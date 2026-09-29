@@ -15,23 +15,25 @@ which document to consult for a given decision.
 | 06 | State Lifecycle Specification | Trusted/candidate state transitions, invariant lifecycle states |
 | 07 | Identity & Dependency Specification | Resource identity resolution rules, dependency graph edge types |
 | 08 | Impact/Invalidation Specification | How affected obligations are computed from identity + dependency output |
-| 09 | Verification & Promotion Specification | **Available** — exact verification result aggregation algorithm (Sec. 18), Conflicting Evidence resolution table for oracle/verifier disagreement (Sec. 17), promotion preconditions checklist (Sec. 19). Authoritative for P5/P6. |
+| 09 | Verification & Promotion Specification | Verification result semantics and aggregation, conflicting-evidence resolution, evidence sufficiency, promotion preconditions, decision matrix, promotion transaction |
 | 10 | LLM Integration Specification | Provider-agnostic adapter contract, structured output schema, trust boundary |
 | 11 | Evidence Logging Specification | Evidence record schema, audit event schema, redaction rules |
-| 12 | Testing & QA Specification | **Available** — full test pyramid, exact test matrices for Identity/Dependency/Impact/Verification/Promotion (Sec. 9-13), fixture naming convention, defect severity levels, CI quality gates. Authoritative for the test suite structure across all phases. |
-| 13 | Experiment Harness Specification | Trial execution, fair-comparison rules, repetition policy, `ExperimentReport` contract. **Its baseline-condition design (C1-C4: LLM+DAIL/LLM-only/Deterministic/No-repair) is superseded** by Doc 02 Section 23's A/B/C (Stateless/Stateful-Full/DAIL) design, which the research paper actually built on and extended — see `DAIL_Vision_and_Delta_Briefing.md`, Part 3. |
+| 12 | Testing & QA Specification | Test pyramid, test matrices for identity/dependency/impact/verification/promotion, canonical fixture set and naming, defect severity, CI quality gates |
+| 13 | Experiment Harness Specification | Trial execution, fair-comparison rules, repetition, metrics, reports. Its C1–C4 conditions conflict with Doc 02 §23's A/B/C modes; resolution C-01: A/B/C are the primary pre-declared conditions and Doc 13's baselines are computed as secondary results. |
 | 14 | Development & DevOps Specification | Repository structure, branching, CI/CD, secrets management |
 | 15 | Implementation Roadmap & Definition of Done | Phase sequencing (P0-P10), exit criteria, master build checklist |
 
-**Correction (this index previously claimed Docs 09 and 12 were missing —
-that was wrong, carried forward from a stale early-project note that was
-never re-verified). Both are fully present and should be treated as
-authoritative for their domains, not as gaps to design around.**
+## Supporting sources (below the specs)
 
-**See also:** `DAIL_Vision_and_Delta_Briefing.md` (in the parent research
-project's outputs) for the full set of deltas between these original specs
-and what the subsequent research paper and its supporting research
-established — including the Doc 13 vs. Doc 02 conflict above, the
-two-independent-reachability-checker oracle design, and an open,
-unresolved tension between the paper's "Git-backed trusted state" language
-and this repository's actual relational/SQLite persistence model.
+- The DAIL Implementation Plan (28 Sep 2026, kept in the research project).
+- [`BUILD_SEQUENCE.md`](BUILD_SEQUENCE.md) — the 18 work packages and their order.
+- [`DECISIONS_REGISTER.md`](DECISIONS_REGISTER.md) — recorded conflicts and their resolutions.
+- The TerraPreserve D0 dataset specification (research project; implemented in the TerraPreserve repository).
+
+## Precedence
+
+1. A dedicated spec beats a general one on its own topic.
+2. Specs beat the plan and the paper, except for resolutions recorded in `DECISIONS_REGISTER.md`.
+3. A conflict not in the register means stop and record it; never choose silently (Doc 01 §16).
+
+Always open alongside any phase: Doc 01 §8, Doc 02 §15, Doc 15 §41.

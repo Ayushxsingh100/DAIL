@@ -1,47 +1,53 @@
-# Phase Gate Report
+# Phase Gate Status
 
-Per Doc 15: "each phase produces testable artifacts and passes an explicit
-exit gate before dependent work is considered complete."
+A gate is PASSED only when the Claude review has audited every Doc 15 exit criterion against the spec text. A green test suite is evidence, not a gate pass.
 
-## P0 — Bootstrap: PASSED (except items only checkable on GitHub)
-- [x] Fresh clone can bootstrap (`scripts/bootstrap.sh`, zero dependencies)
-- [x] Unit test command works (`python3 -m unittest discover -s tests`)
-- [x] No secrets required for core tests
-- [ ] CI runs successfully — workflow written (`.github/workflows/ci.yml`); must be
-      pushed to GitHub to be observed green. **Not verifiable in this sandbox.**
-- [ ] Main branch protected — GitHub setting; **do this manually**.
+## Withdrawn claims
 
-## P1 — Domain Foundation: PASSED
-- [x] Domain schemas validate — `test_resource`, `test_invariant`, `test_state`
-- [x] State lineage tests pass — `test_state`, `test_storage_p1_gate::TestLineage`
-- [x] Canonical hashes are stable — `test_hashing`
-- [x] Forbidden lifecycle transitions are rejected — `test_invariant`
-- [x] Beyond spec: DATA-INT-006 / Doc 05 S.23 immutability enforced by DB triggers,
-      attacked with raw SQL in `test_storage_p1_gate::TestImmutability`
+An earlier version of this file marked P1 and P2 as PASSED. Those claims were withdrawn on 29 Sep 2026 after a spec audit.
 
-## P2 — Evidence Foundation: PASSED
-| Exit criterion | Evidence |
-|---|---|
-| Evidence persists and resolves | `test_evidence_store::TestPersistAndResolve` |
-| Hashes verify | `TestHashesVerify` (incl. tamper + missing-payload detection) |
-| Lineage queries work | `TestLineageQueries`, `test_p2_gate` |
-| Invalidation preserves history | `TestInvalidationPreservesHistory`, `test_p2_gate::test_rejected_candidate_chain` |
-| Redaction tests pass | `test_redaction`, `test_structured_log_and_ids`, on-disk secret grep |
-| Duplicate events are handled | `TestDuplicateHandling` |
+## P0 — Project Bootstrap — IN PROGRESS (P0-close)
 
-Doc 11 S.51.3 end-to-end chains covered: safe promotion, rejected candidate.
-Not yet covered (need later phases): retry, escalation, stale-parent,
-verifier-error, LLM-generation-to-promotion chains.
+Doc 15 §7.3 exit criteria:
 
-## Test health
-128 tests, 0 failures. Mutation check: 4 deliberate safety bugs (proof gate
-ignoring validity; proof gate ignoring integrity; INVALID->VALID legal;
-redactor disabled) were each caught by the suite.
+| Exit criterion | Status | Evidence |
+|---|---|---|
+| Fresh clone can bootstrap | PENDING REVIEW | `python scripts/dev.py bootstrap` |
+| CI runs successfully | NOT YET OBSERVED | Needs a green run on GitHub `main` |
+| Unit test command works | PENDING REVIEW | `python scripts/dev.py test` (`python -m unittest discover -s tests -p "test_*.py"`) |
+| No secrets required for core tests | PENDING REVIEW | The CI `quality` job uses no secrets |
+| Main branch protected | NOT YET DONE | Manual GitHub setting |
 
-## Known limitations / to confirm
-- Audit event taxonomy is only what was confirmed in Doc 11 S.12 plus 3
-  EVIDENCE_* events added here; reconcile against the full S.12 table.
-- Validity transition table (models.py) is an interpretation of Doc 11 S.7/32/33.
-- mypy/black/ruff are configured but were NOT run here (no network). Run
-  `pip install -e ".[dev]"` and fix anything they flag before P3.
-- ADR-002/003/004 are proposed defaults awaiting confirmation.
+## P1 — Domain Foundation — NOT PASSED
+
+Rewrite scheduled as P1a and P1b. Known gaps:
+
+1. `InvariantStatus` must be exactly REGISTERED, VERIFYING, PROTECTED, AFFECTED, REVERIFYING, VIOLATED, UNCERTAIN (Doc 05 §4.1). The code mixes verification results into statuses.
+2. `VerificationResult` must be PASS, FAIL, UNKNOWN, UNSUPPORTED, VERIFIER_ERROR (Doc 05 §4.1). The code has ERROR and UNCERTAIN instead.
+3. The candidate lifecycle must follow Doc 06 §5: CREATED → BUILDING → FAILED | READY → ANALYZING → REJECTED | RETRY_REQUIRED | ESCALATED | PROMOTABLE → PROMOTED.
+4. `InvariantRef` is missing (Doc 06 §14). Invariant definitions must become immutable and versioned.
+5. `Resource` has the wrong shape. Doc 05 §5.1 defines a normalized resource; the current class is a change record and moves to P3 as `IdentityMatch`.
+6. Missing fields and entities:
+   - `TrustedState`: lineage_id, normalization_version, commit_decision_id, committed_at.
+   - `CandidateState`: lineage_id, candidate_sequence, source, patch_id, state_hash.
+   - The `Patch` entity (Doc 05 §9), and `Reference` and `Provenance` (Doc 05 §5.3, §6).
+7. The forbidden transitions SM-001 to SM-010 (Doc 06 §22) are not encoded.
+8. The repository interfaces of Doc 05 §26 are missing.
+9. The lifecycle tests must be rewritten from the Doc 06 §31 test matrix.
+
+## P2 — Evidence Foundation — NOT PASSED
+
+Reconciliation scheduled as P2-fix. Known gaps:
+
+1. Evidence invalidation is global but must be per context. Doc 11 §7 defines INVALID as "no longer valid for the referenced new-state context", and Doc 06 §15 says a rejected candidate leaves vN's evidence valid for vN. `EvidenceStore.current_validity(evidence_id)` takes no context.
+2. The evidence type taxonomy must follow Doc 11 §5.
+3. `run_id` and `attempt_id` binding is missing (Doc 05 §16.1, Doc 11 §10).
+4. Artifact references must use `evidence://<type>/<content_hash>` (Doc 11 §17).
+5. The `Provenance` object is missing; it must be the union of Doc 05 §6 and Doc 11 §21.
+6. Log levels must be ERROR, WARN, INFO, DEBUG, TRACE (Doc 11 §15), and the lifecycle events of Doc 06 §28 must be added to the Doc 11 §12 taxonomy.
+
+## P3–P10 — NOT STARTED
+
+## Temporary exceptions
+
+- The mypy `ignore_errors` override for five modules (`core.domain.enums`, `core.domain.invariant`, `core.domain.state`, `core.domain.resource`, `core.domain.storage`) in `pyproject.toml`. It must be removed in P1a.

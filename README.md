@@ -9,82 +9,137 @@ properties as protected obligations across iterative state transitions. See
 the paper (`DAIL_Paper_LaTeX.tex`, in the research repo) for the full
 mechanism, formal model, and evaluation methodology.
 
-## Current build phase
+## Build status
 
-Following `docs/SPEC_INDEX.md` → *Implementation Roadmap & Definition of
-Done* (Spec 15), this repository is currently at:
+| Phase | Status |
+|---|---|
+| P0 — Project Bootstrap | IN PROGRESS (P0-close) |
+| P1 — Domain Foundation | NOT PASSED; rewrite scheduled (P1a, P1b) |
+| P2 — Evidence Foundation | NOT PASSED; reconciliation scheduled (P2-fix) |
+| P3–P10 | NOT STARTED |
 
-- [x] **P0 — Project Bootstrap**
-- [x] **P1 — Domain Foundation** *(gate passed: schemas validate, lineage,
-      stable hashes, forbidden transitions rejected, DB-level immutability)*
-- [x] **P2 — Evidence Foundation** *(gate passed: persist/resolve, hash
-      verify + tamper detection, lineage queries, invalidation keeps history,
-      redaction, duplicate events)*
-- [ ] P3 — Identity & Dependency  **<- next**
-- [ ] P4 — Impact & Invalidation
-- [ ] P5 — Verification
-- [ ] P6 — Promotion
-- [ ] P7 — LLM Integration
-- [ ] P8 — Experiment Harness
-- [ ] P9 — AWS/Terraform Integration
-- [ ] P10 — Hardening & End-to-End
+Next package after P0-close: P1a.
+
+- Gate status and known gaps: [`docs/PHASE_GATES.md`](docs/PHASE_GATES.md)
+- Work packages and order: [`docs/BUILD_SEQUENCE.md`](docs/BUILD_SEQUENCE.md)
+- Recorded conflicts and decisions: [`docs/DECISIONS_REGISTER.md`](docs/DECISIONS_REGISTER.md)
+- Specification index: [`docs/SPEC_INDEX.md`](docs/SPEC_INDEX.md)
+- Architecture decision records: [`docs/adr/`](docs/adr/)
 
 Per Doc 15 Section 41 ("Implementation Rules We Must Not Break"): phases are
 built bottom-up and gated — later phases are not started until the current
 phase's exit criteria pass. Do not skip ahead.
 
-## Bootstrap (fresh clone → running tests)
+## Local commands (Doc 14 §12)
 
-P0/P1 have **zero external dependencies** — everything below runs with
-nothing but Python 3.12's standard library. This is deliberate: it keeps
-"fresh clone can bootstrap" trivially true and means the safety-critical
-domain logic can be tested with no network access and no secrets.
+All commands run from the repository root. `scripts/dev.py` uses only the
+Python 3.12 standard library, so a fresh clone needs no network access and no
+secrets.
 
 ```bash
-# 1. Clone and enter the repo
-git clone <repo-url> cloudspartanx && cd cloudspartanx
-
-# 2. Confirm Python version (must be 3.12.x)
-python3 --version
-
-# 3. Run the bootstrap script (creates local sqlite db, runs tests)
-bash scripts/bootstrap.sh
-
-# 4. Run tests directly at any time
-python3 -m unittest discover -s tests -p "test_*.py" -v
+python3.12 scripts/dev.py bootstrap   # check Python 3.12, load dev config, create .local/,
+                                      # initialize schemas, run tests, run health checks
+python3.12 scripts/dev.py test        # python -m unittest discover -s tests -p "test_*.py"
+python3.12 scripts/dev.py lint        # black --check . ; ruff check . ; mypy  (needs the dev toolchain)
+python3.12 scripts/dev.py health      # one line per health check; exit 1 on any FAIL
 ```
 
-Once you have network access and want the full toolchain (formatter, linter,
-type checker, pytest, and later phases' dependencies):
+`bash scripts/bootstrap.sh` is a thin wrapper around `scripts/dev.py bootstrap`
+(on Windows use WSL or Git Bash, or call `scripts/dev.py` directly).
+
+## Dev toolchain and lockfiles
+
+The dev toolchain is exact-pinned in `pyproject.toml` and hash-locked in
+`requirements/dev.lock` (see [`requirements/README.md`](requirements/README.md)).
 
 ```bash
-pip install -e ".[dev]"      # black, ruff, mypy, pytest
-black --check core tests
-ruff check core tests
-mypy core
+# fresh clone of the branch
+git clone <repo-url> cloudspartanx && cd cloudspartanx && git checkout feature/p0-close
+
+# zero-dependency bootstrap (no venv, no network)
+python3.12 scripts/dev.py bootstrap
+
+# locked dev toolchain
+python3.12 -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
+python -m pip install "pip-tools>=7.4"
+pip-compile --extra=dev --generate-hashes --output-file=requirements/dev.lock pyproject.toml
+python -m pip install --require-hashes -r requirements/dev.lock
+python -m pip install --no-deps -e .
+python scripts/dev.py lint
 pytest
+pip-audit --require-hashes -r requirements/dev.lock
+
+# Terraform (must print 1.15.x)
+terraform version
+terraform -chdir=infrastructure/terraform init -backend=false
+terraform -chdir=infrastructure/terraform providers lock \
+  -platform=linux_amd64 -platform=darwin_arm64 -platform=darwin_amd64 -platform=windows_amd64
+terraform fmt -check -recursive infrastructure/terraform
+terraform -chdir=infrastructure/terraform validate
+
+python scripts/dev.py health
+
+# commit requirements/dev.lock and infrastructure/terraform/.terraform.lock.hcl,
+# push the branch, open a PR to main, wait for quality/secrets/terraform to go green,
+# merge, confirm green on main, then protect main (PR + the three required checks,
+# no force-push, no deletion).
 ```
+
+## Pinned toolchain
+
+| Tool | Pin |
+|---|---|
+| Python | 3.12 |
+| Terraform | `~> 1.15.0` (CI installs 1.15.8) |
+| AWS provider | 6.53.0 |
+| black | 24.10.0 |
+| ruff | 0.7.0 |
+| mypy | 1.13.0 |
+| pytest | 8.3.3 |
+| pytest-cov | 5.0.0 |
+| pip-audit | exact version comes from the lockfile |
+| actions/checkout | v6 |
+| actions/setup-python | v6 |
+| gitleaks-action | v3 |
 
 ## Repository layout
 
 ```
 cloudspartanx/
+├── .github/workflows/ci.yml   # quality, secrets, terraform jobs (Doc 14 §22-23)
+├── config/
+│   ├── base/                  # one versioned default file per area (Doc 14 §14)
+│   └── environments/          # dev, test, experiment, staging overrides (Doc 14 §17)
 ├── core/
-│   └── domain/          # P1: Resource, Invariant, TrustedState, CandidateState,
-│                         #     lifecycle states, canonical hashing, local storage
-│   # (identity/, dependency/, impact/, verification/, promotion/ land in P3-P6)
-├── llm/                  # P7: provider-agnostic adapter, prompts, schemas
-├── evidence/              # P2: evidence records, audit events, redaction, structured logs
-├── experiments/           # P8: trial harness, baselines, metrics
-├── fixtures/               # Terraform test fixtures (TerraGoat-derived, etc.)
-├── infrastructure/terraform/  # P9: AWS sandbox definitions
+│   ├── domain/                # P1: domain objects, lifecycles, canonical hashing, local storage
+│   ├── terraform_model/       # P3a: parser, normalizer, canonical security rule, fingerprints
+│   ├── identity/              # P3b: identity engine
+│   ├── dependency/            # P3c: dependency graph
+│   ├── impact/                # P4: impact and invalidation
+│   ├── verification/          # P5a/P5b: deterministic verifiers
+│   ├── promotion/             # P6a/P6b: promotion decision and transaction
+│   └── application/           # configuration + health (P0-close); scope policy (P4);
+│                              # EvaluationOrchestrator (P6b)
+├── evidence/                  # P2: evidence records, audit events, redaction, structured logs
+├── llm/                       # P7: adapter/, prompts/, schemas/, validation/
+├── experiments/               # P8: trial harness, conditions, metrics
+├── fixtures/                  # the 15 Doc 12 §7 canonical fixtures (Doc 04 §15 layout)
+│   ├── canonical_regression/{baseline,patch_safe,patch_regression}/
+│   ├── identity/  dependency/  impact/  verification/  adversarial/
+├── infrastructure/terraform/  # P9: modules/, environments/{dev,test,experiment,staging}/,
+│                              # policies/, versions.tf (Doc 14 §18)
+├── requirements/              # dev.lock (hash-locked dev toolchain, generated by pip-compile)
 ├── tests/
-│   └── unit/             # fast, no I/O, no network
-├── docs/
-│   └── SPEC_INDEX.md      # links Specifications 01-15
+│   ├── unit/  integration/  contract/  adversarial/  e2e/
+├── docs/                      # PHASE_GATES, BUILD_SEQUENCE, DECISIONS_REGISTER, SPEC_INDEX, adr/
 └── scripts/
-    └── bootstrap.sh
+    ├── dev.py                 # bootstrap | test | lint | health
+    └── bootstrap.sh           # wrapper for dev.py bootstrap
 ```
+
+The TerraPreserve benchmark and its independent oracle live in a separate
+repository (ADR-010, ADR-013). This repository contains no `benchmark/` or
+`oracle/` directory and never imports them.
 
 ## Engineering principles (Doc 14, Section 2)
 
