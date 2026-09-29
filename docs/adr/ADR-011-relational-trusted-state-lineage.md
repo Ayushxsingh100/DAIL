@@ -1,5 +1,5 @@
-# ADR-002: Trusted-state lineage is relational, not literal Git
-**Status:** Proposed-default (confirm with faculty; affects paper wording)
+# ADR-011: Trusted-state lineage is relational, not literal Git
+**Status:** Accepted in build (C-11, 29 Sep 2026); paper wording change pending research review.
 
 **Context.** The paper (Sec. VI-B) says the ledger is "Git-backed: promoted
 states = commits, rejected candidates = discarded branches". The
