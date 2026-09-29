@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  bootstrap-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # --- P0/P1: standard-library-only tests, no secrets, no network needed ---
+      - name: Run domain unit tests (stdlib only)
+        run: python -m unittest discover -s tests -p "test_*.py" -v
+
+      # --- Full toolchain (formatter/linter/type-checker/pytest) ---
+      - name: Install dev tooling
+        run: pip install -e ".[dev]"
+
+      - name: Check formatting (black)
+        run: black --check core tests
+
+      - name: Lint (ruff)
+        run: ruff check core tests
+
+      - name: Type check (mypy, strict on core.domain)
+        run: mypy core
+
+      - name: Run full test suite (pytest)
+        run: pytest --cov=core --cov-report=term-missing
+
+  # Exit criterion: "No secrets required for core tests" — this job intentionally
+  # has zero secrets/env vars configured, and must still pass. If a future PR
+  # requires a secret for this job to go green, that PR violates the P0 exit
+  # criterion and should be revised, not the CI config.
