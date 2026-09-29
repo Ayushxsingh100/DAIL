@@ -6,54 +6,47 @@ requires-python = ">=3.12,<3.13"
 readme = "README.md"
 
 # --- Phase-gated dependencies -----------------------------------------------
-# P0/P1 (current phase) intentionally have ZERO external runtime dependencies:
-# domain models use the standard library only (dataclasses + enum + hashlib +
-# json + sqlite3). This keeps "fresh clone can bootstrap" trivially true and
-# means core safety-critical logic can be tested with no network access and
-# no secrets, per the Development & DevOps Specification (Doc 14) and the
-# Implementation Roadmap (Doc 15) P0 exit criteria.
-#
-# The dependencies below are declared now (version-pinned, per Doc 14 Section 7
-# "Version Pinning") so the phases that need them are unblocked when reached,
-# but nothing before P3 should import from outside the standard library.
+# core/ and evidence/ use the Python 3.12 standard library only (ADR-002,
+# ADR-004), so a fresh clone can bootstrap and run the core tests with no
+# network access and no secrets (Doc 15 §7.3). Any third-party import in core/
+# needs its own ADR (the known future exception is networkx, ADR-005, P3c).
 dependencies = []
 
 [project.optional-dependencies]
-# P1 hardening (optional now): stricter runtime validation than hand-rolled
-# dataclass __post_init__ checks. Swap-in target once network access exists.
-validation = [
-    "pydantic==2.9.2",
-]
-# P2 (Evidence) / P9 (AWS-Terraform integration) persistence hardening.
-persistence = [
-    "sqlalchemy==2.0.35",
-]
-# P3 (Identity/Dependency graph engine).
+# Later-phase groups: declared, never installed; re-verified and locked when
+# their phase starts (ADR-002). Pydantic and SQLAlchemy are not used in the
+# core (ADR-004).
+# P3c (dependency graph, ADR-005).
+# declared, never installed; re-verified and locked when phase P3c starts
 graph = [
-    "networkx==3.6.1",           # already present in this sandbox; pin matches it
+    "networkx==3.6.1",
 ]
-# P5 (Verification engine) - security verifier.
+# P5a (verification); Checkov is recorded as an advisory cross-check only (C-12).
+# declared, never installed; re-verified and locked when phase P5a starts
 verification = [
     "checkov==3.2.526",
 ]
-# P7 (LLM integration) - provider-agnostic adapter + structured output.
+# P7a (LLM integration); Pydantic is permitted only inside llm/ (ADR-004).
+# declared, never installed; re-verified and locked when phase P7a starts
 llm = [
     "litellm==1.51.0",
     "instructor==1.6.4",
     "pydantic==2.9.2",
 ]
-# P8 (Experiment harness) - AWS SDK for oracle validation (Reachability
-# Analyzer, live TCP tests) and Config/KICS cross-validation.
+# P9 (AWS adapter behind AWSPort, Doc 04 §13).
+# declared, never installed; re-verified and locked when phase P9 starts
 aws = [
     "boto3==1.35.36",
 ]
-# Developer tooling: formatter, linter, type checker, test runner.
+# Developer tooling: formatter, linter, type checker, test runner, dependency
+# scanner. Exact pins; hash-locked in requirements/dev.lock (ADR-002).
 dev = [
     "black==24.10.0",
     "ruff==0.7.0",
     "mypy==1.13.0",
     "pytest==8.3.3",
     "pytest-cov==5.0.0",
+    "pip-audit>=2.7",
 ]
 
 [build-system]
@@ -61,7 +54,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["core*", "evidence*"]
+include = ["core*", "evidence*", "llm*"]
 
 # --- Formatter ---------------------------------------------------------------
 [tool.black]
@@ -83,9 +76,17 @@ python_version = "3.12"
 strict = true
 warn_unused_ignores = true
 disallow_untyped_defs = true
+# Tests are not type-checked.
+files = ["core", "evidence", "scripts"]
 # LLM/AWS-adapter modules get relaxed typing rules once they exist (P7/P9),
 # since third-party stubs for litellm/boto3 are inconsistent; core.domain and
 # core.identity/dependency/impact/verification/promotion must stay strict.
+
+[[tool.mypy.overrides]]
+# TEMPORARY - modules scheduled for rewrite in P1a. Remove this override in P1a.
+module = ["core.domain.enums", "core.domain.invariant", "core.domain.state",
+          "core.domain.resource", "core.domain.storage"]
+ignore_errors = true
 
 # --- Tests -------------------------------------------------------------------
 [tool.pytest.ini_options]
