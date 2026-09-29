@@ -1,0 +1,4 @@
+# Versioned defaults for the observability area (Doc 14 §14-15).
+# Flat keys for this area only; no [observability] header. Validated by core/application/config.py.
+# Allowed: ERROR, WARN, INFO, DEBUG, TRACE (Doc 11 §15). The only runtime-overridable key.
+log_level = "INFO"

@@ -1,0 +1,5 @@
+# Overrides for the dev environment (Doc 14 §17: developer integration and manual testing).
+# Use [area] tables. Safety-critical flags stay at their conservative value here.
+
+[observability]
+log_level = "DEBUG"

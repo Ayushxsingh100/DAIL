@@ -1,0 +1,5 @@
+# Versioned defaults for the promotion area (Doc 14 §14-15).
+# Flat keys for this area only; no [promotion] header. Validated by core/application/config.py.
+# automatic_enabled is safety-critical (Doc 14 §37-38): it may be enabled only in a
+# reviewed configuration file, never by an environment variable or runtime override.
+automatic_enabled = false

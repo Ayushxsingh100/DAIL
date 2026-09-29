@@ -1,0 +1,3 @@
+# Versioned defaults for the artifact_store area (Doc 14 §14-15).
+# Flat keys for this area only; no [artifact_store] header. Validated by core/application/config.py.
+root = ".local/artifacts"
