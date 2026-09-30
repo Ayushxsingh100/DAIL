@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+from datetime import UTC
 from pathlib import Path
 
 from evidence.ids import CorrelationContext, new_id
@@ -43,19 +44,41 @@ class TestStructuredLogger(unittest.TestCase):
 
     def test_event_has_every_doc11_section14_field(self) -> None:
         log = StructuredLogger("dail")
-        e = log.log(LogLevel.INFO, component="impact", event_name="impact_done", ctx=self.ctx,
-                    status="ok", candidate_id="c1", state_id="s1", duration_ms=12.5)
+        e = log.log(
+            LogLevel.INFO,
+            component="impact",
+            event_name="impact_done",
+            ctx=self.ctx,
+            status="ok",
+            candidate_id="c1",
+            state_id="s1",
+            duration_ms=12.5,
+        )
         d = e.to_dict()
-        for key in ("timestamp", "level", "service", "component", "event_name", "correlation_id",
-                    "operation_id", "candidate_id", "state_id", "duration_ms", "status",
-                    "error_code", "metadata"):
+        for key in (
+            "timestamp",
+            "level",
+            "service",
+            "component",
+            "event_name",
+            "correlation_id",
+            "operation_id",
+            "candidate_id",
+            "state_id",
+            "duration_ms",
+            "status",
+            "error_code",
+            "metadata",
+        ):
             self.assertIn(key, d)
         self.assertEqual(d["correlation_id"], self.ctx.correlation_id)
 
     def test_correlation_propagates_across_operations(self) -> None:
         log = StructuredLogger("dail")
         log.log(LogLevel.INFO, component="a", event_name="x", ctx=self.ctx, status="ok")
-        log.log(LogLevel.INFO, component="b", event_name="y", ctx=self.ctx.new_operation(), status="ok")
+        log.log(
+            LogLevel.INFO, component="b", event_name="y", ctx=self.ctx.new_operation(), status="ok"
+        )
         corr = {e.correlation_id for e in log.entries}
         ops = {e.operation_id for e in log.entries}
         self.assertEqual(len(corr), 1)
@@ -63,8 +86,14 @@ class TestStructuredLogger(unittest.TestCase):
 
     def test_metadata_is_redacted(self) -> None:
         log = StructuredLogger("dail")
-        e = log.log(LogLevel.INFO, component="llm", event_name="request", ctx=self.ctx, status="ok",
-                    metadata={"api_key": "sk-live-abc", "max_tokens": 1000, "model": "m"})
+        e = log.log(
+            LogLevel.INFO,
+            component="llm",
+            event_name="request",
+            ctx=self.ctx,
+            status="ok",
+            metadata={"api_key": "sk-live-abc", "max_tokens": 1000, "model": "m"},
+        )
         self.assertEqual(e.metadata["api_key"], "[REDACTED]")
         self.assertEqual(e.metadata["max_tokens"], 1000)
 
@@ -72,8 +101,16 @@ class TestStructuredLogger(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             sink = Path(d) / "logs" / "dail.jsonl"
             log = StructuredLogger("dail", sink_path=sink)
-            log.log(LogLevel.WARNING, component="tf", event_name="parse", ctx=self.ctx, status="ok",
-                    metadata={"user_data": "AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG"})
+            log.log(
+                LogLevel.WARNING,
+                component="tf",
+                event_name="parse",
+                ctx=self.ctx,
+                status="ok",
+                metadata={
+                    "user_data": "AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG",  # gitleaks:allow
+                },
+            )
             text = sink.read_text()
             self.assertNotIn("wJalrXUtnFEMI", text)
             lines = [json.loads(x) for x in text.splitlines()]  # machine-readable JSONL
@@ -83,8 +120,14 @@ class TestStructuredLogger(unittest.TestCase):
         log = StructuredLogger("dail")
         with self.assertRaises(ValueError):
             log.log(LogLevel.ERROR, component="v", event_name="boom", ctx=self.ctx, status="failed")
-        e = log.log(LogLevel.ERROR, component="v", event_name="boom", ctx=self.ctx,
-                    status="failed", error_code="VERIFIER_ERROR")
+        e = log.log(
+            LogLevel.ERROR,
+            component="v",
+            event_name="boom",
+            ctx=self.ctx,
+            status="failed",
+            error_code="VERIFIER_ERROR",
+        )
         self.assertEqual(e.error_code, "VERIFIER_ERROR")
 
     def test_entries_are_kept_in_order(self) -> None:
@@ -98,9 +141,10 @@ class TestStructuredLogger(unittest.TestCase):
             StructuredLogger("")
 
     def test_log_event_dataclass_direct_validation(self) -> None:
-        from datetime import datetime, timezone
+        from datetime import datetime
+
         with self.assertRaises(ValueError):
-            LogEvent(datetime.now(timezone.utc), LogLevel.ERROR, "s", "c", "n", "corr", "op", "failed")
+            LogEvent(datetime.now(UTC), LogLevel.ERROR, "s", "c", "n", "corr", "op", "failed")
 
 
 if __name__ == "__main__":

@@ -9,7 +9,7 @@ reconstructed across components.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -54,7 +54,7 @@ class StructuredLogger:
     ) -> LogEvent:
         safe_meta = self._redactor.redact(metadata or {}).payload
         event = LogEvent(
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             level=level,
             service=self.service,
             component=component,

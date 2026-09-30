@@ -73,9 +73,7 @@ class Resource:
                 "(a deleted resource has no resulting attribute snapshot)"
             )
         if self.action == ChangeAction.UNCHANGED and self.before != self.after:
-            raise ValueError(
-                f"Resource {self.address!r}: action=UNCHANGED but before != after"
-            )
+            raise ValueError(f"Resource {self.address!r}: action=UNCHANGED but before != after")
         if self.replace_paths and self.action != ChangeAction.REPLACED:
             raise ValueError(
                 f"Resource {self.address!r}: replace_paths is set but action "

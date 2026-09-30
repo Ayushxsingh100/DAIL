@@ -8,7 +8,9 @@ class TestRedaction(unittest.TestCase):
         self.r = Redactor()
 
     def test_secret_keys_are_redacted(self) -> None:
-        res = self.r.redact({"password": "hunter2", "db": {"master_password": "x", "engine": "postgres"}})
+        res = self.r.redact(
+            {"password": "hunter2", "db": {"master_password": "x", "engine": "postgres"}}
+        )
         self.assertEqual(res.payload["password"], REDACTED)
         self.assertEqual(res.payload["db"]["master_password"], REDACTED)
         self.assertEqual(res.payload["db"]["engine"], "postgres")

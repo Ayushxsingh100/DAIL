@@ -18,7 +18,7 @@ phase has no way to validate against real Terraform data.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from core.domain.enums import (
@@ -68,7 +68,7 @@ class Invariant:
     dependency_snapshot_hash: str | None = None
     evidence_reference: str | None = None
     provenance: str = "unspecified"
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def __post_init__(self) -> None:
         if not self.invariant_id:
@@ -162,9 +162,7 @@ class InvariantRegistry:
     def get(self, invariant_id: str, version: int) -> Invariant:
         key = (invariant_id, version)
         if key not in self._invariants:
-            raise InvariantNotFoundError(
-                f"No invariant {invariant_id!r} at version {version}"
-            )
+            raise InvariantNotFoundError(f"No invariant {invariant_id!r} at version {version}")
         return self._invariants[key]
 
     def latest_version(self, invariant_id: str) -> Invariant:

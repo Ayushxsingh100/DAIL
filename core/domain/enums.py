@@ -106,7 +106,9 @@ class InvariantLifecycleState(str, Enum):
 # Explicit transition table. Per P1 exit criterion ("Forbidden lifecycle
 # transitions are rejected") this is the single source of truth for what
 # counts as a legal transition -- nothing outside this table is permitted.
-_ALLOWED_LIFECYCLE_TRANSITIONS: dict[InvariantLifecycleState, frozenset[InvariantLifecycleState]] = {
+_ALLOWED_LIFECYCLE_TRANSITIONS: dict[
+    InvariantLifecycleState, frozenset[InvariantLifecycleState]
+] = {
     InvariantLifecycleState.REGISTERED: frozenset({InvariantLifecycleState.VERIFYING}),
     InvariantLifecycleState.VERIFYING: frozenset(
         {

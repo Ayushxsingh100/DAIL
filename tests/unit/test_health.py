@@ -64,8 +64,9 @@ class HealthTestCase(unittest.TestCase):
 class TestHealthChecks(HealthTestCase):
     def test_all_five_checks_are_reported_in_order(self) -> None:
         names = [r.name for r in run_health_checks(self.config(), self.repo)]
-        self.assertEqual(names, ["liveness", "readiness", "database", "artifact_store",
-                                 "llm_provider"])
+        self.assertEqual(
+            names, ["liveness", "readiness", "database", "artifact_store", "llm_provider"]
+        )
 
     def test_liveness_and_readiness_pass_with_a_resolved_config(self) -> None:
         res = self.results(self.config())

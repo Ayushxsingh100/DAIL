@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 
 from core.domain.hashing import content_hash
@@ -82,7 +82,7 @@ class TrustedState:
     content_hash: str
     invariant_registry_version: int
     parent_state_id: str | None
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def __post_init__(self) -> None:
         if self.version < 1:
@@ -101,9 +101,7 @@ class TrustedState:
             raise ValueError(f"TrustedState {self.state_id!r}: content_hash must be non-empty")
 
     @classmethod
-    def genesis(
-        cls, *, content_payload: object, invariant_registry_version: int
-    ) -> TrustedState:
+    def genesis(cls, *, content_payload: object, invariant_registry_version: int) -> TrustedState:
         """Construct the very first trusted state (version 1, no parent).
 
         This is the one legitimate way to create a TrustedState without
@@ -174,7 +172,7 @@ class CandidateState:
     parent_state_id: str
     patch_hash: str
     status: CandidateStatus = CandidateStatus.BUILT
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def __post_init__(self) -> None:
         if not self.parent_state_id:

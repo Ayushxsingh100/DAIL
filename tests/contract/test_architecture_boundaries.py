@@ -39,8 +39,21 @@ R5_ENGINES = ("core.identity", "core.dependency", "core.impact", "core.verificat
 ORACLE_TOP_LEVEL_PREFIXES = ("oracle", "terrapreserve")
 # R7 per-package third-party allowlist. Empty until P3c (ADR-005: networkx in core.dependency).
 THIRD_PARTY_ALLOWLIST: dict[str, frozenset[str]] = {}
-SKIP_DIRS = frozenset({".git", ".venv", "venv", ".local", "__pycache__", "build", "dist",
-                       ".mypy_cache", ".ruff_cache", ".pytest_cache", "node_modules"})
+SKIP_DIRS = frozenset(
+    {
+        ".git",
+        ".venv",
+        "venv",
+        ".local",
+        "__pycache__",
+        "build",
+        "dist",
+        ".mypy_cache",
+        ".ruff_cache",
+        ".pytest_cache",
+        "node_modules",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -179,7 +192,9 @@ class TestCheckerSelfTest(unittest.TestCase):
                 self.assertIn(rule, self.rules_for(module, source))
 
     def test_r6_rejects_any_other_core_package_and_evidence(self) -> None:
-        self.assertIn("R6", self.rules_for("core.terraform_model.bad", "from core.domain import x\n"))
+        self.assertIn(
+            "R6", self.rules_for("core.terraform_model.bad", "from core.domain import x\n")
+        )
         self.assertIn("R6", self.rules_for("core.terraform_model.bad", "import evidence.store\n"))
 
     def test_relative_imports_are_resolved(self) -> None:
@@ -193,12 +208,18 @@ class TestCheckerSelfTest(unittest.TestCase):
         self.assertIn(
             "R5", self.rules_for("core.impact.engine", "from ..promotion import controller\n")
         )
-        self.assertIn("R2", self.rules_for("core.domain", "from ..application import config\n",
-                                           is_package=True))
+        self.assertIn(
+            "R2",
+            self.rules_for("core.domain", "from ..application import config\n", is_package=True),
+        )
 
     def test_allowed_imports_are_not_reported(self) -> None:
-        self.assertEqual(self.rules_for("core.domain.ok", "import json\nfrom .enums import X\n"), set())
-        self.assertEqual(self.rules_for("evidence.ok", "from core.domain.hashing import h\n"), set())
+        self.assertEqual(
+            self.rules_for("core.domain.ok", "import json\nfrom .enums import X\n"), set()
+        )
+        self.assertEqual(
+            self.rules_for("evidence.ok", "from core.domain.hashing import h\n"), set()
+        )
         self.assertEqual(
             self.rules_for("core.application.ok", "from core.domain import storage\n"), set()
         )

@@ -20,7 +20,7 @@ Where this file goes beyond a field in the spec, it says so:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
@@ -29,7 +29,7 @@ _HEX = set("0123456789abcdef")
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _is_sha256_hex(value: str) -> bool:
@@ -115,8 +115,12 @@ class EvidenceRecord:
 
     def __post_init__(self) -> None:
         for name in (
-            "evidence_id", "operation_id", "correlation_id", "source_component",
-            "source_type", "algorithm_or_verifier_version",
+            "evidence_id",
+            "operation_id",
+            "correlation_id",
+            "source_component",
+            "source_type",
+            "algorithm_or_verifier_version",
         ):
             if not getattr(self, name):
                 raise ValueError(f"EvidenceRecord.{name} must be non-empty")

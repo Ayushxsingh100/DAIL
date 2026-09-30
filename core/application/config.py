@@ -254,9 +254,9 @@ def _expected(key: ConfigKey, from_environment_variable: bool) -> str:
     if key.type is ValueType.BOOL:
         return "exactly 'true' or 'false'" if from_environment_variable else "a boolean"
     if key.type is ValueType.INT:
-        return "a plain non-negative integer (digits only)" if from_environment_variable else (
-            "an integer"
-        )
+        if from_environment_variable:
+            return "a plain non-negative integer (digits only)"
+        return "an integer"
     if key.type is ValueType.PATH:
         return "a non-empty path string"
     if key.type is ValueType.ENUM:

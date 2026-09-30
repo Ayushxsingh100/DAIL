@@ -1,4 +1,5 @@
 """P1 exit-gate tests for the persistence layer (Doc 05 Sections 22-23)."""
+
 import sqlite3
 import tempfile
 import unittest
@@ -12,10 +13,15 @@ from core.domain.storage import LocalStorage
 
 def _inv() -> Invariant:
     return Invariant(
-        invariant_id="INV-SEC-001", version=1, description="no public ssh",
-        invariant_type=InvariantType.SECURITY, predicate_id="ckv_aws_24",
-        scope_id="aws_security_group", applicability_rule="always",
-        verification_policy_id="default", verifier_version="checkov==3.2.526",
+        invariant_id="INV-SEC-001",
+        version=1,
+        description="no public ssh",
+        invariant_type=InvariantType.SECURITY,
+        predicate_id="ckv_aws_24",
+        scope_id="aws_security_group",
+        applicability_rule="always",
+        verification_policy_id="default",
+        verifier_version="checkov==3.2.526",
     )
 
 
@@ -83,8 +89,11 @@ class TestLineage(_Base):
             c.mark_under_verification()
             c.mark_promoted()
             nxt = TrustedState.promoted_from(
-                candidate=c, parent=states[-1], content_payload={"v": i},
-                invariant_registry_version=1)
+                candidate=c,
+                parent=states[-1],
+                content_payload={"v": i},
+                invariant_registry_version=1,
+            )
             self.storage.save_trusted_state(nxt)
             states.append(nxt)
         return states
@@ -96,8 +105,13 @@ class TestLineage(_Base):
         self.assertIsNone(lineage[-1].parent_state_id)
 
     def test_dangling_parent_is_rejected_by_foreign_key(self) -> None:
-        orphan = TrustedState(state_id="state-x", version=2, content_hash="h",
-                              invariant_registry_version=1, parent_state_id="missing")
+        orphan = TrustedState(
+            state_id="state-x",
+            version=2,
+            content_hash="h",
+            invariant_registry_version=1,
+            parent_state_id="missing",
+        )
         with self.assertRaises(sqlite3.IntegrityError):
             self.storage.save_trusted_state(orphan)  # DATA-INT-001-style FK
 
@@ -114,8 +128,10 @@ class TestImmutability(_Base):
 
     def test_trusted_state_cannot_be_updated(self) -> None:
         with self.assertRaises(sqlite3.DatabaseError):
-            self._raw("UPDATE trusted_state SET content_hash='tampered' WHERE state_id=?",
-                      (self.s0.state_id,))
+            self._raw(
+                "UPDATE trusted_state SET content_hash='tampered' WHERE state_id=?",
+                (self.s0.state_id,),
+            )
 
     def test_trusted_state_cannot_be_deleted(self) -> None:
         with self.assertRaises(sqlite3.DatabaseError):
@@ -123,21 +139,27 @@ class TestImmutability(_Base):
 
     def test_candidate_patch_hash_cannot_change(self) -> None:
         with self.assertRaises(sqlite3.DatabaseError):
-            self._raw("UPDATE candidate_state SET patch_hash='evil' WHERE candidate_id=?",
-                      (self.c.candidate_id,))
+            self._raw(
+                "UPDATE candidate_state SET patch_hash='evil' WHERE candidate_id=?",
+                (self.c.candidate_id,),
+            )
 
     def test_candidate_parent_cannot_change(self) -> None:
         with self.assertRaises(sqlite3.DatabaseError):
-            self._raw("UPDATE candidate_state SET parent_state_id='other' WHERE candidate_id=?",
-                      (self.c.candidate_id,))
+            self._raw(
+                "UPDATE candidate_state SET parent_state_id='other' WHERE candidate_id=?",
+                (self.c.candidate_id,),
+            )
 
     def test_candidate_cannot_be_deleted(self) -> None:
         with self.assertRaises(sqlite3.DatabaseError):
             self._raw("DELETE FROM candidate_state WHERE candidate_id=?", (self.c.candidate_id,))
 
     def test_candidate_status_may_change(self) -> None:
-        self._raw("UPDATE candidate_state SET status='REJECTED' WHERE candidate_id=?",
-                  (self.c.candidate_id,))  # must NOT raise
+        self._raw(
+            "UPDATE candidate_state SET status='REJECTED' WHERE candidate_id=?",
+            (self.c.candidate_id,),
+        )  # must NOT raise
 
 
 if __name__ == "__main__":

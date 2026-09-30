@@ -29,16 +29,44 @@ REDACTION_POLICY_VERSION = "redaction-policy-1"
 
 _SECRET_KEY_EXACT = frozenset(
     {
-        "password", "passwd", "secret", "token", "api_key", "apikey", "authorization",
-        "credentials", "credential", "private_key", "client_secret", "secret_key",
-        "access_key", "secret_access_key", "aws_access_key_id", "aws_secret_access_key",
-        "aws_session_token", "session_token", "auth_token", "bearer_token",
+        "password",
+        "passwd",
+        "secret",
+        "token",
+        "api_key",
+        "apikey",
+        "authorization",
+        "credentials",
+        "credential",
+        "private_key",
+        "client_secret",
+        "secret_key",
+        "access_key",
+        "secret_access_key",
+        "aws_access_key_id",
+        "aws_secret_access_key",
+        "aws_session_token",
+        "session_token",
+        "auth_token",
+        "bearer_token",
     }
 )
 _SECRET_KEY_SUFFIXES = (
-    "_password", "_passwd", "_secret", "_secret_key", "_api_key", "_apikey",
-    "_private_key", "_access_key", "_auth_token", "_access_token", "_refresh_token",
-    "_session_token", "_bearer_token", "_client_secret", "_credentials",
+    "_password",
+    "_passwd",
+    "_secret",
+    "_secret_key",
+    "_api_key",
+    "_apikey",
+    "_private_key",
+    "_access_key",
+    "_auth_token",
+    "_access_token",
+    "_refresh_token",
+    "_session_token",
+    "_bearer_token",
+    "_client_secret",
+    "_credentials",
 )
 _SECRET_KEY_SUBSTRINGS = ("password", "passwd")
 
@@ -123,7 +151,7 @@ class Redactor:
                     else:
                         out[k] = walk(v)
                 return out
-            if isinstance(node, (list, tuple)):
+            if isinstance(node, list | tuple):
                 return [walk(x) for x in node]
             if isinstance(node, str):
                 new, n = _redact_string(node)

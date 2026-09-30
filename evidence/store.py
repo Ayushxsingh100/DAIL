@@ -24,7 +24,7 @@ import sqlite3
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -175,7 +175,7 @@ class ProofCheck:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 class EvidenceStore:
@@ -301,11 +301,23 @@ class EvidenceStore:
                 f"INSERT INTO evidence_record ({self._EVD_COLS}) "
                 "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
-                    rec.evidence_id, rec.evidence_type.value, rec.state_id, rec.candidate_id,
-                    rec.parent_state_id, rec.state_hash, rec.operation_id, rec.correlation_id,
-                    rec.source_component, rec.source_type, rec.content_hash, rec.payload_ref,
-                    rec.created_at.isoformat(), rec.algorithm_or_verifier_version,
-                    rec.validity.value, rec.schema_version, rec.redaction_policy_version,
+                    rec.evidence_id,
+                    rec.evidence_type.value,
+                    rec.state_id,
+                    rec.candidate_id,
+                    rec.parent_state_id,
+                    rec.state_hash,
+                    rec.operation_id,
+                    rec.correlation_id,
+                    rec.source_component,
+                    rec.source_type,
+                    rec.content_hash,
+                    rec.payload_ref,
+                    rec.created_at.isoformat(),
+                    rec.algorithm_or_verifier_version,
+                    rec.validity.value,
+                    rec.schema_version,
+                    rec.redaction_policy_version,
                 ),
             )
         return PutEvidenceResult(rec, False, red.redaction_count)
@@ -376,10 +388,16 @@ class EvidenceStore:
             ).fetchall()
         return [
             ValidityTransition(
-                transition_id=r[0], evidence_id=r[1],
-                from_validity=EvidenceValidity(r[2]), to_validity=EvidenceValidity(r[3]),
-                reason=r[4], candidate_id=r[5], state_id=r[6], impact_report_ref=r[7],
-                superseded_by=r[8], created_at=datetime.fromisoformat(r[9]),
+                transition_id=r[0],
+                evidence_id=r[1],
+                from_validity=EvidenceValidity(r[2]),
+                to_validity=EvidenceValidity(r[3]),
+                reason=r[4],
+                candidate_id=r[5],
+                state_id=r[6],
+                impact_report_ref=r[7],
+                superseded_by=r[8],
+                created_at=datetime.fromisoformat(r[9]),
             )
             for r in rows
         ]
@@ -407,18 +425,31 @@ class EvidenceStore:
                 f"{current.value} -> {to.value}"
             )
         tr = ValidityTransition(
-            transition_id=new_id("vt"), evidence_id=evidence_id, from_validity=current,
-            to_validity=to, reason=reason, candidate_id=candidate_id, state_id=state_id,
-            impact_report_ref=impact_report_ref, superseded_by=superseded_by,
+            transition_id=new_id("vt"),
+            evidence_id=evidence_id,
+            from_validity=current,
+            to_validity=to,
+            reason=reason,
+            candidate_id=candidate_id,
+            state_id=state_id,
+            impact_report_ref=impact_report_ref,
+            superseded_by=superseded_by,
         )
         conn.execute(
             "INSERT INTO validity_transition (transition_id, evidence_id, from_validity, "
             "to_validity, reason, candidate_id, state_id, impact_report_ref, superseded_by, "
             "created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
             (
-                tr.transition_id, tr.evidence_id, tr.from_validity.value, tr.to_validity.value,
-                tr.reason, tr.candidate_id, tr.state_id, tr.impact_report_ref,
-                tr.superseded_by, tr.created_at.isoformat(),
+                tr.transition_id,
+                tr.evidence_id,
+                tr.from_validity.value,
+                tr.to_validity.value,
+                tr.reason,
+                tr.candidate_id,
+                tr.state_id,
+                tr.impact_report_ref,
+                tr.superseded_by,
+                tr.created_at.isoformat(),
             ),
         )
         self._append_audit(
@@ -433,8 +464,11 @@ class EvidenceStore:
             candidate_id=candidate_id,
             decision_id=None,
             payload={
-                "evidence_id": evidence_id, "from": current.value, "to": to.value,
-                "reason": reason, "impact_report_ref": impact_report_ref,
+                "evidence_id": evidence_id,
+                "from": current.value,
+                "to": to.value,
+                "reason": reason,
+                "impact_report_ref": impact_report_ref,
                 "superseded_by": superseded_by,
             },
         )
@@ -454,9 +488,14 @@ class EvidenceStore:
         untouched and a validity-transition event is appended (Doc 11 S.32)."""
         with self._connect() as conn:
             return self._change_validity(
-                conn, evidence_id=evidence_id, to=EvidenceValidity.INVALID, reason=reason,
-                ctx=ctx, event_type=AuditEventType.EVIDENCE_INVALIDATED,
-                candidate_id=candidate_id, state_id=state_id,
+                conn,
+                evidence_id=evidence_id,
+                to=EvidenceValidity.INVALID,
+                reason=reason,
+                ctx=ctx,
+                event_type=AuditEventType.EVIDENCE_INVALIDATED,
+                candidate_id=candidate_id,
+                state_id=state_id,
                 impact_report_ref=impact_report_ref,
             )
 
@@ -472,9 +511,14 @@ class EvidenceStore:
     ) -> ValidityTransition:
         with self._connect() as conn:
             return self._change_validity(
-                conn, evidence_id=evidence_id, to=to, reason=reason, ctx=ctx,
+                conn,
+                evidence_id=evidence_id,
+                to=to,
+                reason=reason,
+                ctx=ctx,
                 event_type=AuditEventType.EVIDENCE_VALIDITY_CHANGED,
-                candidate_id=candidate_id, state_id=state_id,
+                candidate_id=candidate_id,
+                state_id=state_id,
             )
 
     def supersede(
@@ -489,8 +533,12 @@ class EvidenceStore:
                     f"replacement evidence {new_id_!r} must itself be VALID to supersede"
                 )
             tr = self._change_validity(
-                conn, evidence_id=old_id, to=EvidenceValidity.SUPERSEDED, reason=reason,
-                ctx=ctx, event_type=AuditEventType.EVIDENCE_SUPERSEDED,
+                conn,
+                evidence_id=old_id,
+                to=EvidenceValidity.SUPERSEDED,
+                reason=reason,
+                ctx=ctx,
+                event_type=AuditEventType.EVIDENCE_SUPERSEDED,
                 superseded_by=new_id_,
             )
             conn.execute(
@@ -552,10 +600,20 @@ class EvidenceStore:
     @staticmethod
     def _row_to_event(r: tuple[Any, ...]) -> AuditEvent:
         return AuditEvent(
-            sequence=r[0], event_id=r[1], event_type=AuditEventType(r[2]), event_version=r[3],
-            correlation_id=r[4], operation_id=r[5], actor_type=ActorType(r[6]), actor_id=r[7],
-            state_id=r[8], candidate_id=r[9], decision_id=r[10],
-            timestamp=datetime.fromisoformat(r[11]), payload_hash=r[12], payload_ref=r[13],
+            sequence=r[0],
+            event_id=r[1],
+            event_type=AuditEventType(r[2]),
+            event_version=r[3],
+            correlation_id=r[4],
+            operation_id=r[5],
+            actor_type=ActorType(r[6]),
+            actor_id=r[7],
+            state_id=r[8],
+            candidate_id=r[9],
+            decision_id=r[10],
+            timestamp=datetime.fromisoformat(r[11]),
+            payload_hash=r[12],
+            payload_ref=r[13],
         )
 
     def _append_audit(
@@ -592,8 +650,19 @@ class EvidenceStore:
             "operation_id, actor_type, actor_id, state_id, candidate_id, decision_id, "
             "timestamp, payload_hash, payload_ref) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
-                event_id, event_type.value, event_version, ctx.correlation_id, ctx.operation_id,
-                actor_type.value, actor_id, state_id, candidate_id, decision_id, ts, digest, ref,
+                event_id,
+                event_type.value,
+                event_version,
+                ctx.correlation_id,
+                ctx.operation_id,
+                actor_type.value,
+                actor_id,
+                state_id,
+                candidate_id,
+                decision_id,
+                ts,
+                digest,
+                ref,
             ),
         )
         seq = cur.lastrowid
@@ -620,9 +689,16 @@ class EvidenceStore:
         when the same event may be delivered more than once."""
         with self._connect() as conn:
             return self._append_audit(
-                conn, event_id=event_id or new_id("evt"), event_type=event_type,
-                event_version=event_version, ctx=ctx, actor_type=actor_type, actor_id=actor_id,
-                state_id=state_id, candidate_id=candidate_id, decision_id=decision_id,
+                conn,
+                event_id=event_id or new_id("evt"),
+                event_type=event_type,
+                event_version=event_version,
+                ctx=ctx,
+                actor_type=actor_type,
+                actor_id=actor_id,
+                state_id=state_id,
+                candidate_id=candidate_id,
+                decision_id=decision_id,
                 payload=payload,
             )
 

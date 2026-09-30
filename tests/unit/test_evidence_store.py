@@ -30,9 +30,12 @@ class _Base(unittest.TestCase):
         base = dict(
             evidence_type=EvidenceType.VERIFICATION,
             payload=payload if payload is not None else {"result": "PASS"},
-            ctx=self.ctx, source_component="verification", source_type="checkov",
+            ctx=self.ctx,
+            source_component="verification",
+            source_type="checkov",
             algorithm_or_verifier_version="checkov==3.2.526",
-            state_id="state-1", candidate_id=None,
+            state_id="state-1",
+            candidate_id=None,
         )
         base.update(kw)
         return self.store.put_evidence(**base)
@@ -53,7 +56,9 @@ class TestPersistAndResolve(_Base):
         res = self.put({"result": "PASS", "predicate": "ckv_aws_24"})
         rec = self.store.get_evidence(res.record.evidence_id)
         self.assertEqual(rec, res.record)
-        self.assertEqual(self.store.resolve_payload(rec), {"predicate": "ckv_aws_24", "result": "PASS"})
+        self.assertEqual(
+            self.store.resolve_payload(rec), {"predicate": "ckv_aws_24", "result": "PASS"}
+        )
         self.assertTrue(rec.payload_ref.startswith("cas:"))
 
     def test_unknown_evidence_raises(self) -> None:
@@ -93,8 +98,12 @@ class TestDuplicateHandling(_Base):
             self.put({"result": "FAIL"}, evidence_id="evd-fixed")
 
     def test_duplicate_audit_event_creates_no_second_row(self) -> None:
-        kw = dict(event_type=AuditEventType.IMPACT_COMPLETED, ctx=self.ctx,
-                  payload={"affected": ["INV-SEC-001"]}, event_id="evt-once")
+        kw = dict(
+            event_type=AuditEventType.IMPACT_COMPLETED,
+            ctx=self.ctx,
+            payload={"affected": ["INV-SEC-001"]},
+            event_id="evt-once",
+        )
         a = self.store.append_audit_event(**kw)
         b = self.store.append_audit_event(**kw)
         self.assertFalse(a.duplicate)
@@ -103,16 +112,25 @@ class TestDuplicateHandling(_Base):
         self.assertEqual(self.store.count_events(), 1)
 
     def test_conflicting_reuse_of_event_id_raises(self) -> None:
-        self.store.append_audit_event(event_type=AuditEventType.IMPACT_COMPLETED, ctx=self.ctx,
-                                      payload={"a": 1}, event_id="evt-x")
+        self.store.append_audit_event(
+            event_type=AuditEventType.IMPACT_COMPLETED,
+            ctx=self.ctx,
+            payload={"a": 1},
+            event_id="evt-x",
+        )
         with self.assertRaises(ConflictingDuplicateEventError):
-            self.store.append_audit_event(event_type=AuditEventType.IMPACT_COMPLETED, ctx=self.ctx,
-                                          payload={"a": 2}, event_id="evt-x")
+            self.store.append_audit_event(
+                event_type=AuditEventType.IMPACT_COMPLETED,
+                ctx=self.ctx,
+                payload={"a": 2},
+                event_id="evt-x",
+            )
 
     def test_audit_sequence_is_monotonic(self) -> None:
         seqs = [
-            self.store.append_audit_event(event_type=AuditEventType.STATE_CREATED, ctx=self.ctx,
-                                          payload={"i": i}).event.sequence
+            self.store.append_audit_event(
+                event_type=AuditEventType.STATE_CREATED, ctx=self.ctx, payload={"i": i}
+            ).event.sequence
             for i in range(5)
         ]
         self.assertEqual(seqs, sorted(seqs))
@@ -130,8 +148,10 @@ class TestHashesVerify(_Base):
         rec = self.put({"result": "FAIL"}).record
         # Simulate out-of-band tampering by defeating the trigger first.
         self.raw("DROP TRIGGER evidence_payload_no_update")
-        self.raw("UPDATE evidence_payload SET payload_json = ? WHERE content_hash = ?",
-                 ('{"result":"PASS"}', rec.content_hash))
+        self.raw(
+            "UPDATE evidence_payload SET payload_json = ? WHERE content_hash = ?",
+            ('{"result":"PASS"}', rec.content_hash),
+        )
         self.assertEqual(self.store.verify_integrity(rec), IntegrityStatus.TAMPERED)
 
     def test_missing_payload_is_detected(self) -> None:
@@ -145,13 +165,17 @@ class TestAppendOnly(_Base):
     def test_evidence_record_cannot_be_updated_or_deleted(self) -> None:
         rec = self.put().record
         with self.assertRaises(sqlite3.DatabaseError):
-            self.raw("UPDATE evidence_record SET validity='VALID', content_hash='x' WHERE evidence_id=?",
-                     (rec.evidence_id,))
+            self.raw(
+                "UPDATE evidence_record SET validity='VALID', content_hash='x' WHERE evidence_id=?",
+                (rec.evidence_id,),
+            )
         with self.assertRaises(sqlite3.DatabaseError):
             self.raw("DELETE FROM evidence_record WHERE evidence_id=?", (rec.evidence_id,))
 
     def test_audit_event_cannot_be_updated_or_deleted(self) -> None:
-        self.store.append_audit_event(event_type=AuditEventType.STATE_CREATED, ctx=self.ctx, payload={})
+        self.store.append_audit_event(
+            event_type=AuditEventType.STATE_CREATED, ctx=self.ctx, payload={}
+        )
         with self.assertRaises(sqlite3.DatabaseError):
             self.raw("UPDATE audit_event SET event_type='X'")
         with self.assertRaises(sqlite3.DatabaseError):
@@ -170,8 +194,12 @@ class TestInvalidationPreservesHistory(_Base):
     def test_invalidation_keeps_original_record_and_payload(self) -> None:
         rec = self.put({"result": "PASS"}, candidate_id="cand-1").record
         tr = self.store.invalidate(
-            rec.evidence_id, reason="INV-FUNC-001 affected by candidate",
-            ctx=self.ctx, candidate_id="cand-1", impact_report_ref="impact-7")
+            rec.evidence_id,
+            reason="INV-FUNC-001 affected by candidate",
+            ctx=self.ctx,
+            candidate_id="cand-1",
+            impact_report_ref="impact-7",
+        )
         self.assertEqual(self.store.current_validity(rec.evidence_id), EvidenceValidity.INVALID)
         # original record untouched, payload still resolvable and intact
         again = self.store.get_evidence(rec.evidence_id)
@@ -196,8 +224,9 @@ class TestInvalidationPreservesHistory(_Base):
         rec = self.put().record
         self.store.invalidate(rec.evidence_id, reason="impact", ctx=self.ctx)
         with self.assertRaises(InvalidValidityTransition):
-            self.store.change_validity(rec.evidence_id, EvidenceValidity.VALID,
-                                       reason="pretend it is fine", ctx=self.ctx)
+            self.store.change_validity(
+                rec.evidence_id, EvidenceValidity.VALID, reason="pretend it is fine", ctx=self.ctx
+            )
 
     def test_a_reason_is_mandatory(self) -> None:
         rec = self.put().record
@@ -210,8 +239,12 @@ class TestInvalidationPreservesHistory(_Base):
 
     def test_uncertain_can_be_resolved(self) -> None:
         rec = self.put().record
-        self.store.change_validity(rec.evidence_id, EvidenceValidity.UNCERTAIN, reason="?", ctx=self.ctx)
-        self.store.change_validity(rec.evidence_id, EvidenceValidity.VALID, reason="confirmed", ctx=self.ctx)
+        self.store.change_validity(
+            rec.evidence_id, EvidenceValidity.UNCERTAIN, reason="?", ctx=self.ctx
+        )
+        self.store.change_validity(
+            rec.evidence_id, EvidenceValidity.VALID, reason="confirmed", ctx=self.ctx
+        )
         self.assertEqual(self.store.current_validity(rec.evidence_id), EvidenceValidity.VALID)
         self.assertEqual(len(self.store.validity_history(rec.evidence_id)), 2)
 
@@ -223,7 +256,9 @@ class TestSupersession(_Base):
         self.store.supersede(old.evidence_id, new.evidence_id, reason="re-verified", ctx=self.ctx)
         self.assertEqual(self.store.current_validity(old.evidence_id), EvidenceValidity.SUPERSEDED)
         self.assertEqual(self.store.superseded_by(old.evidence_id), new.evidence_id)
-        self.assertEqual(self.store.resolve_payload(self.store.get_evidence(old.evidence_id)), {"v": 1})
+        self.assertEqual(
+            self.store.resolve_payload(self.store.get_evidence(old.evidence_id)), {"v": 1}
+        )
 
     def test_cannot_supersede_with_invalid_evidence(self) -> None:
         old, new = self.put({"v": 1}).record, self.put({"v": 2}).record
@@ -277,8 +312,10 @@ class TestProofGate(_Base):
     def test_tampered_evidence_is_not_proof(self) -> None:
         rec = self.put({"result": "FAIL"}, state_id="state-1").record
         self.raw("DROP TRIGGER evidence_payload_no_update")
-        self.raw("UPDATE evidence_payload SET payload_json=? WHERE content_hash=?",
-                 ('{"result":"PASS"}', rec.content_hash))
+        self.raw(
+            "UPDATE evidence_payload SET payload_json=? WHERE content_hash=?",
+            ('{"result":"PASS"}', rec.content_hash),
+        )
         check = self.store.usable_as_proof(rec.evidence_id, state_id="state-1")
         self.assertFalse(check.usable)
         self.assertTrue(any("TAMPERED" in r for r in check.reasons))
@@ -295,27 +332,53 @@ class TestLineageQueries(_Base):
         b = self.put({"n": 2}, state_id=None, candidate_id="cand-1").record
         other_ctx = CorrelationContext.new()
         self.store.put_evidence(
-            evidence_type=EvidenceType.IMPACT, payload={"n": 3}, ctx=other_ctx,
-            source_component="impact", source_type="engine",
-            algorithm_or_verifier_version="1", state_id="state-1")
+            evidence_type=EvidenceType.IMPACT,
+            payload={"n": 3},
+            ctx=other_ctx,
+            source_component="impact",
+            source_type="engine",
+            algorithm_or_verifier_version="1",
+            state_id="state-1",
+        )
         self.assertEqual(len(self.store.evidence_for_state("state-1")), 2)
-        self.assertEqual([r.evidence_id for r in self.store.evidence_for_candidate("cand-1")], [b.evidence_id])
-        self.assertEqual({r.evidence_id for r in self.store.evidence_for_correlation(self.ctx.correlation_id)},
-                         {a.evidence_id, b.evidence_id})
+        self.assertEqual(
+            [r.evidence_id for r in self.store.evidence_for_candidate("cand-1")], [b.evidence_id]
+        )
+        self.assertEqual(
+            {r.evidence_id for r in self.store.evidence_for_correlation(self.ctx.correlation_id)},
+            {a.evidence_id, b.evidence_id},
+        )
 
     def test_events_come_back_in_append_order(self) -> None:
-        for t in (AuditEventType.CANDIDATE_CREATED, AuditEventType.IMPACT_COMPLETED,
-                  AuditEventType.VERIFICATION_COMPLETED, AuditEventType.CANDIDATE_REJECTED):
-            self.store.append_audit_event(event_type=t, ctx=self.ctx, payload={}, candidate_id="cand-1")
+        for t in (
+            AuditEventType.CANDIDATE_CREATED,
+            AuditEventType.IMPACT_COMPLETED,
+            AuditEventType.VERIFICATION_COMPLETED,
+            AuditEventType.CANDIDATE_REJECTED,
+        ):
+            self.store.append_audit_event(
+                event_type=t, ctx=self.ctx, payload={}, candidate_id="cand-1"
+            )
         got = [e.event_type for e in self.store.events_for_correlation(self.ctx.correlation_id)]
-        self.assertEqual(got, [AuditEventType.CANDIDATE_CREATED, AuditEventType.IMPACT_COMPLETED,
-                               AuditEventType.VERIFICATION_COMPLETED, AuditEventType.CANDIDATE_REJECTED])
+        self.assertEqual(
+            got,
+            [
+                AuditEventType.CANDIDATE_CREATED,
+                AuditEventType.IMPACT_COMPLETED,
+                AuditEventType.VERIFICATION_COMPLETED,
+                AuditEventType.CANDIDATE_REJECTED,
+            ],
+        )
         self.assertEqual(len(self.store.events_for_candidate("cand-1")), 4)
 
     def test_correlation_is_isolated_between_workflows(self) -> None:
-        self.store.append_audit_event(event_type=AuditEventType.STATE_CREATED, ctx=self.ctx, payload={})
+        self.store.append_audit_event(
+            event_type=AuditEventType.STATE_CREATED, ctx=self.ctx, payload={}
+        )
         other = CorrelationContext.new()
-        self.store.append_audit_event(event_type=AuditEventType.STATE_CREATED, ctx=other, payload={})
+        self.store.append_audit_event(
+            event_type=AuditEventType.STATE_CREATED, ctx=other, payload={}
+        )
         self.assertEqual(len(self.store.events_for_correlation(self.ctx.correlation_id)), 1)
 
 

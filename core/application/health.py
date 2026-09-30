@@ -96,7 +96,9 @@ def _check_artifact_store(config: ResolvedConfig, repo_root: Path) -> HealthChec
     if not path.exists():
         return HealthCheckResult("artifact_store", FAIL, f"artifact root not found: {shown}")
     if not path.is_dir():
-        return HealthCheckResult("artifact_store", FAIL, f"artifact root is not a directory: {shown}")
+        return HealthCheckResult(
+            "artifact_store", FAIL, f"artifact root is not a directory: {shown}"
+        )
     if not os.access(path, os.W_OK):
         return HealthCheckResult("artifact_store", FAIL, f"artifact root is not writable: {shown}")
     return HealthCheckResult("artifact_store", PASS, f"{shown}: directory exists and is writable")

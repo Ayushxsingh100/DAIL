@@ -3,8 +3,8 @@ import unittest
 from core.domain.enums import InvariantLifecycleState, InvariantType
 from core.domain.invariant import (
     DuplicateInvariantError,
-    Invariant,
     InvalidLifecycleTransition,
+    Invariant,
     InvariantNotFoundError,
     InvariantRegistry,
 )

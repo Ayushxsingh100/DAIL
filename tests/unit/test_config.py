@@ -117,14 +117,17 @@ class TestDefaultsAndPrecedence(ConfigTestCase):
         self.assertEqual(cfg.get("observability.log_level"), "INFO")
         self.assertEqual(cfg.sources["database.path"], "VERSIONED_FILE")
         self.assertEqual(cfg.sources["llm.api_key_ref"], "DEFAULT")
-        self.assertEqual(set(cfg.values), {k.area for k in SCHEMA} | {"verification", "experiments"})
+        self.assertEqual(
+            set(cfg.values), {k.area for k in SCHEMA} | {"verification", "experiments"}
+        )
 
     def test_versioned_file_overrides_default(self) -> None:
         cfg = load_config(self.make_config(base={"observability": "# empty\n"}), environ={})
         self.assertEqual(cfg.get("observability.log_level"), "INFO")
         self.assertEqual(cfg.sources["observability.log_level"], "DEFAULT")
-        cfg = load_config(self.make_config(base={"observability": 'log_level = "WARN"\n'},
-                                           name="c2"), environ={})
+        cfg = load_config(
+            self.make_config(base={"observability": 'log_level = "WARN"\n'}, name="c2"), environ={}
+        )
         self.assertEqual(cfg.get("observability.log_level"), "WARN")
         self.assertEqual(cfg.sources["observability.log_level"], "VERSIONED_FILE")
 
@@ -243,7 +246,9 @@ class TestRejectedInAnyLayer(ConfigTestCase):
 
     def test_malformed_csx_key_variable_is_rejected(self) -> None:
         # Single underscore between area and key: a typo that would otherwise be ignored.
-        err = self.load_error(self.make_config(), environ={"CSX__PROMOTION_AUTOMATIC_ENABLED": "false"})
+        err = self.load_error(
+            self.make_config(), environ={"CSX__PROMOTION_AUTOMATIC_ENABLED": "false"}
+        )
         self.assert_problem(err, "CSX__PROMOTION_AUTOMATIC_ENABLED: unrecognized CSX_ variable")
 
 
@@ -281,10 +286,13 @@ class TestTypes(ConfigTestCase):
         )
 
     def test_enum_value_outside_allowed_set_is_rejected(self) -> None:
-        err = self.load_error(self.make_config(), environ={"CSX__OBSERVABILITY__LOG_LEVEL": "VERBOSE"})
+        err = self.load_error(
+            self.make_config(), environ={"CSX__OBSERVABILITY__LOG_LEVEL": "VERBOSE"}
+        )
         self.assert_problem(err, "observability.log_level: expected one of ERROR, WARN, INFO")
-        cfg_dir = self.make_config(base={"llm": 'generation_enabled = false\nprovider = "openai"\n'},
-                                   name="c2")
+        cfg_dir = self.make_config(
+            base={"llm": 'generation_enabled = false\nprovider = "openai"\n'}, name="c2"
+        )
         self.assert_problem(
             self.load_error(cfg_dir, environ={}), "llm.provider: expected one of fake"
         )
@@ -293,7 +301,9 @@ class TestTypes(ConfigTestCase):
 class TestSecrets(ConfigTestCase):
     def test_literal_secret_is_rejected_and_never_echoed(self) -> None:
         err = self.load_error(self.make_config(), environ={"CSX__LLM__API_KEY_REF": FAKE_SECRET})
-        self.assert_problem(err, "llm.api_key_ref: expected a secret reference of the form env:NAME")
+        self.assert_problem(
+            err, "llm.api_key_ref: expected a secret reference of the form env:NAME"
+        )
         self.assertNotIn(FAKE_SECRET, str(err))
         self.assertNotIn(FAKE_SECRET, "\n".join(err.problems))
 
@@ -322,7 +332,8 @@ class TestSchemaVersion(ConfigTestCase):
     def test_mismatch_is_rejected(self) -> None:
         cfg_dir = self.make_config(base={"application": "config_schema_version = 2\n"})
         self.assert_problem(
-            self.load_error(cfg_dir, environ={}), "does not match the loader's CONFIG_SCHEMA_VERSION"
+            self.load_error(cfg_dir, environ={}),
+            "does not match the loader's CONFIG_SCHEMA_VERSION",
         )
 
     def test_set_from_environment_file_is_rejected(self) -> None:
@@ -372,8 +383,12 @@ class TestRuntimeOverrides(ConfigTestCase):
 
 class TestSafetyFlags(ConfigTestCase):
     FLAGS = (
-        ("promotion.automatic_enabled", "CSX__PROMOTION__AUTOMATIC_ENABLED", "promotion",
-         "automatic_enabled"),
+        (
+            "promotion.automatic_enabled",
+            "CSX__PROMOTION__AUTOMATIC_ENABLED",
+            "promotion",
+            "automatic_enabled",
+        ),
         ("llm.generation_enabled", "CSX__LLM__GENERATION_ENABLED", "llm", "generation_enabled"),
     )
 
@@ -418,8 +433,10 @@ class TestSafetyFlags(ConfigTestCase):
                 self.assert_problem(err, f"safety-critical flag {dotted} can only be enabled")
 
     def test_safety_flags_default_to_conservative(self) -> None:
-        cfg = load_config(self.make_config(base={"llm": 'provider = "fake"\n',
-                                                 "promotion": "# empty\n"}), environ={})
+        cfg = load_config(
+            self.make_config(base={"llm": 'provider = "fake"\n', "promotion": "# empty\n"}),
+            environ={},
+        )
         self.assertEqual(
             cfg.safety_flags(),
             {"llm.generation_enabled": False, "promotion.automatic_enabled": False},

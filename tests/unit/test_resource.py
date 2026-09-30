@@ -30,7 +30,9 @@ class TestResourceValidation(unittest.TestCase):
             Resource(
                 address="aws_instance.old",
                 action=ChangeAction.DELETED,
-                after={"instance_type": "t2.nano"},  # illegal: deleted resources have no resulting state
+                after={
+                    "instance_type": "t2.nano"
+                },  # illegal: deleted resources have no resulting state
             )
 
     def test_unchanged_resource_before_after_must_match(self) -> None:
@@ -66,7 +68,7 @@ class TestResourceValidation(unittest.TestCase):
 
     def test_resource_is_frozen(self) -> None:
         r = Resource(address="aws_vpc.web_vpc", action=ChangeAction.UNCHANGED)
-        with self.assertRaises(Exception):
+        with self.assertRaises(Exception):  # noqa: B017
             r.address = "something-else"  # type: ignore[misc]
 
 

@@ -5,9 +5,7 @@ from core.domain.state import CandidateState, CandidateStatus, TrustedState
 
 class TestTrustedStateGenesis(unittest.TestCase):
     def test_genesis_has_version_1_and_no_parent(self) -> None:
-        s0 = TrustedState.genesis(
-            content_payload={"resources": []}, invariant_registry_version=1
-        )
+        s0 = TrustedState.genesis(content_payload={"resources": []}, invariant_registry_version=1)
         self.assertEqual(s0.version, 1)
         self.assertIsNone(s0.parent_state_id)
         self.assertTrue(s0.state_id.startswith("state-"))
@@ -34,7 +32,7 @@ class TestTrustedStateGenesis(unittest.TestCase):
 
     def test_trusted_state_is_frozen(self) -> None:
         s0 = TrustedState.genesis(content_payload={}, invariant_registry_version=1)
-        with self.assertRaises(Exception):
+        with self.assertRaises(Exception):  # noqa: B017
             s0.version = 99  # type: ignore[misc]
 
 
@@ -87,7 +85,9 @@ class TestStateLineage(unittest.TestCase):
 
     def test_cannot_promote_candidate_built_from_a_different_parent(self) -> None:
         s0 = TrustedState.genesis(content_payload={"v": 0}, invariant_registry_version=1)
-        other_branch = TrustedState.genesis(content_payload={"v": "other"}, invariant_registry_version=1)
+        other_branch = TrustedState.genesis(
+            content_payload={"v": "other"}, invariant_registry_version=1
+        )
 
         candidate = CandidateState.build(parent=other_branch, patch_payload={"p": 1})
         candidate.mark_under_verification()
@@ -107,7 +107,10 @@ class TestStateLineage(unittest.TestCase):
         # status is still BUILT, never went through verification
         with self.assertRaises(ValueError):
             TrustedState.promoted_from(
-                candidate=candidate, parent=s0, content_payload={"v": 1}, invariant_registry_version=1
+                candidate=candidate,
+                parent=s0,
+                content_payload={"v": 1},
+                invariant_registry_version=1,
             )
 
 
