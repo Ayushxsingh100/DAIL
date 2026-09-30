@@ -34,3 +34,7 @@ This register records every conflict found between the 15 `CloudSpartanX_*` spec
 | N-05 | Condition A on change-request families | For F1, F5 and F7, Stateless runs structural checks only; declared in the frozen protocol | Pending protocol freeze |
 | N-06 | Guide granularity | 18 work packages (`BUILD_SEQUENCE.md`) | Accepted |
 | N-07 | Safety-flag enabling | Safety-critical flags can be set to the conservative value from any layer, but enabled only in a reviewed configuration file (interpretation of Doc 14 §15, §37) | Accepted |
+| C-24 | Dev-tool pins vs dependency scan | black 26.3.1 and pytest 9.0.3 replace black 24.10.0 and pytest 8.3.3 so that `pip-audit` reports no known vulnerabilities (PYSEC-2026-2120, PYSEC-2026-2121, PYSEC-2026-1845); `requirements/dev.lock` regenerated with pip-compile (Doc 14 §23, §39) | Accepted 30 Sep 2026 |
+| C-25 | Secret variable naming vs stray-variable rule | .env.example suggests the secret lives in CSX_LLM_API_KEY, but the loader rejects every CSX_ variable other than CSX_ENV and CSX__<AREA>__<KEY>; decide before P7a | Open |
+| C-26 | Runtime override of safety flags | N-07 allows the conservative value from any layer; the loader rejects every runtime override except observability.log_level, including setting a safety flag to false (fails closed) | Open |
+| C-27 | core/terraform_model import boundary | Guide text says "no other core engines"; the enforced rule R6 forbids every other core.* package, including core.domain; decide before P3a | Open |
