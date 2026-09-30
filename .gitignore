@@ -15,3 +15,12 @@ venv/
 .env.*
 !.env.example
 .DS_Store
+
+# Local runtime data (scripts/dev.py bootstrap), Terraform working files, build output.
+# .terraform.lock.hcl and requirements/dev.lock are committed and must NOT be ignored.
+.local/
+.terraform/
+*.tfstate
+*.tfstate.*
+dist/
+build/
