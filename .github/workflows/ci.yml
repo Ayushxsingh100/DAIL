@@ -16,7 +16,7 @@ jobs:
   # P0 and must be revised, not this workflow.
   quality:
     name: quality
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -43,7 +43,7 @@ jobs:
 
   secrets:
     name: secrets
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       pull-requests: read
@@ -57,7 +57,7 @@ jobs:
 
   terraform:
     name: terraform
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       TF_VERSION: "1.15.8"
     steps:
