@@ -47,6 +47,14 @@ python3.12 scripts/dev.py health      # one line per health check; exit 1 on any
 `bash scripts/bootstrap.sh` is a thin wrapper around `scripts/dev.py bootstrap`
 (on Windows use WSL or Git Bash, or call `scripts/dev.py` directly).
 
+## Windows notes
+
+- Use `py -3.12` where the docs say `python3.12`.
+- If `terraform init` fails with "forcibly closed by the remote host", Terraform's
+  IPv6 connection is being reset. As a temporary workaround, in an admin shell run
+  `netsh interface ipv6 set prefixpolicy ::ffff:0:0/96 100 4`, then revert with
+  `netsh interface ipv6 set prefixpolicy ::ffff:0:0/96 35 4`.
+
 ## Dev toolchain and lockfiles
 
 The dev toolchain is exact-pinned in `pyproject.toml` and hash-locked in
