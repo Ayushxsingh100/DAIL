@@ -92,10 +92,10 @@ python scripts/dev.py health
 | Python | 3.12 |
 | Terraform | `~> 1.15.0` (CI installs 1.15.8) |
 | AWS provider | 6.53.0 |
-| black | 24.10.0 |
+| black | 26.3.1 |
 | ruff | 0.7.0 |
 | mypy | 1.13.0 |
-| pytest | 8.3.3 |
+| pytest | 9.0.3 |
 | pytest-cov | 5.0.0 |
 | pip-audit | exact version comes from the lockfile |
 | actions/checkout | v6 |
