@@ -38,3 +38,4 @@ This register records every conflict found between the 15 `CloudSpartanX_*` spec
 | C-25 | Secret variable naming vs stray-variable rule | .env.example suggests the secret lives in CSX_LLM_API_KEY, but the loader rejects every CSX_ variable other than CSX_ENV and CSX__<AREA>__<KEY>; decide before P7a | Open |
 | C-26 | Runtime override of safety flags | N-07 allows the conservative value from any layer; the loader rejects every runtime override except observability.log_level, including setting a safety flag to false (fails closed) | Open |
 | C-27 | core/terraform_model import boundary | Guide text says "no other core engines"; the enforced rule R6 forbids every other core.* package, including core.domain; decide before P3a | Open |
+| C-28 | PR approval with a single developer | Doc 14 §22 puts PR approval before merge; GitHub does not allow self-approval, so protection requires 0 approvals and the external review report serves as the approval record | Open |

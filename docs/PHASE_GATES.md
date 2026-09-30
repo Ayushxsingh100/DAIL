@@ -6,17 +6,17 @@ A gate is PASSED only when the Claude review has audited every Doc 15 exit crite
 
 An earlier version of this file marked P1 and P2 as PASSED. Those claims were withdrawn on 29 Sep 2026 after a spec audit.
 
-## P0 — Project Bootstrap — IN PROGRESS (P0-close)
+## P0 — Project Bootstrap — PASSED (external review, 30 Sep 2026)
 
-Doc 15 §7.3 exit criteria:
-
-| Exit criterion | Status | Evidence |
+| Exit criterion (Doc 15 §7.3) | Status | Evidence |
 |---|---|---|
-| Fresh clone can bootstrap | PENDING REVIEW | `python scripts/dev.py bootstrap` |
-| CI runs successfully | NOT YET OBSERVED | Needs a green run on GitHub `main` |
-| Unit test command works | PENDING REVIEW | `python scripts/dev.py test` (`python -m unittest discover -s tests -p "test_*.py"`) |
-| No secrets required for core tests | PENDING REVIEW | The CI `quality` job uses no secrets |
-| Main branch protected | NOT YET DONE | Manual GitHub setting |
+| Fresh clone can bootstrap | PASS | Fresh clones of `c08f8e5`: `scripts/dev.py bootstrap` exit 0 on Windows 11 (Python 3.12.10) and on Linux (Python 3.12.3); 211 tests OK; health 4 PASS, llm_provider SKIPPED |
+| CI runs successfully | PASS | Run 36722784541 on `main` (`c08f8e5`, push): quality, secrets, terraform all success |
+| Unit test command works | PASS | `python -m unittest discover -s tests -p "test_*.py"`: 211 tests OK with no third-party packages |
+| No secrets required for core tests | PASS | The CI quality job uses no secrets; the only secret reference in ci.yml is GITHUB_TOKEN for gitleaks |
+| Main branch protected | PASS | PR required; strict required checks quality/secrets/terraform; admins included; no force-push or deletion (API read-back, 30 Sep 2026) |
+
+Carried forward: required approvals = 0 (C-28, Open). Doc 14 §23's safety-regression and adversarial test gates are empty at P0; they must hold real tests from P3a onward and must not pass empty at later gates.
 
 ## P1 — Domain Foundation — NOT PASSED
 

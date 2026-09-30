@@ -13,7 +13,7 @@ mechanism, formal model, and evaluation methodology.
 
 | Phase | Status |
 |---|---|
-| P0 — Project Bootstrap | IN PROGRESS (P0-close) |
+| P0 — Project Bootstrap | PASSED (30 Sep 2026) |
 | P1 — Domain Foundation | NOT PASSED; rewrite scheduled (P1a, P1b) |
 | P2 — Evidence Foundation | NOT PASSED; reconciliation scheduled (P2-fix) |
 | P3–P10 | NOT STARTED |
@@ -46,6 +46,14 @@ python3.12 scripts/dev.py health      # one line per health check; exit 1 on any
 
 `bash scripts/bootstrap.sh` is a thin wrapper around `scripts/dev.py bootstrap`
 (on Windows use WSL or Git Bash, or call `scripts/dev.py` directly).
+
+## Windows notes
+
+- Use `py -3.12` where the docs say `python3.12`.
+- If `terraform init` fails with "forcibly closed by the remote host", Terraform's
+  IPv6 connection is being reset. As a temporary workaround, in an admin shell run
+  `netsh interface ipv6 set prefixpolicy ::ffff:0:0/96 100 4`, then revert with
+  `netsh interface ipv6 set prefixpolicy ::ffff:0:0/96 35 4`.
 
 ## Dev toolchain and lockfiles
 
