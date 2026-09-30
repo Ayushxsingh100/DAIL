@@ -13,7 +13,7 @@ mechanism, formal model, and evaluation methodology.
 
 | Phase | Status |
 |---|---|
-| P0 — Project Bootstrap | IN PROGRESS (P0-close) |
+| P0 — Project Bootstrap | PASSED (30 Sep 2026) |
 | P1 — Domain Foundation | NOT PASSED; rewrite scheduled (P1a, P1b) |
 | P2 — Evidence Foundation | NOT PASSED; reconciliation scheduled (P2-fix) |
 | P3–P10 | NOT STARTED |
