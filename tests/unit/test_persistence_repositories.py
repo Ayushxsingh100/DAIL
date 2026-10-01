@@ -24,9 +24,10 @@ from unittest import mock
 
 import core.persistence.schema as schema_module
 import core.persistence.sqlite as sqlite_module
-from core.domain.enums import CandidateStatus, InvariantCategory
+from core.domain.enums import CandidateSource, CandidateStatus, InvariantCategory
 from core.domain.errors import (
     DomainValidationError,
+    HashMismatchError,
     IllegalTransitionError,
     PersistenceError,
     StaleParentError,
@@ -276,6 +277,11 @@ class TestUnitOfWork(RepoCase):
         with self.assertRaises(PersistenceError) as ctx, SqliteUnitOfWork(other):
             pass
         self.assertIn("schema version 4", str(ctx.exception))
+
+    def test_constructing_a_unit_of_work_does_not_create_the_file(self) -> None:
+        missing = Path(self._tmp.name) / "later.db"
+        SqliteUnitOfWork(missing)
+        self.assertFalse(missing.exists())
 
     def test_an_uninitialized_database_is_refused(self) -> None:
         with (
@@ -963,14 +969,41 @@ class TestSaveTransitionEnforcesTheLifecycle(RepoCase):
         self.assertEqual(other.candidate_id, self.ready.candidate_id)
         self.refused(transition_candidate(other, CS.ANALYZING), DomainValidationError)
 
+    def test_no_identity_field_can_change_in_a_successor(self) -> None:
+        """Doc 05 §23: candidate semantic content is immutable after construction."""
+        changes: dict[str, Any] = {
+            "lineage_id": uid(0x5FE),
+            "parent_state_id": uid(0x5FD),
+            "candidate_sequence": 99,
+            "source": CandidateSource.LLM,
+            "patch_id": uid(0x5FC),
+            "patch_hash": "e" * 64,
+            "created_at": at(99),
+        }
+        for field, value in changes.items():
+            with self.subTest(field=field):
+                successor = self.analyzing._evolve(**{field: value})
+                exc, stored = self.refused(successor, DomainValidationError)
+                self.assertIn(field, str(exc))
+                self.assertEqual(stored, self.ready)
+        # normalization_version is part of the candidate's own hash, so a READY successor with
+        # another value cannot even be constructed.
+        with self.assertRaises(HashMismatchError):
+            self.analyzing._evolve(normalization_version="norm-9")
+        # A different candidate_id is simply another candidate, which is not stored.
+        with self.uow() as u, self.assertRaises(PersistenceError):
+            u.candidates.save_transition(self.analyzing._evolve(candidate_id=uid(0x5FF)))
+
     def test_an_unknown_candidate_is_refused(self) -> None:
         with self.uow() as u, self.assertRaises(PersistenceError):
             u.candidates.save_transition(start_building(new_candidate(self.v0, n=9, sequence=9)))
 
     def test_a_rejected_candidate_cannot_change_again(self) -> None:
+        rejected = transition_candidate(self.analyzing, CS.REJECTED)
         with self.uow() as u:
             u.candidates.save_transition(self.analyzing)
-            u.candidates.save_transition(transition_candidate(self.analyzing, CS.REJECTED))
+            u.candidates.save_transition(rejected)
+        self.assertEqual(self.read_candidate(rejected.candidate_id), rejected)
         for target in (CS.ANALYZING, CS.PROMOTABLE, CS.RETRY_REQUIRED, CS.ESCALATED, CS.REJECTED):
             with self.subTest(target=target):
                 successor = (
@@ -1125,13 +1158,17 @@ class TestTamperDetection(RepoCase):
         self.steps = self.store_stages(self.v0, SAFE, upto=2)
         self.ready = self.steps[2]
 
-    def assert_state_refused(self, state_id: str) -> None:
-        with self.uow() as u, self.assertRaises(PersistenceError):
+    def assert_state_refused(self, state_id: str, *, by_hash: bool = False) -> None:
+        with self.uow() as u, self.assertRaises(PersistenceError) as ctx:
             u.trusted_states.get(state_id)
+        if by_hash:  # the domain's hash re-validation found it, not a column check (DATA-INT-010)
+            self.assertIsInstance(ctx.exception.__cause__, HashMismatchError)
 
-    def assert_candidate_refused(self, candidate_id: str) -> None:
-        with self.uow() as u, self.assertRaises(PersistenceError):
+    def assert_candidate_refused(self, candidate_id: str, *, by_hash: bool = False) -> None:
+        with self.uow() as u, self.assertRaises(PersistenceError) as ctx:
             u.candidates.get(candidate_id)
+        if by_hash:
+            self.assertIsInstance(ctx.exception.__cause__, HashMismatchError)
 
     def edit_content(self, table: str, key: str, value: str, mutate: Any) -> None:
         content = json.loads(
@@ -1153,7 +1190,7 @@ class TestTamperDetection(RepoCase):
             content["resources"][0]["attributes"]["size"] = "tampered"
 
         self.edit_content("trusted_states", "state_id", self.v0.state_id, mutate)
-        self.assert_state_refused(self.v0.state_id)
+        self.assert_state_refused(self.v0.state_id, by_hash=True)
 
     def test_a_scalar_column_that_disagrees_with_the_content_is_caught(self) -> None:
         self.tamper("UPDATE trusted_states SET version = 5 WHERE state_id = ?", (self.v0.state_id,))
@@ -1235,7 +1272,7 @@ class TestTamperDetection(RepoCase):
             content["resources"][0]["attributes"]["size"] = "tampered"
 
         self.edit_content("candidates", "candidate_id", self.ready.candidate_id, mutate)
-        self.assert_candidate_refused(self.ready.candidate_id)
+        self.assert_candidate_refused(self.ready.candidate_id, by_hash=True)
 
     def test_a_status_edited_only_in_the_content_is_caught(self) -> None:
         def mutate(content: dict[str, Any]) -> None:

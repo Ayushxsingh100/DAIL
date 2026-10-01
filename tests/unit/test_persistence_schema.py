@@ -376,8 +376,11 @@ class TestInitialization(unittest.TestCase):
                         "CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);"
                         f"INSERT INTO schema_meta VALUES ('schema_version', '{version}');"
                     )
-                with self.assertRaises(PersistenceError):
+                with self.assertRaises(PersistenceError) as ctx:
                     initialize_database(path)
+                self.assertIn(f"schema version {version}", str(ctx.exception))
+                self.assertIn("delete", str(ctx.exception))
+                self.assertEqual(schema_version(path), version)
 
     def test_a_schema_meta_without_a_version_is_refused(self) -> None:
         with closing(sqlite3.connect(self.path)) as conn:
@@ -581,27 +584,35 @@ class TestImmutability(DbCase):
         self.run_sql("INSERT INTO candidate_resources VALUES (?,?,?)", (C1, "aws_instance.app", R1))
 
     COLUMNS = {
-        "trusted_states": "state_hash",
-        "patches": "content_hash",
-        "resources": "fingerprint",
-        "state_resources": "record_id",
-        "candidate_resources": "record_id",
-        "invariants": "definition_hash",
-        "invariant_refs": "status",
+        "trusted_states": (
+            "state_hash",
+            "version",
+            "content_json",
+            "lineage_id",
+            "commit_decision_id",
+            "parent_state_id",
+        ),
+        "patches": ("content_hash", "content_json", "parent_state_id"),
+        "resources": ("fingerprint", "content_json", "address", "resource_type"),
+        "state_resources": ("record_id", "address"),
+        "candidate_resources": ("record_id", "address"),
+        "invariants": ("definition_hash", "content_json", "created_at"),
+        "invariant_refs": ("status", "origin", "evidence_ids", "last_verified_at"),
     }
-    NEW_VALUE = {"record_id": uid(0x77), "status": "VIOLATED"}
+    NEW_VALUE = {"record_id": uid(0x77), "status": "VIOLATED", "version": 5, "origin": "VERIFIED"}
 
     def test_an_immutable_row_cannot_be_updated(self) -> None:
         self.populate()
-        for table in IMMUTABLE_TABLES:
-            column = self.COLUMNS[table]
-            value = self.NEW_VALUE.get(column, "f" * 64)
-            with self.subTest(table=table):
-                self.refused_and_unchanged(
-                    f"UPDATE {table} SET {column} = ?",
-                    (value,),
-                    f"DATA-INT-006: {table} is immutable",
-                )
+        self.assertEqual(set(self.COLUMNS), set(IMMUTABLE_TABLES))
+        for table, columns in self.COLUMNS.items():
+            for column in columns:
+                value = self.NEW_VALUE.get(column, "f" * 64)
+                with self.subTest(table=table, column=column):
+                    self.refused_and_unchanged(
+                        f"UPDATE {table} SET {column} = ?",
+                        (value,),
+                        f"DATA-INT-006: {table} is immutable",
+                    )
 
     def test_an_immutable_row_cannot_be_deleted(self) -> None:
         self.populate()
