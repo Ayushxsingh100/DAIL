@@ -48,6 +48,16 @@ def content_hash(payload: Any) -> str:
     return digest.hexdigest()
 
 
+def sha256_text(text: str) -> str:
+    """SHA-256 hex digest of ``text`` as UTF-8, with CRLF and CR normalized to LF.
+
+    Used for patch content (Doc 05 §25: ``patch_hash = SHA256(canonical_patch_content)``;
+    C-33), so the same patch hashes identically whatever line endings a platform wrote.
+    """
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
 def verify_content_hash(payload: Any, expected_hash: str) -> bool:
     """Whether `payload` actually hashes to `expected_hash`.
 
