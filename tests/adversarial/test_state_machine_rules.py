@@ -382,7 +382,12 @@ class TestSM006(unittest.TestCase):
     P1a: PROTECTED, VIOLATED and UNCERTAIN are reachable only by applying a verification result
     to a VERIFYING or REVERIFYING evaluation (Doc 06 §12). An AFFECTED, REVERIFYING or
     never-verified evaluation cannot produce a proof, and a reference cannot carry an in-flight
-    status. P5 adds the verifiers; P6 adds the check that proofs match the promotion.
+    status. P5 adds the verifiers; P6 adds the policy for when carry-forward is allowed.
+
+    Round 2 (C-40): a proof is created only by ``for_baseline``, ``to_proof`` and ``carry_forward``,
+    and ``promote`` accepts only proofs bound to the candidate or carried from the current state,
+    covering every invariant on it. Without that, a VIOLATED invariant on v0 could be recorded
+    PROTECTED on v1, or dropped from v1, with no evaluation at all (review F10).
     """
 
     def setUp(self) -> None:
@@ -430,6 +435,73 @@ class TestSM006(unittest.TestCase):
             dataclasses.replace(
                 self.affected, status=S.PROTECTED, last_result=R.PASS, evidence_ids=(uid(2),)
             )
+
+    def violated_func(self) -> tuple[TrustedState, CandidateState]:
+        v0 = baseline(proofs=[proof(SEC, evidence=1), proof(FUNC, S.VIOLATED, evidence=2)])
+        return v0, promotable_candidate(v0, SAFE)
+
+    def test_a_violated_invariant_cannot_be_recorded_protected_without_an_evaluation(self) -> None:
+        """The review's first forgery: VIOLATED INV-FUNC-001 on v0 became PROTECTED on v1."""
+        v0, candidate = self.violated_func()
+        sec = verified_proof(v0, candidate, SEC, S.PROTECTED, 11)
+        # (a) The proof cannot be built by hand, nor rewritten with replace.
+        with self.assertRaises(UnauthorizedConstructionError):
+            InvariantProof(  # type: ignore[call-arg]
+                invariant_id=FUNC,
+                invariant_version=1,
+                status=S.PROTECTED,
+                evidence_ids=(uid(1012),),
+                verified_at=at(10),
+                origin=ProofOrigin.VERIFIED,
+                candidate_id=candidate.candidate_id,
+                source_state_id=None,
+            )
+        with self.assertRaises(UnauthorizedConstructionError):
+            dataclasses.replace(proof(FUNC, S.VIOLATED, evidence=2), status=S.PROTECTED)
+        # (b) A baseline proof is not accepted at promotion.
+        with self.assertRaises(DomainValidationError):
+            promote(candidate, v0, proofs=[sec, proof(FUNC, S.PROTECTED, evidence=12)])
+        # (c) Carrying the reference forward keeps it VIOLATED.
+        carried = promote(
+            candidate, v0, proofs=[sec, InvariantProof.carry_forward(ref_of(v0, FUNC), candidate)]
+        )
+        self.assertEqual(ref_of(carried, FUNC).status, S.VIOLATED)
+        self.assertFalse(ref_of(carried, FUNC).can_satisfy_proof())
+
+    def test_a_violated_invariant_becomes_protected_only_through_a_passing_reverification(
+        self,
+    ) -> None:
+        v0, candidate = self.violated_func()
+        reopened = InvariantEvaluation.reopen(ref_of(v0, FUNC), candidate, "fix attempted")
+        self.assertEqual(reopened.status, S.REVERIFYING)
+        failed = reopened.apply_result(R.FAIL, [uid(1012)], at(10))
+        passed = reopened.apply_result(R.PASS, [uid(1012)], at(10))
+        sec = verified_proof(v0, candidate, SEC, S.PROTECTED, 11)
+        still = promote(candidate, v0, proofs=[sec, failed.to_proof()])
+        self.assertEqual(ref_of(still, FUNC).status, S.VIOLATED)
+        fixed = promote(candidate, v0, proofs=[sec, passed.to_proof()], decision=2)
+        self.assertEqual(ref_of(fixed, FUNC).status, S.PROTECTED)
+        self.assertEqual(ref_of(fixed, FUNC).origin, ProofOrigin.VERIFIED)
+
+    def test_a_violated_invariant_cannot_disappear_at_promotion(self) -> None:
+        """The review's second forgery: with another proof list, INV-FUNC-001 vanished from v1."""
+        v0, candidate = self.violated_func()
+        sec = verified_proof(v0, candidate, SEC, S.PROTECTED, 11)
+        with self.assertRaises(DomainValidationError) as ctx:
+            promote(candidate, v0, proofs=[sec])
+        self.assertIn(FUNC, str(ctx.exception))
+        self.assertIn("C-40", str(ctx.exception))
+
+    def test_a_proof_verified_for_another_candidate_cannot_promote_this_one(self) -> None:
+        v0, candidate = self.violated_func()
+        other = promotable_candidate(v0, SAFE, n=2, sequence=2)
+        foreign = [
+            verified_proof(v0, other, SEC, S.PROTECTED, 11),
+            verified_proof(v0, other, FUNC, S.PROTECTED, 12),
+        ]
+        with self.assertRaises(DomainValidationError) as ctx:
+            promote(candidate, v0, proofs=foreign)
+        self.assertIn("C-40", str(ctx.exception))
 
     def test_a_proof_or_reference_cannot_carry_an_in_flight_status(self) -> None:
         for status in (S.AFFECTED, S.REVERIFYING, S.VERIFYING, S.REGISTERED):
