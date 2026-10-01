@@ -35,10 +35,31 @@ NEW = "INV-SEC-002"
 
 
 def registered_proof(
+    candidate: CandidateState, definition: Invariant, parent: TrustedState, evidence: int = 31
+) -> InvariantProof:
+    """A VERIFIED proof for an invariant the parent does not hold (L1 allows register only then)."""
+    done = (
+        InvariantEvaluation.register(candidate, definition, parent)
+        .start_verification()
+        .apply_result(VerificationResult.PASS, [uid(1000 + evidence)], at(10))
+    )
+    return done.to_proof()
+
+
+def forged_registered_proof(
     candidate: CandidateState, definition: Invariant, evidence: int = 31
 ) -> InvariantProof:
+    """A VERIFIED proof for an invariant version the parent already holds. L1 refuses
+    ``register`` for that, so this goes around it through the private constructor, on purpose:
+    it plays the forger that ``promote`` must still refuse (C-40)."""
     done = (
-        InvariantEvaluation.register(candidate, definition)
+        InvariantEvaluation._create(
+            candidate,
+            definition.invariant_id,
+            definition.version,
+            S.REGISTERED,
+            "REGISTERED_FOR_CANDIDATE",
+        )
         .start_verification()
         .apply_result(VerificationResult.PASS, [uid(1000 + evidence)], at(10))
     )
@@ -81,7 +102,7 @@ class TestEveryCurrentInvariantNeedsAProof(unittest.TestCase):
                 self.v0,
                 proofs=[
                     carried_proof(self.v0, self.candidate, SEC),
-                    registered_proof(self.candidate, invariant(NEW)),
+                    registered_proof(self.candidate, invariant(NEW), self.v0),
                 ],
             )
         self.assertIn(FUNC, str(ctx.exception))
@@ -93,7 +114,7 @@ class TestEveryCurrentInvariantNeedsAProof(unittest.TestCase):
             proofs=[
                 carried_proof(self.v0, self.candidate, SEC),
                 carried_proof(self.v0, self.candidate, FUNC),
-                registered_proof(self.candidate, invariant(NEW)),
+                registered_proof(self.candidate, invariant(NEW), self.v0),
             ],
         )
         self.assertEqual({r.invariant_id for r in v1.invariant_refs}, {SEC, FUNC, NEW})
@@ -125,7 +146,7 @@ class TestProofVersionMayNotGoDown(unittest.TestCase):
         self.func = carried_proof(self.v0, self.candidate, FUNC)
 
     def test_a_lower_version_is_refused(self) -> None:
-        lower = registered_proof(self.candidate, self.sec_v1)
+        lower = forged_registered_proof(self.candidate, self.sec_v1)
         self.assertEqual(lower.invariant_version, 1)
         with self.assertRaises(DomainValidationError) as ctx:
             promote(self.candidate, self.v0, proofs=[lower, self.func])
@@ -146,7 +167,7 @@ class TestProofVersionMayNotGoDown(unittest.TestCase):
     def test_a_higher_version_is_accepted(self) -> None:
         v0 = baseline(proofs=[proof(SEC, S.PROTECTED, 1), proof(FUNC, S.PROTECTED, 2)])
         candidate = promotable_candidate(v0, SAFE)
-        higher = registered_proof(candidate, self.sec_v2)
+        higher = forged_registered_proof(candidate, self.sec_v2)
         self.assertEqual(higher.invariant_version, 2)
         v1 = promote(candidate, v0, proofs=[higher, carried_proof(v0, candidate, FUNC)])
         self.assertEqual(
@@ -195,7 +216,7 @@ class TestOneReferencePerInvariant(unittest.TestCase):
         v0 = baseline()
         candidate = promotable_candidate(v0, SAFE)
         sec = verified_proof(v0, candidate, SEC, S.PROTECTED, 11)
-        extra = registered_proof(candidate, new_version(invariant(SEC), now=at(5)), 15)
+        extra = forged_registered_proof(candidate, new_version(invariant(SEC), now=at(5)), 15)
         func = carried_proof(v0, candidate, FUNC)
         for proofs in ([sec, sec, func], [sec, extra, func], [extra, sec, func]):
             with self.subTest(versions=[p.invariant_version for p in proofs]):

@@ -348,7 +348,7 @@ class TestRandomWalks(unittest.TestCase):
             return InvariantEvaluation.reopen(refs[FUNC], candidate, "walk")
         if kind == "reopen_uncertain":
             return InvariantEvaluation.reopen(refs["INV-SEC-002"], candidate, "walk")
-        return InvariantEvaluation.register(candidate, invariant("INV-FUNC-002"))
+        return InvariantEvaluation.register(candidate, invariant("INV-FUNC-002"), base)
 
     def test_invariant_walks(self) -> None:
         rng = random.Random(WALK_SEED)

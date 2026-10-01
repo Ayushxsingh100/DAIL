@@ -66,7 +66,9 @@ class EvaluationTestCase(unittest.TestCase):
         return self.affected().start_reverification()
 
     def verifying(self) -> InvariantEvaluation:
-        return InvariantEvaluation.register(self.candidate, invariant(FUNC2)).start_verification()
+        return InvariantEvaluation.register(
+            self.candidate, invariant(FUNC2), self.base
+        ).start_verification()
 
 
 class TestAffect(EvaluationTestCase):
@@ -141,21 +143,72 @@ class TestReopen(EvaluationTestCase):
         self.assertEqual(self.violated.to_dict(), before)
 
 
+class TestRegisterChecksTheParent(EvaluationTestCase):
+    """L1 (P1a review, C-31): ``register`` is only for an invariant the candidate's parent does not
+    hold. An invariant the parent holds goes through ``affect`` or ``reopen``."""
+
+    def test_an_invariant_the_parent_already_holds_is_refused(self) -> None:
+        for invariant_id in (SEC, FUNC, SEC2):  # PROTECTED, VIOLATED, UNCERTAIN on the parent
+            with self.subTest(invariant_id=invariant_id):
+                with self.assertRaises(DomainValidationError) as ctx:
+                    InvariantEvaluation.register(self.candidate, invariant(invariant_id), self.base)
+                message = str(ctx.exception)
+                self.assertIn("L1", message)
+                self.assertIn("C-31", message)
+                self.assertIn(invariant_id, message)
+
+    def test_a_parent_that_is_not_the_candidates_parent_is_refused(self) -> None:
+        other = baseline(state_id=uid(77), proofs=[proof(SEC, S.PROTECTED, evidence=4)])
+        with self.assertRaises(DomainValidationError) as ctx:
+            InvariantEvaluation.register(self.candidate, invariant(FUNC2), other)
+        self.assertIn("L1", str(ctx.exception))
+        self.assertIn("parent", str(ctx.exception))
+
+    def test_the_parents_identity_is_checked_even_when_it_lacks_the_invariant(
+        self,
+    ) -> None:
+        # ``other`` lacks FUNC, so only the parent-identity check can refuse this.
+        other = baseline(state_id=uid(78), proofs=[proof(SEC, S.PROTECTED, evidence=4)])
+        with self.assertRaises(DomainValidationError):
+            InvariantEvaluation.register(self.candidate, invariant(FUNC), other)
+
+    def test_the_parent_must_be_a_trusted_state(self) -> None:
+        with self.assertRaises(DomainValidationError):
+            InvariantEvaluation.register(
+                self.candidate, invariant(FUNC2), self.base.to_dict()  # type: ignore[arg-type]
+            )
+        with self.assertRaises(DomainValidationError):
+            InvariantEvaluation.register(self.candidate, invariant(FUNC2), self.candidate)
+
+    def test_a_genuinely_new_invariant_is_registered(self) -> None:
+        self.assertNotIn(FUNC2, {ref.invariant_id for ref in self.base.invariant_refs})
+        ev = InvariantEvaluation.register(self.candidate, invariant(FUNC2), self.base)
+        self.assertEqual(ev.status, S.REGISTERED)
+        self.assertEqual(ev.parent_state_id, self.base.state_id)
+        self.assertEqual(ev.candidate_id, self.candidate.candidate_id)
+
+    def test_a_refused_register_leaves_the_parent_untouched(self) -> None:
+        before = self.base.to_dict()
+        with self.assertRaises(DomainValidationError):
+            InvariantEvaluation.register(self.candidate, invariant(SEC), self.base)
+        self.assertEqual(self.base.to_dict(), before)
+
+
 class TestRegisterAndVerify(EvaluationTestCase):
     def test_register_gives_a_registered_evaluation(self) -> None:
-        ev = InvariantEvaluation.register(self.candidate, invariant(FUNC2))
+        ev = InvariantEvaluation.register(self.candidate, invariant(FUNC2), self.base)
         self.assertEqual(ev.status, S.REGISTERED)
         self.assertEqual((ev.invariant_id, ev.invariant_version), (FUNC2, 1))
         self.assertEqual(ev.parent_state_id, self.base.state_id)
 
     def test_register_checks_its_arguments(self) -> None:
         with self.assertRaises(DomainValidationError):
-            InvariantEvaluation.register(self.candidate.to_dict(), invariant())
+            InvariantEvaluation.register(self.candidate.to_dict(), invariant(), self.base)
         with self.assertRaises(DomainValidationError):
-            InvariantEvaluation.register(self.candidate, {"invariant_id": SEC})  # type: ignore[arg-type]
+            InvariantEvaluation.register(self.candidate, {"invariant_id": SEC}, self.base)  # type: ignore[arg-type]
 
     def test_start_verification_only_from_registered(self) -> None:
-        registered = InvariantEvaluation.register(self.candidate, invariant(FUNC2))
+        registered = InvariantEvaluation.register(self.candidate, invariant(FUNC2), self.base)
         self.assertEqual(registered.start_verification().status, S.VERIFYING)
         self.assertEqual(registered.status, S.REGISTERED)
         for ev in (self.affected(), self.reverifying(), self.verifying()):
@@ -164,7 +217,7 @@ class TestRegisterAndVerify(EvaluationTestCase):
 
     def test_start_reverification_only_from_affected(self) -> None:
         self.assertEqual(self.reverifying().status, S.REVERIFYING)
-        registered = InvariantEvaluation.register(self.candidate, invariant(FUNC2))
+        registered = InvariantEvaluation.register(self.candidate, invariant(FUNC2), self.base)
         for ev in (registered, self.verifying(), self.reverifying()):
             with self.subTest(status=ev.status.value), self.assertRaises(IllegalTransitionError):
                 ev.start_reverification()
@@ -210,7 +263,7 @@ class TestApplyResult(EvaluationTestCase):
                     self.reverifying().apply_result(result, bad, at(20))  # type: ignore[arg-type]
 
     def test_a_result_applies_only_while_verifying(self) -> None:
-        registered = InvariantEvaluation.register(self.candidate, invariant(FUNC2))
+        registered = InvariantEvaluation.register(self.candidate, invariant(FUNC2), self.base)
         done = self.reverifying().apply_result(R.PASS, EVIDENCE, at(20))
         for ev in (registered, self.affected(), done):
             for result in VerificationResult:
@@ -256,7 +309,7 @@ class TestToProof(EvaluationTestCase):
 
     def test_an_evaluation_never_given_a_result_cannot_produce_a_proof(self) -> None:
         """SM-006: refused because no verification result was ever applied, and it says so."""
-        registered = InvariantEvaluation.register(self.candidate, invariant(FUNC2))
+        registered = InvariantEvaluation.register(self.candidate, invariant(FUNC2), self.base)
         for ev in (registered, self.verifying(), self.affected(), self.reverifying()):
             with self.subTest(status=ev.status.value):
                 self.assertIsNone(ev.last_result)
@@ -266,7 +319,7 @@ class TestToProof(EvaluationTestCase):
                 self.assertIn("never given a verification result", str(ctx.exception))
 
     def test_an_unverified_evaluation_cannot_produce_a_proof(self) -> None:
-        registered = InvariantEvaluation.register(self.candidate, invariant(FUNC2))
+        registered = InvariantEvaluation.register(self.candidate, invariant(FUNC2), self.base)
         for ev in (registered, self.verifying(), self.affected(), self.reverifying()):
             with (
                 self.subTest(status=ev.status.value),
@@ -308,7 +361,7 @@ class TestEvaluationSerialization(EvaluationTestCase):
             self.affected(),
             self.reverifying(),
             self.verifying(),
-            InvariantEvaluation.register(self.candidate, invariant(FUNC2)),
+            InvariantEvaluation.register(self.candidate, invariant(FUNC2), self.base),
         ]
         for ev in (*pending, *verified):
             with self.subTest(status=ev.status.value, result=ev.last_result):
