@@ -114,7 +114,15 @@ class Resource:
                     f"Resource.references: reference from {ref.source_address!r} does not "
                     f"belong to resource {self.address!r} (Doc 05 §5.3)"
                 )
-        object.__setattr__(self, "references", tuple(sorted(refs, key=_reference_sort_key)))
+        ordered_refs = tuple(sorted(refs, key=_reference_sort_key))
+        for first, second in zip(ordered_refs, ordered_refs[1:], strict=False):
+            if first == second:
+                raise DomainValidationError(
+                    f"Resource.references: duplicate reference from {first.source_address!r} "
+                    f"({first.source_attribute} -> {first.target_address}); references are "
+                    "canonical sets (Doc 04 §6.1, Doc 12 §17)"
+                )
+        object.__setattr__(self, "references", ordered_refs)
         if not isinstance(self.provenance, Provenance):
             raise DomainValidationError("Resource.provenance: must be a Provenance (Doc 05 §6)")
         require_enum(self.support_status, ResourceSupport, "Resource.support_status")

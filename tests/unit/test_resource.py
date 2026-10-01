@@ -167,6 +167,35 @@ class TestValidation(unittest.TestCase):
         self.assert_rejected(references=[make_reference("aws_instance.other")])
         self.assert_rejected(references="not a list")
 
+    def test_a_duplicate_reference_is_rejected(self) -> None:
+        """Doc 04 §6.1, Doc 12 §17: references are canonical; a repeated one is not."""
+        ref = make_reference()
+        for refs in (
+            [ref, ref],
+            [ref, make_reference(), make_reference(source_attribute="subnet_id")],
+        ):
+            with self.subTest(count=len(refs)), self.assertRaises(DomainValidationError) as ctx:
+                make_resource(references=refs)
+            self.assertIn("duplicate reference", str(ctx.exception))
+
+    def test_a_duplicate_reference_is_rejected_when_rebuilt_from_data(self) -> None:
+        data = make_resource().to_dict()
+        data["references"] = data["references"] + data["references"]
+        with self.assertRaises(DomainValidationError) as ctx:
+            Resource.from_dict(data)
+        self.assertIn("duplicate reference", str(ctx.exception))
+
+    def test_references_that_differ_in_any_field_are_not_duplicates(self) -> None:
+        variants = [
+            make_reference(),
+            make_reference(source_attribute="subnet_id"),
+            make_reference(target_address="aws_security_group.other"),
+            make_reference(reference_type="depends_on"),
+            make_reference(resolution_status=ReferenceResolution.UNKNOWN),
+        ]
+        res = make_resource(references=variants)
+        self.assertEqual(len(res.references), 5)
+
     def test_provenance_must_be_a_provenance(self) -> None:
         self.assert_rejected(provenance={"source_kind": "TERRAFORM_CONFIG"})
         self.assert_rejected(provenance=None)

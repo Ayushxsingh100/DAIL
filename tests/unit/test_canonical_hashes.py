@@ -234,16 +234,19 @@ def shuffle_keys(value: Any, rng: random.Random) -> Any:
 
 
 def rand_references(rng: random.Random, address: str) -> list[Reference]:
-    return [
-        Reference(
+    """Random references, unique on (attribute, target, type): a resource cannot repeat a
+    reference, and a status change on one must never collide with another."""
+    unique: dict[tuple[str, str, str], Reference] = {}
+    for _ in range(rng.randrange(0, 5)):
+        ref = Reference(
             source_address=address,
             source_attribute=rng.choice(["sg", "subnet", "vpc"]),
             target_address=f"aws_thing.t{rng.randrange(6)}",
             reference_type=rng.choice(["reference", "depends_on"]),
             resolution_status=rng.choice(list(ReferenceResolution)),
         )
-        for _ in range(rng.randrange(0, 5))
-    ]
+        unique.setdefault((ref.source_attribute, ref.target_address, ref.reference_type), ref)
+    return list(unique.values())
 
 
 class Spec:
