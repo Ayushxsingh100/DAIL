@@ -37,6 +37,7 @@ from tests.domain_builders import (
     proof,
     ready_candidate,
     uid,
+    verified_proof,
 )
 
 CS = CandidateStatus
@@ -183,7 +184,7 @@ class TestMatrixCandidateRows(unittest.TestCase):
 class TestMatrixInvariantRows(unittest.TestCase):
     def setUp(self) -> None:
         self.v0 = baseline()
-        self.candidate = ready_candidate(self.v0, SAFE)
+        self.candidate = promotable_candidate(self.v0, SAFE)
         self.sec = ref(self.v0, SEC)
         self.func = ref(self.v0, FUNC)
         self.sec_before = self.sec.to_dict()
@@ -201,8 +202,11 @@ class TestMatrixInvariantRows(unittest.TestCase):
     def test_reverify_pass(self) -> None:
         ev = self.reverify(R.PASS)
         self.assertEqual(ev.status, S.PROTECTED)
-        promotable = promotable_candidate(self.v0, SAFE)
-        v1 = promote(promotable, self.v0, proofs=[ev.to_proof(), proof(FUNC, evidence=12)])
+        v1 = promote(
+            self.candidate,
+            self.v0,
+            proofs=[ev.to_proof(), verified_proof(self.v0, self.candidate, FUNC, S.PROTECTED, 12)],
+        )
         new_ref = ref(v1, SEC)
         self.assertEqual(new_ref.status, S.PROTECTED)
         self.assertEqual(new_ref.state_id, v1.state_id)
@@ -224,9 +228,9 @@ class TestMatrixInvariantRows(unittest.TestCase):
                 attempt()
         # The proper path: the violated state is recorded, a later candidate reopens it.
         v1 = promote(
-            promotable_candidate(self.v0, SAFE),
+            self.candidate,
             self.v0,
-            proofs=[ev.to_proof(), proof(FUNC, evidence=12)],
+            proofs=[ev.to_proof(), verified_proof(self.v0, self.candidate, FUNC, S.PROTECTED, 12)],
         )
         violated_ref = ref(v1, SEC)
         self.assertEqual(violated_ref.status, S.VIOLATED)
@@ -247,9 +251,9 @@ class TestMatrixInvariantRows(unittest.TestCase):
         self.assertEqual(ev.status, S.UNCERTAIN)
         self.assertEqual(ev.last_result, R.UNSUPPORTED)
         v1 = promote(
-            promotable_candidate(self.v0, SAFE),
+            self.candidate,
             self.v0,
-            proofs=[ev.to_proof(), proof(FUNC, evidence=12)],
+            proofs=[ev.to_proof(), verified_proof(self.v0, self.candidate, FUNC, S.PROTECTED, 12)],
         )
         self.assertFalse(ref(v1, SEC).can_satisfy_proof())
         self.assertEqual(ref(v1, SEC).status, S.UNCERTAIN)

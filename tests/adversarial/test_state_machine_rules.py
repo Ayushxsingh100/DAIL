@@ -62,6 +62,7 @@ from tests.domain_builders import (
     ready_candidate,
     resource,
     uid,
+    verified_proof,
 )
 
 CS = CandidateStatus
@@ -152,6 +153,8 @@ class TestConstructionGuardIsolation(unittest.TestCase):
         computed here from the C-33 payload with the public ``content_hash``."""
         data = baseline().to_dict()
         data.update(version=5, parent_state_id=uid(777), commit_decision_id=uid(778))
+        for ref in data["invariant_refs"]:
+            ref["origin"] = "VERIFIED"  # C-40: a later state holds no BASELINE reference
         data["state_hash"] = content_hash(
             {
                 "lineage_id": data["lineage_id"],
@@ -469,7 +472,7 @@ class _UnprovenResult:
 
     def setUp(self) -> None:  # type: ignore[misc]
         self.v0 = baseline()
-        self.candidate = ready_candidate(self.v0, SAFE)
+        self.candidate = promotable_candidate(self.v0, SAFE)
         affected = InvariantEvaluation.affect(ref_of(self.v0, SEC), self.candidate, "changed")
         self.evaluation = affected.start_reverification().apply_result(
             self.result, [uid(9300)], at(20)
@@ -504,9 +507,12 @@ class TestSM007(_UnprovenResult, unittest.TestCase):
 
     def test_the_reference_built_from_it_cannot_satisfy_proof(self) -> None:
         v1 = promote(
-            promotable_candidate(self.v0, SAFE),
+            self.candidate,
             self.v0,
-            proofs=[self.evaluation.to_proof(), proof(FUNC, evidence=12)],
+            proofs=[
+                self.evaluation.to_proof(),
+                verified_proof(self.v0, self.candidate, FUNC, S.PROTECTED, 12),
+            ],
         )
         self.assertEqual(ref_of(v1, SEC).status, S.UNCERTAIN)
         self.assertFalse(ref_of(v1, SEC).can_satisfy_proof())
@@ -530,9 +536,12 @@ class TestSM008(_UnprovenResult, unittest.TestCase):
 
     def test_the_reference_built_from_it_cannot_satisfy_proof(self) -> None:
         v1 = promote(
-            promotable_candidate(self.v0, SAFE),
+            self.candidate,
             self.v0,
-            proofs=[self.evaluation.to_proof(), proof(FUNC, evidence=12)],
+            proofs=[
+                self.evaluation.to_proof(),
+                verified_proof(self.v0, self.candidate, FUNC, S.PROTECTED, 12),
+            ],
         )
         self.assertFalse(ref_of(v1, SEC).can_satisfy_proof())
 
@@ -544,9 +553,12 @@ class TestSM008(_UnprovenResult, unittest.TestCase):
         self.assertEqual((errored.status, errored.last_result), (S.UNCERTAIN, R.VERIFIER_ERROR))
         self.assertFalse(R.VERIFIER_ERROR.is_pass)
         v1 = promote(
-            promotable_candidate(self.v0, SAFE),
+            self.candidate,
             self.v0,
-            proofs=[errored.to_proof(), proof(FUNC, evidence=12)],
+            proofs=[
+                errored.to_proof(),
+                verified_proof(self.v0, self.candidate, FUNC, S.PROTECTED, 12),
+            ],
         )
         self.assertFalse(ref_of(v1, SEC).can_satisfy_proof())
 

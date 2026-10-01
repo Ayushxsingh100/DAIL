@@ -27,7 +27,7 @@ from dataclasses import InitVar, dataclass
 from datetime import datetime
 from typing import Any, Final
 
-from core.domain.enums import CandidateSource, CandidateStatus
+from core.domain.enums import CandidateSource, CandidateStatus, ProofOrigin
 from core.domain.errors import (
     DomainValidationError,
     HashMismatchError,
@@ -88,6 +88,46 @@ def _resources(value: object, field: str) -> tuple[Resource, ...]:
     if len(set(addresses)) != len(addresses):
         raise DomainValidationError(f"{field}: duplicate resource address (Doc 05 §28)")
     return ordered
+
+
+def _check_baseline_proofs(proofs: list[InvariantProof]) -> None:
+    """``establish_baseline`` accepts only BASELINE proofs (C-40)."""
+    for proof in proofs:
+        if not isinstance(proof, InvariantProof):
+            raise DomainValidationError("establish_baseline: expected InvariantProof objects")
+        if proof.origin is not ProofOrigin.BASELINE:
+            raise DomainValidationError(
+                f"C-40, SM-006: the proof for {proof.invariant_id} has origin {proof.origin}; "
+                "only a BASELINE proof can found a baseline"
+            )
+
+
+def _check_promotion_proofs(
+    proofs: list[InvariantProof], candidate: CandidateState, current: TrustedState
+) -> None:
+    """``promote`` accepts only VERIFIED proofs bound to this candidate and CARRIED_FORWARD proofs
+    from the current state (C-40, Doc 06 §22 SM-006)."""
+    for proof in proofs:
+        if not isinstance(proof, InvariantProof):
+            raise DomainValidationError("TrustedState.promote: expected InvariantProof objects")
+        if proof.origin is ProofOrigin.BASELINE:
+            raise DomainValidationError(
+                f"C-40, SM-006: the BASELINE proof for {proof.invariant_id} cannot promote a "
+                "candidate"
+            )
+        if proof.candidate_id != candidate.candidate_id:
+            raise DomainValidationError(
+                f"C-40, SM-006: the proof for {proof.invariant_id} is bound to candidate "
+                f"{proof.candidate_id}, not to {candidate.candidate_id}"
+            )
+        if (
+            proof.origin is ProofOrigin.CARRIED_FORWARD
+            and proof.source_state_id != current.state_id
+        ):
+            raise DomainValidationError(
+                f"C-40, SM-006: the proof for {proof.invariant_id} was carried forward from state "
+                f"{proof.source_state_id}, not from the current state {current.state_id}"
+            )
 
 
 def _resource_entries(resources: Iterable[Resource]) -> list[dict[str, str]]:
@@ -487,6 +527,14 @@ class TrustedState:
         keys = [(r.invariant_id, r.invariant_version) for r in refs]
         if len(set(keys)) != len(keys):
             raise DomainValidationError("TrustedState.invariant_refs: duplicate invariant version")
+        # origin is not part of state_hash (C-33), so a stored state is checked for it here:
+        # a baseline holds BASELINE references only and every later state none (C-40).
+        for ref in refs:
+            if (ref.origin is ProofOrigin.BASELINE) != (self.version == 0):
+                raise DomainValidationError(
+                    f"C-40: the reference to {ref.invariant_id} has origin {ref.origin}, which a "
+                    f"state of version {self.version} cannot hold"
+                )
         ordered_refs = tuple(sorted(refs, key=lambda r: (r.invariant_id, r.invariant_version)))
         object.__setattr__(self, "invariant_refs", ordered_refs)
         evidence = self.evidence_refs
@@ -599,6 +647,7 @@ class TrustedState:
             raise DomainValidationError(
                 "establish_baseline: at least one invariant proof is required (Doc 06 §24)"
             )
+        _check_baseline_proofs(proofs)
         return cls._build(
             state_id=new_uuid() if state_id is None else state_id,
             lineage_id=lineage_id,
@@ -628,9 +677,11 @@ class TrustedState:
     ) -> TrustedState:
         """The next trusted state: the only way a candidate becomes trusted (SM-001, SM-002).
 
-        Checks structure, lineage and staleness only; carry-forward compatibility and the
-        promotion policy belong to P6, and only the Promotion Controller may call this (R8).
-        ``current`` is never modified.
+        Checks structure, lineage, staleness and the proofs' origin and binding (C-40): only
+        VERIFIED proofs bound to this candidate and CARRIED_FORWARD proofs from ``current`` are
+        accepted. Whether carrying an invariant forward is allowed, and the promotion policy,
+        belong to P6; only the Promotion Controller may call this (R8). ``current`` is never
+        modified.
         """
         if not isinstance(candidate, CandidateState):
             raise DomainValidationError("TrustedState.promote: candidate must be a CandidateState")
@@ -657,13 +708,15 @@ class TrustedState:
                 f"{current.state_id}",
             )
         require_uuid(decision_id, "TrustedState.promote.decision_id")
+        proofs = list(invariant_proofs)
+        _check_promotion_proofs(proofs, candidate, current)
         return cls._build(
             state_id=new_uuid() if state_id is None else state_id,
             lineage_id=current.lineage_id,
             version=current.version + 1,
             parent_state_id=current.state_id,
             resources=candidate.resources,
-            invariant_proofs=invariant_proofs,
+            invariant_proofs=proofs,
             evidence_refs=evidence_refs,
             created_at=now,
             commit_decision_id=decision_id,

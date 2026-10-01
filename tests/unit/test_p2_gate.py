@@ -18,8 +18,9 @@ from core.domain.enums import (
     InvariantStatus,
     ProvenanceSourceKind,
     ResourceSupport,
+    VerificationResult,
 )
-from core.domain.invariant import InvariantProof
+from core.domain.invariant import InvariantEvaluation, InvariantProof
 from core.domain.patch import Patch
 from core.domain.resource import Resource
 from core.domain.state import (
@@ -83,6 +84,18 @@ def _proof(evidence_n: int) -> InvariantProof:
         evidence_ids=(_uid(evidence_n),),
         verified_at=NOW,
     )
+
+
+def _verified_proof(
+    parent: TrustedState, candidate: CandidateState, evidence_n: int
+) -> InvariantProof:
+    """INV-FUNC-001 re-verified PASS for ``candidate``: evaluation -> result -> proof (C-40)."""
+    ref = next(r for r in parent.invariant_refs if r.invariant_id == "INV-FUNC-001")
+    evaluation = InvariantEvaluation.affect(ref, candidate, "ssh rule changed")
+    done = evaluation.start_reverification().apply_result(
+        VerificationResult.PASS, [_uid(evidence_n)], NOW
+    )
+    return done.to_proof()
 
 
 class TestP2Gate(unittest.TestCase):
@@ -242,7 +255,7 @@ class TestP2Gate(unittest.TestCase):
             candidate=c2,
             current=self.s0,
             decision_id=_uid(9100),
-            invariant_proofs=[_proof(9002)],
+            invariant_proofs=[_verified_proof(self.s0, c2, 9002)],
             evidence_refs=[_uid(9002)],
             invariant_registry_version=1,
             now=NOW,
