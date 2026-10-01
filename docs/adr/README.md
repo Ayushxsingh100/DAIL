@@ -14,7 +14,7 @@ project decisions (see `docs/DECISIONS_REGISTER.md`).
 | 005 | NetworkX for the dependency graph | Pending — written in P3c |
 | 006 | Provider-agnostic LLM boundary | Pending — written in P7a |
 | 007 | Promotion Controller as sole trusted-state mutation authority | Pending — written in P6a |
-| 008 | Explicit uncertainty result semantics | Pending — written in P1a |
+| [008](ADR-008-explicit-uncertainty-result-semantics.md) | Explicit uncertainty result semantics | Accepted (1 Oct 2026) |
 | [009](ADR-009-deterministic-fixed-patch-core-before-llm.md) | Deterministic fixed-patch core before LLM integration | Accepted |
 | [010](ADR-010-independent-oracle-separation.md) | Independent oracle separation | Accepted (N-02) |
 | [011](ADR-011-relational-trusted-state-lineage.md) | Trusted-state lineage is relational (parent-linked rows), not Git | Accepted in build (C-11, 29 Sep 2026); paper wording change pending research review |
