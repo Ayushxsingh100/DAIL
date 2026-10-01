@@ -9,8 +9,9 @@ tuples) so a caller's later mutation changes neither the object nor its hash.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime, timedelta
+from enum import Enum
 from types import MappingProxyType
 from typing import Any
 
@@ -88,3 +89,59 @@ def parse_utc(value: object, field: str) -> datetime:
     except ValueError:
         raise DomainValidationError(f"{field}: not an ISO-8601 timestamp (Doc 05 §4.2)") from None
     return utc(parsed, field)
+
+
+def require_text(value: object, field: str) -> str:
+    """A non-empty string with no leading or trailing whitespace."""
+    if not isinstance(value, str) or value == "" or value != value.strip():
+        raise DomainValidationError(
+            f"{field}: must be a non-empty string without leading or trailing whitespace"
+        )
+    return value
+
+
+def optional_text(value: object, field: str) -> str | None:
+    """Explicit null (``None``) or a ``require_text`` string (Doc 05 §27: explicit null)."""
+    return None if value is None else require_text(value, field)
+
+
+def require_int(value: object, field: str, minimum: int) -> int:
+    """An ``int`` (not ``bool``) of at least ``minimum``."""
+    if not isinstance(value, int) or isinstance(value, bool) or value < minimum:
+        raise DomainValidationError(f"{field}: must be an integer >= {minimum}")
+    return value
+
+
+def require_enum[E: Enum](value: object, enum_type: type[E], field: str) -> E:
+    """``value`` must already be a member of ``enum_type`` (strict: no implicit conversion)."""
+    if not isinstance(value, enum_type):
+        raise DomainValidationError(f"{field}: must be a {enum_type.__name__} member")
+    return value
+
+
+def parse_enum[E: Enum](value: object, enum_type: type[E], field: str) -> E:
+    """Parse the stable string form of an enum member (used by ``from_dict``)."""
+    if isinstance(value, enum_type):
+        return value
+    if isinstance(value, str):
+        try:
+            return enum_type(value)
+        except ValueError:
+            pass
+    raise DomainValidationError(f"{field}: not a valid {enum_type.__name__} value")
+
+
+def require_keys(data: object, expected: Iterable[str], name: str) -> Mapping[str, Any]:
+    """``data`` must be a mapping with exactly the ``expected`` keys (Doc 05 §27: explicit DTOs)."""
+    if not isinstance(data, Mapping):
+        raise DomainValidationError(f"{name}: must be an object")
+    wanted = set(expected)
+    present = set(data)
+    if present != wanted:
+        problems = []
+        if wanted - present:
+            problems.append(f"missing {sorted(wanted - present)}")
+        if present - wanted:
+            problems.append(f"unexpected {sorted(str(k) for k in present - wanted)}")
+        raise DomainValidationError(f"{name}: keys do not match the schema ({'; '.join(problems)})")
+    return data
