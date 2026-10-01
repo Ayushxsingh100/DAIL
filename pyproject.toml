@@ -82,12 +82,6 @@ files = ["core", "evidence", "scripts"]
 # since third-party stubs for litellm/boto3 are inconsistent; core.domain and
 # core.identity/dependency/impact/verification/promotion must stay strict.
 
-[[tool.mypy.overrides]]
-# TEMPORARY - modules scheduled for rewrite in P1a. Remove this override in P1a.
-module = ["core.domain.enums", "core.domain.invariant", "core.domain.state",
-          "core.domain.resource", "core.domain.storage"]
-ignore_errors = true
-
 # --- Tests -------------------------------------------------------------------
 [tool.pytest.ini_options]
 minversion = "8.0"

@@ -50,4 +50,4 @@ Reconciliation scheduled as P2-fix. Known gaps:
 
 ## Temporary exceptions
 
-- The mypy `ignore_errors` override for five modules (`core.domain.enums`, `core.domain.invariant`, `core.domain.state`, `core.domain.resource`, `core.domain.storage`) in `pyproject.toml`. It must be removed in P1a.
+None.
