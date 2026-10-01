@@ -610,6 +610,10 @@ class InvariantEvaluation:
         """VERIFYING or REVERIFYING -> the status of ``result`` (C-30). Evidence is required
         for every result, including VERIFIER_ERROR (Doc 09 §37)."""
         status = apply_verification_result(self.status, result)
+        if isinstance(evidence_ids, str) or not isinstance(evidence_ids, Iterable):
+            raise DomainValidationError(
+                "InvariantEvaluation.apply_result: evidence_ids must be a list of UUIDs"
+            )
         return self._evolve(
             status=status,
             last_result=result,

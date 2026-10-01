@@ -7,10 +7,14 @@ Doc 06 sections, never derived from the implementation.
 from __future__ import annotations
 
 import itertools
+import random
 import unittest
+from collections.abc import Callable
+from typing import Any
 
 from core.domain.enums import CandidateStatus, InvariantStatus, VerificationResult
 from core.domain.errors import DomainValidationError, IllegalTransitionError
+from core.domain.invariant import InvariantEvaluation
 from core.domain.lifecycle import (
     CANDIDATE_TRANSITIONS,
     INVARIANT_PLAIN_TRANSITIONS,
@@ -20,6 +24,30 @@ from core.domain.lifecycle import (
     check_candidate_transition,
     check_invariant_transition,
     status_for_result,
+)
+from core.domain.state import (
+    CandidateState,
+    TrustedState,
+    fail_building,
+    finish_building,
+    mark_promoted,
+    reject_stale_candidate,
+    start_building,
+    transition_candidate,
+)
+from tests.domain_builders import (
+    FUNC,
+    SEC,
+    at,
+    baseline,
+    canonical_resources,
+    invariant,
+    new_candidate,
+    promotable_candidate,
+    promote,
+    proof,
+    ready_candidate,
+    uid,
 )
 
 C = CandidateStatus
@@ -207,6 +235,178 @@ class TestApplyVerificationResult(unittest.TestCase):
         for result in (R.UNKNOWN, R.UNSUPPORTED, R.VERIFIER_ERROR):
             self.assertIs(apply_verification_result(I.REVERIFYING, result), I.UNCERTAIN)
             self.assertFalse(result.is_pass)
+
+
+# --- seeded random walks -----------------------------------------------------------------------
+
+WALK_SEED = 20261001
+WALKS = 500
+SAFE_RESOURCES = canonical_resources(ssh_open=False, db_path=True)
+NOT_REACHABLE_BY_PLAIN_TRANSITION = {C.READY, C.FAILED, C.PROMOTED}
+
+
+def candidate_event_is_legal(status: C, event: str) -> tuple[bool, C]:
+    """Legality and expected resulting status of ``event``, from the literal Step 10 table
+    and the function contracts, independent of the implementation."""
+    if event == "start_building":
+        return status is C.CREATED, C.BUILDING
+    if event == "finish_building":
+        return status is C.BUILDING, C.READY
+    if event == "fail_building":
+        return status is C.BUILDING, C.FAILED
+    if event == "reject_stale":
+        return status is C.PROMOTABLE, C.REJECTED
+    if event == "promote_and_mark":
+        return status is C.PROMOTABLE, C.PROMOTED
+    target = C(event.removeprefix("to_"))
+    legal = (
+        target not in NOT_REACHABLE_BY_PLAIN_TRANSITION
+        and (status, target) in LEGAL_CANDIDATE
+        and not (status is C.PROMOTABLE and target is C.REJECTED)
+    )
+    return legal, target
+
+
+CANDIDATE_EVENTS = [
+    "start_building",
+    "finish_building",
+    "fail_building",
+    "reject_stale",
+    "promote_and_mark",
+    *[f"to_{status.value}" for status in CandidateStatus],
+]
+
+INVARIANT_EVENTS = [
+    "start_verification",
+    "start_reverification",
+    *[f"apply_{result.value}" for result in VerificationResult],
+    "to_proof",
+]
+
+
+class TestRandomWalks(unittest.TestCase):
+    """Seeded random walks over both lifecycles (random.Random(20261001), 500 walks each)."""
+
+    parent: TrustedState
+    newer: TrustedState
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.parent = baseline()
+        cls.newer = promote(promotable_candidate(cls.parent, SAFE_RESOURCES, n=99), cls.parent)
+
+    def run_candidate_event(self, event: str, candidate: CandidateState) -> CandidateState:
+        if event == "start_building":
+            return start_building(candidate)
+        if event == "finish_building":
+            return finish_building(candidate, SAFE_RESOURCES)
+        if event == "fail_building":
+            return fail_building(candidate, "walk failure")
+        if event == "reject_stale":
+            return reject_stale_candidate(candidate, self.newer)
+        if event == "promote_and_mark":
+            return mark_promoted(candidate, promote(candidate, self.parent))
+        return transition_candidate(candidate, C(event.removeprefix("to_")))
+
+    def test_candidate_walks(self) -> None:
+        rng = random.Random(WALK_SEED)
+        visited: set[C] = set()
+        for walk in range(WALKS):
+            candidate = new_candidate(self.parent, n=walk % 40 + 1)
+            fixed_hash: str | None = None
+            for step in range(rng.randrange(4, 16)):
+                event = rng.choice(CANDIDATE_EVENTS)
+                where = f"walk={walk} step={step} event={event} status={candidate.status.value}"
+                legal, expected = candidate_event_is_legal(candidate.status, event)
+                before = candidate.to_dict()
+                try:
+                    after = self.run_candidate_event(event, candidate)
+                except DomainValidationError:
+                    self.assertFalse(legal, where)
+                    self.assertEqual(candidate.to_dict(), before, where)
+                    continue
+                self.assertTrue(legal, where)
+                self.assertEqual(after.status, expected, where)
+                self.assertEqual(candidate.to_dict(), before, where)  # the input is untouched
+                candidate = after
+                visited.add(candidate.status)
+                if fixed_hash is None and candidate.state_hash is not None:
+                    fixed_hash = candidate.state_hash
+                if fixed_hash is not None:
+                    self.assertEqual(candidate.state_hash, fixed_hash, where)
+        # The walks must actually exercise the whole lifecycle, or they prove little.
+        self.assertEqual(visited, set(CandidateStatus) - {C.CREATED})
+
+    def start_evaluation(
+        self, rng: random.Random, base: TrustedState, candidate: CandidateState
+    ) -> InvariantEvaluation:
+        refs = {ref.invariant_id: ref for ref in base.invariant_refs}
+        kind = rng.choice(["affect", "reopen_violated", "reopen_uncertain", "register"])
+        if kind == "affect":
+            return InvariantEvaluation.affect(refs[SEC], candidate, "walk")
+        if kind == "reopen_violated":
+            return InvariantEvaluation.reopen(refs[FUNC], candidate, "walk")
+        if kind == "reopen_uncertain":
+            return InvariantEvaluation.reopen(refs["INV-SEC-002"], candidate, "walk")
+        return InvariantEvaluation.register(candidate, invariant("INV-FUNC-002"))
+
+    def test_invariant_walks(self) -> None:
+        rng = random.Random(WALK_SEED)
+        base = baseline(
+            proofs=[
+                proof(SEC, I.PROTECTED, evidence=1),
+                proof(FUNC, I.VIOLATED, evidence=2),
+                proof("INV-SEC-002", I.UNCERTAIN, evidence=3),
+            ]
+        )
+        candidate = ready_candidate(base, SAFE_RESOURCES)
+        protected_reached = 0
+        for walk in range(WALKS):
+            ev = self.start_evaluation(rng, base, candidate)
+            came_from_a_pass = False
+            for step in range(rng.randrange(3, 10)):
+                event = rng.choice(INVARIANT_EVENTS)
+                where = f"walk={walk} step={step} event={event} status={ev.status.value}"
+                before = ev.to_dict()
+                action: Callable[[], Any]
+                if event == "start_verification":
+                    legal, expected = ev.status is I.REGISTERED, I.VERIFYING
+                    action = ev.start_verification
+                elif event == "start_reverification":
+                    legal, expected = ev.status is I.AFFECTED, I.REVERIFYING
+                    action = ev.start_reverification
+                elif event == "to_proof":
+                    legal, expected = ev.status in RESULT_ONLY_STATUSES, ev.status
+                    action = ev.to_proof
+                else:
+                    result = VerificationResult(event.removeprefix("apply_"))
+                    legal = ev.status in (I.VERIFYING, I.REVERIFYING)
+                    expected = RESULT_STATUS[result]
+                    evidence = [uid(9500 + walk)]
+
+                    def action(
+                        res: VerificationResult = result, e: Any = ev, ids: Any = evidence
+                    ) -> Any:
+                        return e.apply_result(res, ids, at(40))
+
+                try:
+                    outcome = action()
+                except DomainValidationError:
+                    self.assertFalse(legal, where)
+                    self.assertEqual(ev.to_dict(), before, where)
+                    continue
+                self.assertTrue(legal, where)
+                self.assertEqual(ev.to_dict(), before, where)
+                self.assertEqual(outcome.status, expected, where)
+                if event == "to_proof":
+                    continue
+                came_from_a_pass = event == "apply_PASS"
+                ev = outcome
+                if ev.status is I.PROTECTED:
+                    protected_reached += 1
+                    self.assertTrue(came_from_a_pass, where)
+                    self.assertIs(ev.last_result, VerificationResult.PASS, where)
+        self.assertGreater(protected_reached, 0)
 
 
 if __name__ == "__main__":
