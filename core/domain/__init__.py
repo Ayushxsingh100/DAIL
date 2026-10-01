@@ -16,5 +16,5 @@ P1b (C-35).
 
 Standard library only (ADR-004); contract rules R1 and R8-R10 are checked by
 ``tests/contract/test_architecture_boundaries.py``. See docs/SPEC_INDEX.md, docs/PHASE_GATES.md
-and docs/DECISIONS_REGISTER.md (C-29 to C-38).
+and docs/DECISIONS_REGISTER.md (C-29 to C-41).
 """
