@@ -46,7 +46,7 @@ prompt and this file conflict, stop and ask.
    - NOT RUN items;
    - deviations and contradictions found;
    - open questions.
-5. **Gates are decided by review.** An external Claude review audits each report against the specs. That review decides whether a gate passes, not a green test suite.
+5. **Gates are decided by review.** An external Claude review audits each report against the specs. That review decides whether a gate passes, not a green test suite. The PR description links that verdict; it is the approval record (C-28).
 
 ## Gates and honesty (non-negotiable)
 

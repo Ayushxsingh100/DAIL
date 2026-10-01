@@ -11,11 +11,20 @@ R3  nothing in core.* or evidence.* imports llm, experiments, scripts, apps,
 R4  evidence.* imports from core only core.domain.*.
 R5  core.identity, core.dependency, core.impact and core.verification do not
     import core.promotion (Doc 02 §15).
-R6  core.terraform_model imports no other core.* package, no evidence, and no
-    sqlite3.
+R6  core.terraform_model imports the standard library (except sqlite3) and
+    core.domain.*; no other core.* package and no evidence (C-27, ADR-014).
 R7  core.* and evidence.* import no third-party package (sys.stdlib_module_names).
     The per-package allowlist is empty; ADR-005 adds networkx for core.dependency
     in P3c.
+R8  promotion authority (SM-001, SM-002): the attribute ``promote`` on ``TrustedState`` and any
+    reference to ``mark_promoted`` appear only in core.domain.state and core.promotion.*.
+R9  no lifecycle bypass through deserialization: ``from_dict`` on TrustedState, CandidateState,
+    InvariantRef and InvariantEvaluation is referenced only inside core.domain.*; and the
+    construction-guard token names (``_TRUSTED_TOKEN``, ``_CANDIDATE_TOKEN``, ``_REF_TOKEN``,
+    ``_EVALUATION_TOKEN``, ``_PROOF_TOKEN``) are imported or accessed only in the module that
+    defines them.
+R10 determinism in core.domain: no ``datetime.now``/``utcnow``, ``date.today``, ``time.time`` or
+    ``random``, and ``uuid4`` only in core.domain.ids.
 ORACLE  nothing in this repository imports the TerraPreserve oracle (ADR-010).
 
 A self-test feeds in-memory sources that break each rule, so a checker that
@@ -63,6 +72,8 @@ class Violation:
     imported: str
 
     def __str__(self) -> str:
+        if self.rule in SOURCE_RULES:
+            return f"{self.rule}: {self.module} uses {self.imported}"
         return f"{self.rule}: {self.module} imports {self.imported}"
 
 
@@ -124,7 +135,11 @@ def check_module(module: str, imports: set[str]) -> list[Violation]:
         if any(_within(module, e) for e in R5_ENGINES) and _within(name, "core.promotion"):
             violations.append(Violation("R5", module, name))
         if _within(module, "core.terraform_model") and (
-            (top == "core" and not _within(name, "core.terraform_model"))
+            (
+                top == "core"
+                and not _within(name, "core.terraform_model")
+                and not _within(name, "core.domain")
+            )
             or top in ("evidence", "sqlite3")
         ):
             violations.append(Violation("R6", module, name))
@@ -165,6 +180,114 @@ def check_repository(roots: tuple[str, ...] | None = CHECKED_ROOTS) -> list[Viol
     return violations
 
 
+# --- Source-level rules R8 to R10 (P1a step 14) ---------------------------------------------------
+
+SOURCE_RULES = frozenset({"R8", "R9", "R10"})
+# R8: only the state module and the Promotion Controller package may create a trusted state from a
+# candidate or mark a candidate promoted (SM-001, SM-002).
+R8_ALLOWED_MODULES = ("core.domain.state", "core.promotion")
+# R9: these classes are rebuilt from data only inside core.domain (P1b adds the repository adapter).
+R9_LIFECYCLE_CLASSES = frozenset(
+    {"TrustedState", "CandidateState", "InvariantRef", "InvariantEvaluation"}
+)
+# R10: (receiver, attribute) pairs that read the clock, in core.domain.
+R10_CLOCK_CALLS = frozenset(
+    {("datetime", "now"), ("datetime", "utcnow"), ("date", "today"), ("time", "time")}
+)
+R10_UUID4_MODULE = "core.domain.ids"
+# R9: each construction-guard token belongs to exactly one module (Doc 06 §30).
+R9_GUARD_TOKEN_HOMES = {
+    "_TRUSTED_TOKEN": "core.domain.state",
+    "_CANDIDATE_TOKEN": "core.domain.state",
+    "_REF_TOKEN": "core.domain.invariant",
+    "_EVALUATION_TOKEN": "core.domain.invariant",
+    "_PROOF_TOKEN": "core.domain.invariant",
+}
+
+
+def _import_aliases(tree: ast.AST) -> dict[str, str]:
+    """Local name -> the name it was imported as, so ``T.promote`` and ``dt.now`` are seen through
+    ``import ... as``/``from ... import ... as``."""
+    names: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.asname:
+                    names[alias.asname] = alias.name.split(".")[-1]
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if alias.asname:
+                    names[alias.asname] = alias.name
+    return names
+
+
+def _receiver(expr: ast.expr, aliases: dict[str, str]) -> str | None:
+    """The name an attribute is read from: a (possibly aliased) name, or the last attribute."""
+    if isinstance(expr, ast.Name):
+        return aliases.get(expr.id, expr.id)
+    if isinstance(expr, ast.Attribute):
+        return expr.attr
+    return None
+
+
+def check_source(module: str, source: str) -> list[Violation]:
+    """R8, R9 and R10 on one module's source (nothing is imported or executed)."""
+    tree = ast.parse(source)
+    aliases = _import_aliases(tree)
+    found: list[Violation] = []
+    in_domain = _within(module, "core.domain")
+    r8_allowed = any(_within(module, allowed) for allowed in R8_ALLOWED_MODULES)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute):
+            receiver = _receiver(node.value, aliases)
+            if node.attr == "promote" and receiver == "TrustedState" and not r8_allowed:
+                found.append(Violation("R8", module, "TrustedState.promote"))
+            if node.attr == "mark_promoted" and not r8_allowed:
+                found.append(Violation("R8", module, "mark_promoted"))
+            if node.attr == "from_dict" and receiver in R9_LIFECYCLE_CLASSES and not in_domain:
+                found.append(Violation("R9", module, f"{receiver}.from_dict"))
+            if R9_GUARD_TOKEN_HOMES.get(node.attr, module) != module:
+                found.append(Violation("R9", module, node.attr))
+            if in_domain:
+                if (receiver, node.attr) in R10_CLOCK_CALLS:
+                    found.append(Violation("R10", module, f"{receiver}.{node.attr}"))
+                if receiver == "random":
+                    found.append(Violation("R10", module, f"random.{node.attr}"))
+                if node.attr == "uuid4" and module != R10_UUID4_MODULE:
+                    found.append(Violation("R10", module, "uuid4"))
+        elif isinstance(node, ast.Name):
+            original = aliases.get(node.id, node.id)
+            if R9_GUARD_TOKEN_HOMES.get(original, module) != module:
+                found.append(Violation("R9", module, original))
+            if original == "mark_promoted" and not r8_allowed:
+                found.append(Violation("R8", module, "mark_promoted"))
+            if original == "uuid4" and in_domain and module != R10_UUID4_MODULE:
+                found.append(Violation("R10", module, "uuid4"))
+        elif isinstance(node, ast.ImportFrom):
+            imported = {alias.name for alias in node.names}
+            for name in sorted(imported):
+                if R9_GUARD_TOKEN_HOMES.get(name, module) != module:
+                    found.append(Violation("R9", module, name))
+            if "mark_promoted" in imported and not r8_allowed:
+                found.append(Violation("R8", module, "mark_promoted"))
+            if in_domain and node.module == "random":
+                found.append(Violation("R10", module, "random"))
+            if in_domain and "uuid4" in imported and module != R10_UUID4_MODULE:
+                found.append(Violation("R10", module, "uuid4"))
+        elif isinstance(node, ast.Import) and in_domain:
+            if any(alias.name.split(".")[0] == "random" for alias in node.names):
+                found.append(Violation("R10", module, "random"))
+    return found
+
+
+def check_repository_source(roots: tuple[str, ...] | None = CHECKED_ROOTS) -> list[Violation]:
+    violations: list[Violation] = []
+    for path in iter_python_files(roots):
+        module, _ = module_name(path)
+        violations.extend(check_source(module, path.read_text(encoding="utf-8")))
+    return violations
+
+
 class TestCheckerSelfTest(unittest.TestCase):
     """The checker must report violations it is fed; otherwise the boundary test proves nothing."""
 
@@ -191,11 +314,28 @@ class TestCheckerSelfTest(unittest.TestCase):
             with self.subTest(rule=rule):
                 self.assertIn(rule, self.rules_for(module, source))
 
-    def test_r6_rejects_any_other_core_package_and_evidence(self) -> None:
-        self.assertIn(
-            "R6", self.rules_for("core.terraform_model.bad", "from core.domain import x\n")
-        )
-        self.assertIn("R6", self.rules_for("core.terraform_model.bad", "import evidence.store\n"))
+    def test_r6_rejects_any_other_core_package_evidence_and_sqlite3(self) -> None:
+        # C-27 / ADR-014: core.domain.* is allowed; every other core.* package,
+        # evidence and sqlite3 stay forbidden.
+        module = "core.terraform_model.bad"
+        for source in (
+            "from core.identity import x\n",
+            "from core.application import config\n",
+            "import evidence.store\n",
+            "import sqlite3\n",
+        ):
+            with self.subTest(source=source.strip()):
+                self.assertIn("R6", self.rules_for(module, source))
+
+    def test_r6_allows_core_domain_and_the_standard_library(self) -> None:
+        module = "core.terraform_model.ok"
+        for source in (
+            "from core.domain.enums import X\n",
+            "from core.domain import hashing\n",
+            "import json\nimport re\n",
+        ):
+            with self.subTest(source=source.strip().splitlines()[0]):
+                self.assertNotIn("R6", self.rules_for(module, source))
 
     def test_relative_imports_are_resolved(self) -> None:
         self.assertEqual(
@@ -225,6 +365,163 @@ class TestCheckerSelfTest(unittest.TestCase):
         )
 
 
+class TestSourceRulesSelfTest(unittest.TestCase):
+    """R8 to R10 are source-level rules; each must fail on a source that breaks it."""
+
+    def rules(self, module: str, source: str) -> set[str]:
+        return {v.rule for v in check_source(module, source)}
+
+    # --- R8: promotion authority (SM-001, SM-002) -------------------------------------------
+
+    def test_r8_fires_on_trusted_state_promote_outside_the_allowed_modules(self) -> None:
+        for module in ("core.identity.bad", "core.application.bad", "evidence.bad", "scripts.bad"):
+            for source in (
+                "from core.domain.state import TrustedState\nTrustedState.promote(candidate=c)\n",
+                "import core.domain.state as s\ns.TrustedState.promote(candidate=c)\n",
+                "from core.domain.state import TrustedState as T\nT.promote(candidate=c)\n",
+                "from core.domain import state\nstate.TrustedState.promote(candidate=c)\n",
+            ):
+                with self.subTest(module=module, source=source.splitlines()[-1]):
+                    self.assertIn("R8", self.rules(module, source))
+
+    def test_r8_fires_on_any_reference_to_mark_promoted(self) -> None:
+        for source in (
+            "from core.domain.state import mark_promoted\n",
+            "from core.domain.state import mark_promoted as mp\nmp(c, s)\n",
+            "from core.domain import state\nstate.mark_promoted(c, s)\n",
+            "mark_promoted(c, s)\n",
+        ):
+            with self.subTest(source=source.splitlines()[-1]):
+                self.assertIn("R8", self.rules("core.impact.bad", source))
+
+    def test_r8_allows_the_state_module_and_the_promotion_package(self) -> None:
+        use = "TrustedState.promote(candidate=c)\nmark_promoted(c, s)\n"
+        for module in ("core.domain.state", "core.promotion.controller", "core.promotion"):
+            with self.subTest(module=module):
+                self.assertNotIn("R8", self.rules(module, use))
+
+    def test_r8_ignores_unrelated_promote_calls(self) -> None:
+        source = "controller.promote()\nTrustedState.establish_baseline()\nx = TrustedState\n"
+        self.assertNotIn("R8", self.rules("core.impact.ok", source))
+
+    # --- R9: no lifecycle bypass through deserialization ---------------------------------------
+
+    def test_r9_fires_on_from_dict_of_the_lifecycle_classes_outside_the_domain(self) -> None:
+        for cls in ("TrustedState", "CandidateState", "InvariantRef", "InvariantEvaluation"):
+            for module in ("core.application.bad", "core.promotion.bad", "evidence.bad", "llm.bad"):
+                with self.subTest(cls=cls, module=module):
+                    self.assertIn("R9", self.rules(module, f"x = {cls}.from_dict(data)\n"))
+
+    def test_r9_follows_aliases_and_module_attributes(self) -> None:
+        for source in (
+            "from core.domain.state import TrustedState as T\nT.from_dict(d)\n",
+            "import core.domain.state as s\ns.CandidateState.from_dict(d)\n",
+            "from core.domain import invariant\ninvariant.InvariantRef.from_dict(d)\n",
+        ):
+            with self.subTest(source=source.splitlines()[-1]):
+                self.assertIn("R9", self.rules("core.application.bad", source))
+
+    def test_r9_allows_the_domain_and_other_classes(self) -> None:
+        self.assertNotIn("R9", self.rules("core.domain.storage", "TrustedState.from_dict(d)\n"))
+        self.assertNotIn("R9", self.rules("core.domain.state", "InvariantRef.from_dict(d)\n"))
+        self.assertNotIn("R9", self.rules("core.application.ok", "Resource.from_dict(d)\n"))
+        self.assertNotIn("R9", self.rules("core.application.ok", "Patch.from_dict(d)\n"))
+
+    # --- R9 (guard tokens): the construction-guard token names stay in their module ------------
+
+    def test_r9_fires_on_guard_token_names_outside_their_defining_module(self) -> None:
+        for source in (
+            "from core.domain.state import _TRUSTED_TOKEN\n",
+            "from core.domain.state import _CANDIDATE_TOKEN as t\nx = t\n",
+            "from core.domain.invariant import _REF_TOKEN\n",
+            "from core.domain import state\nx = state._TRUSTED_TOKEN\n",
+            "import core.domain.invariant as inv\nx = inv._EVALUATION_TOKEN\n",
+            "x = _CANDIDATE_TOKEN\n",
+            "from core.domain.invariant import _PROOF_TOKEN\n",
+            "from core.domain import invariant\nx = invariant._PROOF_TOKEN\n",
+        ):
+            for module in (
+                "core.application.bad",
+                "core.promotion.bad",
+                "evidence.bad",
+                "scripts.bad",
+            ):
+                with self.subTest(module=module, source=source.splitlines()[0]):
+                    self.assertIn("R9", self.rules(module, source))
+
+    def test_r9_keeps_each_token_in_its_own_defining_module(self) -> None:
+        # Another module of the domain may not borrow a token either.
+        self.assertIn("R9", self.rules("core.domain.state", "x = _REF_TOKEN\n"))
+        self.assertIn("R9", self.rules("core.domain.state", "x = _EVALUATION_TOKEN\n"))
+        self.assertIn("R9", self.rules("core.domain.state", "x = _PROOF_TOKEN\n"))
+        self.assertIn("R9", self.rules("core.domain.invariant", "x = _TRUSTED_TOKEN\n"))
+        self.assertIn("R9", self.rules("core.domain.storage", "x = _CANDIDATE_TOKEN\n"))
+        self.assertIn(
+            "R9",
+            self.rules("core.domain.storage", "from core.domain.state import _TRUSTED_TOKEN\n"),
+        )
+
+    def test_r9_allows_the_tokens_in_their_defining_modules(self) -> None:
+        state_use = "_TRUSTED_TOKEN = object()\n_CANDIDATE_TOKEN = object()\nx = _TRUSTED_TOKEN\n"
+        invariant_use = (
+            "_REF_TOKEN = object()\n_EVALUATION_TOKEN = object()\n_PROOF_TOKEN = object()\n"
+            "x = _REF_TOKEN\ny = _PROOF_TOKEN\n"
+        )
+        self.assertNotIn("R9", self.rules("core.domain.state", state_use))
+        self.assertNotIn("R9", self.rules("core.domain.invariant", invariant_use))
+
+    def test_r9_ignores_other_private_names(self) -> None:
+        source = "from core.domain.state import _resources\nx = _TOKEN_COUNT + other._token\n"
+        self.assertNotIn("R9", self.rules("core.application.ok", source))
+
+    # --- R10: determinism in core.domain -------------------------------------------------------
+
+    def test_r10_fires_on_clock_and_random_calls_in_the_domain(self) -> None:
+        for source in (
+            "from datetime import datetime\ndatetime.now()\n",
+            "import datetime\ndatetime.datetime.now()\n",
+            "from datetime import datetime\ndatetime.utcnow()\n",
+            "from datetime import date\ndate.today()\n",
+            "import time\ntime.time()\n",
+            "import random\nrandom.random()\n",
+            "from random import choice\n",
+            "from datetime import datetime as dt\ndt.now()\n",
+            "import time as t\nt.time()\n",
+            "import random as r\nr.shuffle(x)\n",
+        ):
+            with self.subTest(source=source.splitlines()[-1]):
+                self.assertIn("R10", self.rules("core.domain.bad", source))
+
+    def test_r10_fires_on_uuid4_outside_ids(self) -> None:
+        for source in (
+            "import uuid\nuuid.uuid4()\n",
+            "from uuid import uuid4\n",
+            "from uuid import uuid4 as u\nu()\n",
+            "from core.domain import ids\nids.uuid4()\n",
+        ):
+            with self.subTest(source=source.splitlines()[-1]):
+                self.assertIn("R10", self.rules("core.domain.state", source))
+
+    def test_r10_allows_uuid4_in_ids_and_deterministic_datetime_use(self) -> None:
+        self.assertNotIn("R10", self.rules("core.domain.ids", "import uuid\nuuid.uuid4()\n"))
+        deterministic = (
+            "from datetime import UTC, datetime\n"
+            "datetime(2026, 1, 1, tzinfo=UTC)\n"
+            "datetime.fromisoformat(s)\n"
+            "import uuid\nuuid.UUID(s)\n"
+            "import time\nx = time.strftime\n"
+        )
+        self.assertNotIn("R10", self.rules("core.domain.jsonvalue", deterministic))
+
+    def test_r10_applies_only_to_the_domain(self) -> None:
+        source = (
+            "import uuid, random\nfrom datetime import datetime\n" "datetime.now()\nuuid.uuid4()\n"
+        )
+        self.assertNotIn("R10", self.rules("core.application.health", source))
+        self.assertNotIn("R10", self.rules("evidence.ids", source))
+        self.assertNotIn("R10", self.rules("scripts.dev", source))
+
+
 class TestArchitectureBoundaries(unittest.TestCase):
     def test_checked_packages_exist(self) -> None:
         for root in CHECKED_ROOTS:
@@ -233,6 +530,10 @@ class TestArchitectureBoundaries(unittest.TestCase):
 
     def test_rules_r1_to_r7_hold(self) -> None:
         violations = check_repository(CHECKED_ROOTS)
+        self.assertEqual(violations, [], "\n".join(str(v) for v in violations))
+
+    def test_rules_r8_to_r10_hold(self) -> None:
+        violations = check_repository_source(CHECKED_ROOTS)
         self.assertEqual(violations, [], "\n".join(str(v) for v in violations))
 
     def test_no_oracle_imports_anywhere_in_the_repository(self) -> None:

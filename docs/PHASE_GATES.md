@@ -16,9 +16,11 @@ An earlier version of this file marked P1 and P2 as PASSED. Those claims were wi
 | No secrets required for core tests | PASS | The CI quality job uses no secrets; the only secret reference in ci.yml is GITHUB_TOKEN for gitleaks |
 | Main branch protected | PASS | PR required; strict required checks quality/secrets/terraform; admins included; no force-push or deletion (API read-back, 30 Sep 2026) |
 
-Carried forward: required approvals = 0 (C-28, Open). Doc 14 §23's safety-regression and adversarial test gates are empty at P0; they must hold real tests from P3a onward and must not pass empty at later gates.
+Carried forward: required approvals = 0 (C-28, Accepted 30 Sep 2026: each PR description links its external review verdict as the approval record). Doc 14 §23's safety-regression and adversarial test gates are empty at P0; they must hold real tests from P3a onward and must not pass empty at later gates.
 
 ## P1 — Domain Foundation — NOT PASSED
+
+P1a mini-gate: PASSED (external review, 1 Oct 2026, PR #3). Gaps 1–7 and 9 closed at domain level; gap 8 and database-level enforcement remain for P1b.
 
 Rewrite scheduled as P1a and P1b. Known gaps:
 
@@ -50,4 +52,4 @@ Reconciliation scheduled as P2-fix. Known gaps:
 
 ## Temporary exceptions
 
-- The mypy `ignore_errors` override for five modules (`core.domain.enums`, `core.domain.invariant`, `core.domain.state`, `core.domain.resource`, `core.domain.storage`) in `pyproject.toml`. It must be removed in P1a.
+None.

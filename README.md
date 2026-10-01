@@ -47,6 +47,12 @@ python3.12 scripts/dev.py health      # one line per health check; exit 1 on any
 `bash scripts/bootstrap.sh` is a thin wrapper around `scripts/dev.py bootstrap`
 (on Windows use WSL or Git Bash, or call `scripts/dev.py` directly).
 
+## Development notes
+
+- From P1a the local development database (`.local/dail.db`) has schema version 3 (C-35). There
+  are no migrations before P1b: if bootstrap reports another schema version, delete
+  `.local/dail.db` and run bootstrap again.
+
 ## Windows notes
 
 - Use `py -3.12` where the docs say `python3.12`.
