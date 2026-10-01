@@ -128,6 +128,21 @@ def _check_promotion_proofs(
                 f"C-40, SM-006: the proof for {proof.invariant_id} was carried forward from state "
                 f"{proof.source_state_id}, not from the current state {current.state_id}"
             )
+    # Coverage: no invariant on the current state may be dropped, and none may go back to an
+    # older definition (C-40; retiring an invariant is the open C-41).
+    proof_versions = {proof.invariant_id: proof.invariant_version for proof in proofs}
+    for ref in current.invariant_refs:
+        if ref.invariant_id not in proof_versions:
+            raise DomainValidationError(
+                f"C-40, SM-006: no proof for {ref.invariant_id}; an invariant on the current "
+                "state cannot be dropped at promotion (C-41)"
+            )
+        if proof_versions[ref.invariant_id] < ref.invariant_version:
+            raise DomainValidationError(
+                f"C-40: the proof for {ref.invariant_id} is version "
+                f"{proof_versions[ref.invariant_id]}, lower than the current version "
+                f"{ref.invariant_version}"
+            )
 
 
 def _resource_entries(resources: Iterable[Resource]) -> list[dict[str, str]]:
