@@ -19,7 +19,9 @@ R7  core.* and evidence.* import no third-party package (sys.stdlib_module_names
 R8  promotion authority (SM-001, SM-002): the attribute ``promote`` on ``TrustedState`` and any
     reference to ``mark_promoted`` appear only in core.domain.state and core.promotion.*.
 R9  no lifecycle bypass through deserialization: ``from_dict`` on TrustedState, CandidateState,
-    InvariantRef and InvariantEvaluation is referenced only inside core.domain.*.
+    InvariantRef and InvariantEvaluation is referenced only inside core.domain.*; and the
+    construction-guard token names (``_TRUSTED_TOKEN``, ``_CANDIDATE_TOKEN``, ``_REF_TOKEN``,
+    ``_EVALUATION_TOKEN``) are imported or accessed only in the module that defines them.
 R10 determinism in core.domain: no ``datetime.now``/``utcnow``, ``date.today``, ``time.time`` or
     ``random``, and ``uuid4`` only in core.domain.ids.
 ORACLE  nothing in this repository imports the TerraPreserve oracle (ADR-010).
@@ -192,6 +194,13 @@ R10_CLOCK_CALLS = frozenset(
     {("datetime", "now"), ("datetime", "utcnow"), ("date", "today"), ("time", "time")}
 )
 R10_UUID4_MODULE = "core.domain.ids"
+# R9: each construction-guard token belongs to exactly one module (Doc 06 §30).
+R9_GUARD_TOKEN_HOMES = {
+    "_TRUSTED_TOKEN": "core.domain.state",
+    "_CANDIDATE_TOKEN": "core.domain.state",
+    "_REF_TOKEN": "core.domain.invariant",
+    "_EVALUATION_TOKEN": "core.domain.invariant",
+}
 
 
 def _import_aliases(tree: ast.AST) -> dict[str, str]:
@@ -235,6 +244,8 @@ def check_source(module: str, source: str) -> list[Violation]:
                 found.append(Violation("R8", module, "mark_promoted"))
             if node.attr == "from_dict" and receiver in R9_LIFECYCLE_CLASSES and not in_domain:
                 found.append(Violation("R9", module, f"{receiver}.from_dict"))
+            if R9_GUARD_TOKEN_HOMES.get(node.attr, module) != module:
+                found.append(Violation("R9", module, node.attr))
             if in_domain:
                 if (receiver, node.attr) in R10_CLOCK_CALLS:
                     found.append(Violation("R10", module, f"{receiver}.{node.attr}"))
@@ -244,12 +255,17 @@ def check_source(module: str, source: str) -> list[Violation]:
                     found.append(Violation("R10", module, "uuid4"))
         elif isinstance(node, ast.Name):
             original = aliases.get(node.id, node.id)
+            if R9_GUARD_TOKEN_HOMES.get(original, module) != module:
+                found.append(Violation("R9", module, original))
             if original == "mark_promoted" and not r8_allowed:
                 found.append(Violation("R8", module, "mark_promoted"))
             if original == "uuid4" and in_domain and module != R10_UUID4_MODULE:
                 found.append(Violation("R10", module, "uuid4"))
         elif isinstance(node, ast.ImportFrom):
             imported = {alias.name for alias in node.names}
+            for name in sorted(imported):
+                if R9_GUARD_TOKEN_HOMES.get(name, module) != module:
+                    found.append(Violation("R9", module, name))
             if "mark_promoted" in imported and not r8_allowed:
                 found.append(Violation("R8", module, "mark_promoted"))
             if in_domain and node.module == "random":
@@ -408,6 +424,47 @@ class TestSourceRulesSelfTest(unittest.TestCase):
         self.assertNotIn("R9", self.rules("core.domain.state", "InvariantRef.from_dict(d)\n"))
         self.assertNotIn("R9", self.rules("core.application.ok", "Resource.from_dict(d)\n"))
         self.assertNotIn("R9", self.rules("core.application.ok", "Patch.from_dict(d)\n"))
+
+    # --- R9 (guard tokens): the construction-guard token names stay in their module ------------
+
+    def test_r9_fires_on_guard_token_names_outside_their_defining_module(self) -> None:
+        for source in (
+            "from core.domain.state import _TRUSTED_TOKEN\n",
+            "from core.domain.state import _CANDIDATE_TOKEN as t\nx = t\n",
+            "from core.domain.invariant import _REF_TOKEN\n",
+            "from core.domain import state\nx = state._TRUSTED_TOKEN\n",
+            "import core.domain.invariant as inv\nx = inv._EVALUATION_TOKEN\n",
+            "x = _CANDIDATE_TOKEN\n",
+        ):
+            for module in (
+                "core.application.bad",
+                "core.promotion.bad",
+                "evidence.bad",
+                "scripts.bad",
+            ):
+                with self.subTest(module=module, source=source.splitlines()[0]):
+                    self.assertIn("R9", self.rules(module, source))
+
+    def test_r9_keeps_each_token_in_its_own_defining_module(self) -> None:
+        # Another module of the domain may not borrow a token either.
+        self.assertIn("R9", self.rules("core.domain.state", "x = _REF_TOKEN\n"))
+        self.assertIn("R9", self.rules("core.domain.state", "x = _EVALUATION_TOKEN\n"))
+        self.assertIn("R9", self.rules("core.domain.invariant", "x = _TRUSTED_TOKEN\n"))
+        self.assertIn("R9", self.rules("core.domain.storage", "x = _CANDIDATE_TOKEN\n"))
+        self.assertIn(
+            "R9",
+            self.rules("core.domain.storage", "from core.domain.state import _TRUSTED_TOKEN\n"),
+        )
+
+    def test_r9_allows_the_tokens_in_their_defining_modules(self) -> None:
+        state_use = "_TRUSTED_TOKEN = object()\n_CANDIDATE_TOKEN = object()\nx = _TRUSTED_TOKEN\n"
+        invariant_use = "_REF_TOKEN = object()\n_EVALUATION_TOKEN = object()\nx = _REF_TOKEN\n"
+        self.assertNotIn("R9", self.rules("core.domain.state", state_use))
+        self.assertNotIn("R9", self.rules("core.domain.invariant", invariant_use))
+
+    def test_r9_ignores_other_private_names(self) -> None:
+        source = "from core.domain.state import _resources\nx = _TOKEN_COUNT + other._token\n"
+        self.assertNotIn("R9", self.rules("core.application.ok", source))
 
     # --- R10: determinism in core.domain -------------------------------------------------------
 
