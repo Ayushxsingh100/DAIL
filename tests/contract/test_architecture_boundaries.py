@@ -25,6 +25,10 @@ R9  no lifecycle bypass through deserialization: ``from_dict`` on TrustedState, 
     defines them.
 R10 determinism in core.domain: no ``datetime.now``/``utcnow``, ``date.today``, ``time.time`` or
     ``random``, and ``uuid4`` only in core.domain.ids.
+R11 ``sqlite3`` is imported only in core.persistence.*, evidence.* and core.application.health
+    (C-43, P1b).
+R12 core.persistence.* imports only the standard library, core.domain.* and itself (P1b). R1
+    already keeps core.domain from importing core.persistence.
 ORACLE  nothing in this repository imports the TerraPreserve oracle (ADR-010).
 
 A self-test feeds in-memory sources that break each rule, so a checker that
@@ -46,6 +50,8 @@ R5_ENGINES = ("core.identity", "core.dependency", "core.impact", "core.verificat
 # ADR-010: the oracle lives in the TerraPreserve repository. Any top-level
 # module named oracle or starting with "terrapreserve" is treated as the oracle.
 ORACLE_TOP_LEVEL_PREFIXES = ("oracle", "terrapreserve")
+# R11: the only places that may import sqlite3 (C-43).
+R11_ALLOWED_MODULES = ("core.persistence", "evidence", "core.application.health")
 # R7 per-package third-party allowlist. Empty until P3c (ADR-005: networkx in core.dependency).
 THIRD_PARTY_ALLOWLIST: dict[str, frozenset[str]] = {}
 SKIP_DIRS = frozenset(
@@ -130,6 +136,14 @@ def check_module(module: str, imports: set[str]) -> list[Violation]:
             violations.append(Violation("R2", module, name))
         if (in_core or in_evidence) and top in R3_FORBIDDEN_TOP_LEVEL:
             violations.append(Violation("R3", module, name))
+        if top == "sqlite3" and not any(_within(module, a) for a in R11_ALLOWED_MODULES):
+            violations.append(Violation("R11", module, name))
+        if (
+            _within(module, "core.persistence")
+            and not is_stdlib
+            and not (_within(name, "core.domain") or _within(name, "core.persistence"))
+        ):
+            violations.append(Violation("R12", module, name))
         if in_evidence and top == "core" and not _within(name, "core.domain"):
             violations.append(Violation("R4", module, name))
         if any(_within(module, e) for e in R5_ENGINES) and _within(name, "core.promotion"):
@@ -186,7 +200,8 @@ SOURCE_RULES = frozenset({"R8", "R9", "R10"})
 # R8: only the state module and the Promotion Controller package may create a trusted state from a
 # candidate or mark a candidate promoted (SM-001, SM-002).
 R8_ALLOWED_MODULES = ("core.domain.state", "core.promotion")
-# R9: these classes are rebuilt from data only inside core.domain (P1b adds the repository adapter).
+# R9: these classes are rebuilt from data only inside core.domain; the repository adapter goes
+# through core.domain.codec (C-48).
 R9_LIFECYCLE_CLASSES = frozenset(
     {"TrustedState", "CandidateState", "InvariantRef", "InvariantEvaluation"}
 )
@@ -336,6 +351,84 @@ class TestCheckerSelfTest(unittest.TestCase):
         ):
             with self.subTest(source=source.strip().splitlines()[0]):
                 self.assertNotIn("R6", self.rules_for(module, source))
+
+    def test_r1_keeps_the_domain_from_importing_the_persistence_adapter(self) -> None:
+        for source in (
+            "from core.persistence import sqlite\n",
+            "import core.persistence.schema\n",
+            "from core.persistence.sqlite import SqliteUnitOfWork\n",
+            "from ..persistence import schema\n",
+        ):
+            with self.subTest(source=source.strip()):
+                self.assertIn("R1", self.rules_for("core.domain.bad", source, is_package=False))
+
+    def test_r11_reports_sqlite3_outside_the_allowed_modules(self) -> None:
+        for module in (
+            "core.domain.bad",
+            "core.identity.bad",
+            "core.promotion.bad",
+            "core.application.config",
+            "core.application.bad",
+            "core.terraform_model.bad",
+            "llm.bad",
+            "scripts.bad",
+            "scripts.dev",
+        ):
+            for source in (
+                "import sqlite3\n",
+                "from sqlite3 import connect\n",
+                "import sqlite3 as db\n",
+            ):
+                with self.subTest(module=module, source=source.strip()):
+                    self.assertIn("R11", self.rules_for(module, source))
+
+    def test_r11_allows_sqlite3_in_the_three_places_c_43_names(self) -> None:
+        for module in (
+            "core.persistence.schema",
+            "core.persistence.sqlite",
+            "core.persistence",
+            "evidence.store",
+            "evidence.bad",
+            "core.application.health",
+        ):
+            with self.subTest(module=module):
+                self.assertNotIn("R11", self.rules_for(module, "import sqlite3\n"))
+
+    def test_r11_does_not_extend_to_a_module_that_merely_shares_a_prefix(self) -> None:
+        for module in ("core.persistence_extra", "evidencex.bad", "core.application.healthy"):
+            with self.subTest(module=module):
+                self.assertIn("R11", self.rules_for(module, "import sqlite3\n"))
+
+    def test_r12_reports_anything_but_the_standard_library_and_core_domain(self) -> None:
+        module = "core.persistence.bad"
+        for source in (
+            "from core.application import config\n",
+            "from core.identity import engine\n",
+            "from core.promotion import controller\n",
+            "import evidence.store\n",
+            "import llm.adapter\n",
+            "import networkx\n",
+            "from pydantic import BaseModel\n",
+            "import sqlalchemy\n",
+        ):
+            with self.subTest(source=source.strip()):
+                self.assertIn("R12", self.rules_for(module, source))
+
+    def test_r12_allows_the_standard_library_core_domain_and_its_own_package(self) -> None:
+        module = "core.persistence.sqlite"
+        for source in (
+            "import sqlite3\nimport json\nfrom pathlib import Path\n",
+            "from core.domain.state import TrustedState\n",
+            "from core.domain import codec\n",
+            "from core.persistence.schema import open_connection\n",
+            "from .schema import open_connection\n",
+        ):
+            with self.subTest(source=source.splitlines()[0]):
+                self.assertNotIn("R12", self.rules_for(module, source))
+
+    def test_r12_applies_only_to_the_persistence_package(self) -> None:
+        self.assertNotIn("R12", self.rules_for("core.application.health", "import sqlite3\n"))
+        self.assertNotIn("R12", self.rules_for("evidence.store", "import sqlite3\n"))
 
     def test_relative_imports_are_resolved(self) -> None:
         self.assertEqual(
@@ -535,6 +628,32 @@ class TestArchitectureBoundaries(unittest.TestCase):
     def test_rules_r8_to_r10_hold(self) -> None:
         violations = check_repository_source(CHECKED_ROOTS)
         self.assertEqual(violations, [], "\n".join(str(v) for v in violations))
+
+    def test_the_only_sqlite3_importers_are_exactly_the_modules_c_43_names(self) -> None:
+        importers = set()
+        for path in iter_python_files(CHECKED_ROOTS):
+            module, is_package = module_name(path)
+            if any(
+                _top(name) == "sqlite3"
+                for name in collect_imports(path.read_text(encoding="utf-8"), module, is_package)
+            ):
+                importers.add(module)
+        self.assertEqual(
+            importers,
+            {
+                "core.persistence.schema",
+                "core.persistence.sqlite",
+                "core.application.health",
+                "evidence.store",
+            },
+        )
+
+    def test_the_persistence_package_exists_and_is_checked(self) -> None:
+        checked = {module_name(p)[0] for p in iter_python_files(CHECKED_ROOTS)}
+        self.assertTrue(
+            {"core.persistence.schema", "core.persistence.sqlite", "core.domain.repositories"}
+            <= checked
+        )
 
     def test_no_oracle_imports_anywhere_in_the_repository(self) -> None:
         violations = [v for v in check_repository(None) if v.rule == "ORACLE"]
