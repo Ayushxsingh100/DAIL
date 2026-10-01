@@ -11,7 +11,7 @@ from pathlib import Path
 
 from core.application.config import ResolvedConfig, load_config
 from core.application.health import EXPECTED_TABLES, run_health_checks
-from core.domain.storage import LocalStorage
+from core.persistence.schema import initialize_database
 from evidence.store import EvidenceStore
 
 BASE_FILES: dict[str, str] = {
@@ -54,7 +54,7 @@ class HealthTestCase(unittest.TestCase):
         return load_config(cfg_dir, environment="dev", environ=environ or {})
 
     def init_db(self) -> None:
-        LocalStorage(self.db_path).initialize_schema()
+        initialize_database(self.db_path)
         EvidenceStore(self.db_path).initialize_schema()
 
     def results(self, cfg: ResolvedConfig) -> dict[str, tuple[str, str]]:

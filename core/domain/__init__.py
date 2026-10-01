@@ -11,10 +11,11 @@ be created only through those functions, so ``dataclasses.replace`` and direct c
 cannot skip a transition.
 
 Hashing: canonical content and SHA-256 hashes, stable under reordering and excluding timestamps
-and record ids (C-33). Interim local storage (``storage``) is replaced behind repository ports in
-P1b (C-35).
+and record ids (C-33). Persistence: the repository ports (``repositories``, Doc 05 §26) and the
+adapter's way back into the domain (``codec``, C-48); the SQLite adapter itself is
+``core.persistence``, which this package never imports.
 
 Standard library only (ADR-004); contract rules R1 and R8-R10 are checked by
 ``tests/contract/test_architecture_boundaries.py``. See docs/SPEC_INDEX.md, docs/PHASE_GATES.md
-and docs/DECISIONS_REGISTER.md (C-29 to C-41).
+and docs/DECISIONS_REGISTER.md (C-29 to C-48).
 """
