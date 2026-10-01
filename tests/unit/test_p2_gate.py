@@ -76,7 +76,7 @@ def _patch(parent: TrustedState, content: str) -> Patch:
 def _proof(evidence_n: int) -> InvariantProof:
     """INV-FUNC-001 PROTECTED. The P2 evidence ids are not UUIDs (Doc 05 §3), so a synthetic
     UUID stands in for the evidence reference here."""
-    return InvariantProof(
+    return InvariantProof.for_baseline(
         invariant_id="INV-FUNC-001",
         invariant_version=1,
         status=InvariantStatus.PROTECTED,

@@ -13,7 +13,7 @@ import unittest
 from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
-from core.domain.enums import InvariantCategory, InvariantStatus
+from core.domain.enums import InvariantCategory, InvariantStatus, ProofOrigin
 from core.domain.errors import DomainValidationError, UnauthorizedConstructionError
 from core.domain.invariant import (
     Invariant,
@@ -70,7 +70,7 @@ def make_proof(**overrides: Any) -> InvariantProof:
         "verified_at": NOW,
     }
     fields.update(overrides)
-    return InvariantProof(**fields)
+    return InvariantProof.for_baseline(**fields)
 
 
 def ref_dict(**overrides: Any) -> dict[str, Any]:
@@ -83,6 +83,7 @@ def ref_dict(**overrides: Any) -> dict[str, Any]:
         "last_verified_at": "2026-10-01T09:30:00+00:00",
         "invalidated_by_candidate_id": None,
         "invalidation_reason": None,
+        "origin": "BASELINE",
     }
     data.update(overrides)
     return data
@@ -446,6 +447,7 @@ class TestInvariantRef(unittest.TestCase):
                 last_verified_at=NOW,
                 invalidated_by_candidate_id=None,
                 invalidation_reason=None,
+                origin=ProofOrigin.BASELINE,
             )
 
     def test_replace_cannot_change_a_status(self) -> None:
@@ -549,8 +551,25 @@ class TestInvariantRef(unittest.TestCase):
         self.assertEqual(ref.evidence_ids, (EVIDENCE_A, EVIDENCE_B))
         self.assertEqual(ref.last_verified_at, NOW)
         self.assertIsNone(ref.invalidated_by_candidate_id)
+        self.assertIs(ref.origin, ProofOrigin.BASELINE)  # C-40: the ref records the proof's origin
         with self.assertRaises(DomainValidationError):
             InvariantRef._from_proof(proof, "state-1")
+
+    def test_origin_is_recorded_validated_and_round_trips(self) -> None:
+        for origin in ProofOrigin:
+            with self.subTest(origin=origin):
+                ref = InvariantRef.from_dict(ref_dict(origin=origin.value))
+                self.assertIs(ref.origin, origin)
+                self.assertEqual(ref.to_dict()["origin"], origin.value)
+                self.assertEqual(InvariantRef.from_dict(ref.to_dict()), ref)
+
+    def test_origin_is_required_and_must_be_a_known_origin(self) -> None:
+        without = {k: v for k, v in ref_dict().items() if k != "origin"}
+        with self.assertRaises(DomainValidationError):
+            InvariantRef.from_dict(without)
+        for bad in ("baseline", "TRUSTED", "", None, 3):
+            with self.subTest(origin=bad), self.assertRaises(DomainValidationError):
+                InvariantRef.from_dict(ref_dict(origin=bad))
 
 
 if __name__ == "__main__":

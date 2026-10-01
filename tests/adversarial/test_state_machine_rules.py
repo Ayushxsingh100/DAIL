@@ -16,6 +16,7 @@ from core.domain.enums import (
     CandidateStatus,
     InvariantCategory,
     InvariantStatus,
+    ProofOrigin,
     VerificationResult,
 )
 from core.domain.errors import (
@@ -430,7 +431,7 @@ class TestSM006(unittest.TestCase):
     def test_a_proof_or_reference_cannot_carry_an_in_flight_status(self) -> None:
         for status in (S.AFFECTED, S.REVERIFYING, S.VERIFYING, S.REGISTERED):
             with self.subTest(status=status.value), self.assertRaises(DomainValidationError):
-                InvariantProof(
+                InvariantProof.for_baseline(
                     invariant_id=SEC,
                     invariant_version=1,
                     status=status,
@@ -716,6 +717,7 @@ class TestConstructionGuardSurface(unittest.TestCase):
                 last_verified_at=at(0),
                 invalidated_by_candidate_id=None,
                 invalidation_reason=None,
+                origin=ProofOrigin.BASELINE,
             )
 
 

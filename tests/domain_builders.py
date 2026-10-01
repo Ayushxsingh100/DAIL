@@ -19,8 +19,15 @@ from core.domain.enums import (
     ProvenanceSourceKind,
     ReferenceResolution,
     ResourceSupport,
+    VerificationResult,
 )
-from core.domain.invariant import Invariant, InvariantProof, InvariantScope
+from core.domain.invariant import (
+    Invariant,
+    InvariantEvaluation,
+    InvariantProof,
+    InvariantRef,
+    InvariantScope,
+)
 from core.domain.patch import Patch
 from core.domain.resource import Resource
 from core.domain.state import (
@@ -145,13 +152,59 @@ def proof(
     evidence: int = 1,
     minutes: int = 0,
 ) -> InvariantProof:
-    return InvariantProof(
+    """A BASELINE proof (``InvariantProof.for_baseline``, C-40)."""
+    return InvariantProof.for_baseline(
         invariant_id=invariant_id,
         invariant_version=1,
         status=status,
         evidence_ids=(uid(1000 + evidence),),
         verified_at=at(minutes),
     )
+
+
+_RESULT_FOR_STATUS = {
+    InvariantStatus.PROTECTED: VerificationResult.PASS,
+    InvariantStatus.VIOLATED: VerificationResult.FAIL,
+    InvariantStatus.UNCERTAIN: VerificationResult.UNKNOWN,
+}
+
+
+def parent_ref(parent: TrustedState, invariant_id: str) -> InvariantRef:
+    return next(ref for ref in parent.invariant_refs if ref.invariant_id == invariant_id)
+
+
+def evaluation_for(
+    parent: TrustedState, candidate: CandidateState, invariant_id: str
+) -> InvariantEvaluation:
+    """An evaluation of ``invariant_id`` for ``candidate``, ready for ``apply_result``: the
+    lifecycle path the parent's reference allows (Doc 06 §8, §9, §12)."""
+    ref = next((r for r in parent.invariant_refs if r.invariant_id == invariant_id), None)
+    if ref is None:
+        return InvariantEvaluation.register(candidate, invariant(invariant_id)).start_verification()
+    if ref.status is InvariantStatus.PROTECTED:
+        return InvariantEvaluation.affect(ref, candidate, "fixture").start_reverification()
+    return InvariantEvaluation.reopen(ref, candidate, "fixture")
+
+
+def verified_proof(
+    parent: TrustedState,
+    candidate: CandidateState,
+    invariant_id: str = SEC,
+    status: InvariantStatus = InvariantStatus.PROTECTED,
+    evidence: int = 1,
+    minutes: int = 10,
+) -> InvariantProof:
+    """A VERIFIED proof, obtained the only way C-40 allows: evaluation -> result -> ``to_proof``."""
+    evaluation = evaluation_for(parent, candidate, invariant_id)
+    done = evaluation.apply_result(_RESULT_FOR_STATUS[status], [uid(1000 + evidence)], at(minutes))
+    return done.to_proof()
+
+
+def carried_proof(
+    parent: TrustedState, candidate: CandidateState, invariant_id: str = SEC
+) -> InvariantProof:
+    """A CARRIED_FORWARD proof copied from the parent's reference (C-40)."""
+    return InvariantProof.carry_forward(parent_ref(parent, invariant_id), candidate)
 
 
 def baseline(
@@ -233,6 +286,30 @@ def promotable_candidate(
     )
 
 
+_DEFAULT_EVIDENCE = {SEC: 11, FUNC: 12}
+
+
+def default_verified_proofs(
+    candidate: CandidateState, current: TrustedState
+) -> list[InvariantProof]:
+    """A PROTECTED, VERIFIED proof for every invariant on ``current`` (C-40 coverage).
+
+    A candidate whose parent is not ``current`` is stale: no honest proof can exist for it, and
+    ``promote`` refuses it (SM-010) before it reads any proof, so the list is empty then."""
+    if candidate.parent_state_id != current.state_id:
+        return []
+    return [
+        verified_proof(
+            current,
+            candidate,
+            ref.invariant_id,
+            InvariantStatus.PROTECTED,
+            evidence=_DEFAULT_EVIDENCE.get(ref.invariant_id, 20 + index),
+        )
+        for index, ref in enumerate(current.invariant_refs)
+    ]
+
+
 def promote(
     candidate: CandidateState,
     current: TrustedState,
@@ -242,9 +319,7 @@ def promote(
     decision: int = 1,
     minutes: int = 10,
 ) -> TrustedState:
-    chosen = (
-        list(proofs) if proofs is not None else [proof(SEC, evidence=11), proof(FUNC, evidence=12)]
-    )
+    chosen = list(proofs) if proofs is not None else default_verified_proofs(candidate, current)
     return TrustedState.promote(
         candidate=candidate,
         current=current,

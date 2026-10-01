@@ -83,6 +83,19 @@ class InvariantStatus(StrEnum):
     UNCERTAIN = "UNCERTAIN"
 
 
+class ProofOrigin(StrEnum):
+    """How the proof behind a trusted-state reference came to exist (C-40, not in Doc 05 §4.1).
+
+    BASELINE: the baseline protocol (``InvariantProof.for_baseline``). VERIFIED: an
+    ``InvariantEvaluation`` of one candidate that was given a verification result. CARRIED_FORWARD:
+    copied unchanged from the current state's reference (``InvariantProof.carry_forward``).
+    """
+
+    BASELINE = "BASELINE"
+    VERIFIED = "VERIFIED"
+    CARRIED_FORWARD = "CARRIED_FORWARD"
+
+
 class ImpactStatus(StrEnum):
     UNAFFECTED = "UNAFFECTED"
     AFFECTED = "AFFECTED"

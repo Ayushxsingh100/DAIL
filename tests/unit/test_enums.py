@@ -21,6 +21,7 @@ from core.domain.enums import (
     InvariantCategory,
     InvariantStatus,
     PatchFormat,
+    ProofOrigin,
     ProvenanceSourceKind,
     ReferenceResolution,
     ResourceSupport,
@@ -81,6 +82,8 @@ SUPPORTING: dict[type[enum.Enum], set[str]] = {
     PatchFormat: {"TERRAFORM_HCL"},
     # Doc 05 §29
     DependencyStatus: {"KNOWN", "UNCERTAIN", "UNSUPPORTED"},
+    # C-40 (not in Doc 05 §4.1)
+    ProofOrigin: {"BASELINE", "VERIFIED", "CARRIED_FORWARD"},
 }
 
 # Names removed by P1a (C-36 and the Section 3 list of old enums).

@@ -21,7 +21,8 @@ R8  promotion authority (SM-001, SM-002): the attribute ``promote`` on ``Trusted
 R9  no lifecycle bypass through deserialization: ``from_dict`` on TrustedState, CandidateState,
     InvariantRef and InvariantEvaluation is referenced only inside core.domain.*; and the
     construction-guard token names (``_TRUSTED_TOKEN``, ``_CANDIDATE_TOKEN``, ``_REF_TOKEN``,
-    ``_EVALUATION_TOKEN``) are imported or accessed only in the module that defines them.
+    ``_EVALUATION_TOKEN``, ``_PROOF_TOKEN``) are imported or accessed only in the module that
+    defines them.
 R10 determinism in core.domain: no ``datetime.now``/``utcnow``, ``date.today``, ``time.time`` or
     ``random``, and ``uuid4`` only in core.domain.ids.
 ORACLE  nothing in this repository imports the TerraPreserve oracle (ADR-010).
@@ -200,6 +201,7 @@ R9_GUARD_TOKEN_HOMES = {
     "_CANDIDATE_TOKEN": "core.domain.state",
     "_REF_TOKEN": "core.domain.invariant",
     "_EVALUATION_TOKEN": "core.domain.invariant",
+    "_PROOF_TOKEN": "core.domain.invariant",
 }
 
 
@@ -435,6 +437,8 @@ class TestSourceRulesSelfTest(unittest.TestCase):
             "from core.domain import state\nx = state._TRUSTED_TOKEN\n",
             "import core.domain.invariant as inv\nx = inv._EVALUATION_TOKEN\n",
             "x = _CANDIDATE_TOKEN\n",
+            "from core.domain.invariant import _PROOF_TOKEN\n",
+            "from core.domain import invariant\nx = invariant._PROOF_TOKEN\n",
         ):
             for module in (
                 "core.application.bad",
@@ -449,6 +453,7 @@ class TestSourceRulesSelfTest(unittest.TestCase):
         # Another module of the domain may not borrow a token either.
         self.assertIn("R9", self.rules("core.domain.state", "x = _REF_TOKEN\n"))
         self.assertIn("R9", self.rules("core.domain.state", "x = _EVALUATION_TOKEN\n"))
+        self.assertIn("R9", self.rules("core.domain.state", "x = _PROOF_TOKEN\n"))
         self.assertIn("R9", self.rules("core.domain.invariant", "x = _TRUSTED_TOKEN\n"))
         self.assertIn("R9", self.rules("core.domain.storage", "x = _CANDIDATE_TOKEN\n"))
         self.assertIn(
@@ -458,7 +463,10 @@ class TestSourceRulesSelfTest(unittest.TestCase):
 
     def test_r9_allows_the_tokens_in_their_defining_modules(self) -> None:
         state_use = "_TRUSTED_TOKEN = object()\n_CANDIDATE_TOKEN = object()\nx = _TRUSTED_TOKEN\n"
-        invariant_use = "_REF_TOKEN = object()\n_EVALUATION_TOKEN = object()\nx = _REF_TOKEN\n"
+        invariant_use = (
+            "_REF_TOKEN = object()\n_EVALUATION_TOKEN = object()\n_PROOF_TOKEN = object()\n"
+            "x = _REF_TOKEN\ny = _PROOF_TOKEN\n"
+        )
         self.assertNotIn("R9", self.rules("core.domain.state", state_use))
         self.assertNotIn("R9", self.rules("core.domain.invariant", invariant_use))
 
