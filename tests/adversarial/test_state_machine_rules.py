@@ -25,6 +25,7 @@ from core.domain.errors import (
     StaleParentError,
     UnauthorizedConstructionError,
 )
+from core.domain.hashing import content_hash
 from core.domain.invariant import (
     Invariant,
     InvariantEvaluation,
@@ -134,6 +135,90 @@ class TestSM001(unittest.TestCase):
         forged = {**v1.to_dict(), "version": 7}
         with self.assertRaises(HashMismatchError):
             TrustedState.from_dict(forged)
+
+
+class TestConstructionGuardIsolation(unittest.TestCase):
+    """The construction guard is the only thing that stops these forgeries.
+
+    Each forged object is otherwise fully valid: the data is rebuilt through ``from_dict`` as a
+    control (which accepts it, because every hash and cross-field rule holds), and then the same
+    values are offered to the direct constructor or to ``dataclasses.replace``. Only
+    ``UnauthorizedConstructionError`` may stop those, never a hash or field check (SM-001, SM-002).
+    """
+
+    def forged_trusted_state_data(self) -> dict[str, Any]:
+        """A version-5 state with arbitrary parent and decision ids and a correct state_hash,
+        computed here from the C-33 payload with the public ``content_hash``."""
+        data = baseline().to_dict()
+        data.update(version=5, parent_state_id=uid(777), commit_decision_id=uid(778))
+        data["state_hash"] = content_hash(
+            {
+                "lineage_id": data["lineage_id"],
+                "version": 5,
+                "normalization_version": data["normalization_version"],
+                "resources": [
+                    {
+                        "address": r["address"],
+                        "resource_type": r["resource_type"],
+                        "fingerprint": r["fingerprint"],
+                    }
+                    for r in sorted(data["resources"], key=lambda r: r["address"])
+                ],
+                "invariants": [
+                    {
+                        "invariant_id": ref["invariant_id"],
+                        "invariant_version": ref["invariant_version"],
+                        "status": ref["status"],
+                    }
+                    for ref in sorted(
+                        data["invariant_refs"],
+                        key=lambda r: (r["invariant_id"], r["invariant_version"]),
+                    )
+                ],
+            }
+        )
+        return data
+
+    def test_a_valid_forged_trusted_state_is_stopped_only_by_the_guard(self) -> None:
+        data = self.forged_trusted_state_data()
+        control = TrustedState.from_dict(data)  # every other rule holds for this data
+        self.assertEqual((control.version, control.parent_state_id), (5, uid(777)))
+        kwargs: dict[str, Any] = {
+            "state_id": data["state_id"],
+            "lineage_id": data["lineage_id"],
+            "version": 5,
+            "parent_state_id": uid(777),
+            "state_hash": data["state_hash"],
+            "resources": control.resources,
+            "invariant_refs": control.invariant_refs,
+            "evidence_refs": control.evidence_refs,
+            "created_at": control.created_at,
+            "committed_at": control.committed_at,
+            "commit_decision_id": uid(778),
+            "normalization_version": data["normalization_version"],
+            "invariant_registry_version": data["invariant_registry_version"],
+        }
+        with self.assertRaises(UnauthorizedConstructionError):
+            TrustedState(**kwargs)
+
+    def test_a_consistent_replace_to_promotable_is_stopped_only_by_the_guard(self) -> None:
+        analyzing = analyzing_candidate(baseline(), SAFE)
+        control = CandidateState.from_dict({**analyzing.to_dict(), "status": "PROMOTABLE"})
+        self.assertEqual(control.status, CS.PROMOTABLE)  # the target state is itself consistent
+        with self.assertRaises(UnauthorizedConstructionError):
+            dataclasses.replace(analyzing, status=CS.PROMOTABLE)
+
+    def test_a_consistent_replace_of_a_trusted_state_is_stopped_only_by_the_guard(self) -> None:
+        data = self.forged_trusted_state_data()
+        control = TrustedState.from_dict(data)
+        with self.assertRaises(UnauthorizedConstructionError):
+            dataclasses.replace(
+                baseline(),
+                version=5,
+                parent_state_id=uid(777),
+                commit_decision_id=uid(778),
+                state_hash=control.state_hash,
+            )
 
 
 class TestSM002(unittest.TestCase):
