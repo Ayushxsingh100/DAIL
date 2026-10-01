@@ -241,6 +241,11 @@ class Invariant:
         )
 
 
+def new_version(definition: Invariant, *, now: datetime, **changes: Any) -> Invariant:
+    """``Invariant.new_version`` as a function: the next version of ``definition`` (Doc 06 §4.2)."""
+    return Invariant.new_version(definition, now=now, **changes)
+
+
 class InvariantRegistry:
     """In-memory registry of definitions (P1b adds ``InvariantRepository``).
 

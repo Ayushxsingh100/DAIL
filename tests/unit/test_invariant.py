@@ -21,6 +21,7 @@ from core.domain.invariant import (
     InvariantRef,
     InvariantRegistry,
     InvariantScope,
+    new_version,
 )
 
 NOW = datetime(2026, 10, 1, 9, 30, tzinfo=UTC)
@@ -291,6 +292,14 @@ class TestNewVersion(unittest.TestCase):
         self.assertEqual(v2.verifier_version, "1.1.0")
         self.assertEqual(v2.created_at, LATER)
         self.assertEqual(v2.name, v1.name)
+
+    def test_the_module_level_function_is_the_same_operation(self) -> None:
+        v1 = make_invariant()
+        self.assertEqual(
+            new_version(v1, now=LATER, description="tightened"),
+            Invariant.new_version(v1, now=LATER, description="tightened"),
+        )
+        self.assertEqual(new_version(v1, now=LATER).version, 2)
 
     def test_the_original_is_untouched(self) -> None:
         v1 = make_invariant()
