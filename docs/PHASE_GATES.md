@@ -20,6 +20,8 @@ Carried forward: required approvals = 0 (C-28, Accepted 30 Sep 2026: each PR des
 
 ## P1 — Domain Foundation — NOT PASSED
 
+P1a mini-gate: PASSED (external review, 1 Oct 2026, PR #3). Gaps 1–7 and 9 closed at domain level; gap 8 and database-level enforcement remain for P1b.
+
 Rewrite scheduled as P1a and P1b. Known gaps:
 
 1. `InvariantStatus` must be exactly REGISTERED, VERIFYING, PROTECTED, AFFECTED, REVERIFYING, VIOLATED, UNCERTAIN (Doc 05 §4.1). The code mixes verification results into statuses.
