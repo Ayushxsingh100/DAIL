@@ -631,7 +631,15 @@ class InvariantEvaluation:
         """The proof for a trusted state. Only an evaluation that was verified, in this very
         evaluation, can produce one (SM-006): AFFECTED, REVERIFYING and never-verified
         evaluations cannot."""
-        if self.status not in TRUSTED_REF_STATUSES or self.last_result is None:
+        if self.last_result is None:
+            raise IllegalTransitionError(
+                "invariant",
+                self.status,
+                "proof",
+                "SM-006",
+                "the evaluation was never given a verification result",
+            )
+        if self.status not in TRUSTED_REF_STATUSES:
             raise IllegalTransitionError(
                 "invariant",
                 self.status,

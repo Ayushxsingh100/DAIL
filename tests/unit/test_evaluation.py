@@ -254,6 +254,17 @@ class TestToProof(EvaluationTestCase):
                 self.assertEqual(p.evidence_ids, EVIDENCE)
                 self.assertEqual(p.verified_at, at(20))
 
+    def test_an_evaluation_never_given_a_result_cannot_produce_a_proof(self) -> None:
+        """SM-006: refused because no verification result was ever applied, and it says so."""
+        registered = InvariantEvaluation.register(self.candidate, invariant(FUNC2))
+        for ev in (registered, self.verifying(), self.affected(), self.reverifying()):
+            with self.subTest(status=ev.status.value):
+                self.assertIsNone(ev.last_result)
+                with self.assertRaises(IllegalTransitionError) as ctx:
+                    ev.to_proof()
+                self.assertEqual(ctx.exception.rule, "SM-006")
+                self.assertIn("never given a verification result", str(ctx.exception))
+
     def test_an_unverified_evaluation_cannot_produce_a_proof(self) -> None:
         registered = InvariantEvaluation.register(self.candidate, invariant(FUNC2))
         for ev in (registered, self.verifying(), self.affected(), self.reverifying()):
