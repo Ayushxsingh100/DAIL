@@ -13,7 +13,7 @@ from core.domain.enums import InvariantStatus as S
 from core.domain.enums import VerificationResult
 from core.domain.errors import DomainValidationError
 from core.domain.invariant import Invariant, InvariantEvaluation, InvariantProof, new_version
-from core.domain.state import CandidateState
+from core.domain.state import CandidateState, TrustedState
 from tests.domain_builders import (
     FUNC,
     SEC,
@@ -163,6 +163,59 @@ class TestHelpersAreHonest(unittest.TestCase):
         v1 = promote(candidate, v0)
         self.assertEqual({r.invariant_id for r in v1.invariant_refs}, {SEC, FUNC})
         self.assertEqual(evaluation_for(v0, candidate, FUNC).status, S.REVERIFYING)
+
+
+class TestOneReferencePerInvariant(unittest.TestCase):
+    """C-40: a trusted state holds at most one reference per invariant_id, whatever the versions."""
+
+    def versioned(self, invariant_id: str, version: int, evidence: int) -> InvariantProof:
+        return InvariantProof.for_baseline(
+            invariant_id=invariant_id,
+            invariant_version=version,
+            status=S.PROTECTED,
+            evidence_ids=[uid(1000 + evidence)],
+            verified_at=at(0),
+        )
+
+    def test_a_baseline_refuses_two_proofs_for_one_invariant_even_at_different_versions(
+        self,
+    ) -> None:
+        with self.assertRaises(DomainValidationError) as ctx:
+            baseline(
+                proofs=[
+                    self.versioned(SEC, 1, 1),
+                    self.versioned(SEC, 2, 2),
+                    proof(FUNC, S.PROTECTED, 3),
+                ]
+            )
+        self.assertIn("one reference per invariant_id", str(ctx.exception))
+        self.assertIn(SEC, str(ctx.exception))
+
+    def test_promote_refuses_two_proofs_for_one_invariant(self) -> None:
+        v0 = baseline()
+        candidate = promotable_candidate(v0, SAFE)
+        sec = verified_proof(v0, candidate, SEC, S.PROTECTED, 11)
+        extra = registered_proof(candidate, new_version(invariant(SEC), now=at(5)), 15)
+        func = carried_proof(v0, candidate, FUNC)
+        for proofs in ([sec, sec, func], [sec, extra, func], [extra, sec, func]):
+            with self.subTest(versions=[p.invariant_version for p in proofs]):
+                with self.assertRaises(DomainValidationError) as ctx:
+                    promote(candidate, v0, proofs=proofs)
+                self.assertIn("one reference per invariant_id", str(ctx.exception))
+
+    def test_loading_a_state_with_two_references_for_one_invariant_is_refused(self) -> None:
+        v0 = baseline()
+        data = v0.to_dict()
+        twin = dict(next(r for r in data["invariant_refs"] if r["invariant_id"] == SEC))
+        twin["invariant_version"] = 2
+        data["invariant_refs"].append(twin)
+        with self.assertRaises(DomainValidationError) as ctx:
+            TrustedState.from_dict(data)
+        self.assertIn("one reference per invariant_id", str(ctx.exception))
+
+    def test_distinct_invariants_are_unaffected(self) -> None:
+        state = baseline(proofs=[proof(SEC, S.PROTECTED, 1), proof(FUNC, S.VIOLATED, 2)])
+        self.assertEqual(len(state.invariant_refs), 2)
 
 
 if __name__ == "__main__":

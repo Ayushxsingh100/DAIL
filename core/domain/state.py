@@ -90,6 +90,18 @@ def _resources(value: object, field: str) -> tuple[Resource, ...]:
     return ordered
 
 
+def _require_one_reference_per_invariant(invariant_ids: list[str]) -> None:
+    """A trusted state holds at most one reference per invariant_id, at any version (C-40)."""
+    seen: set[str] = set()
+    for invariant_id in invariant_ids:
+        if invariant_id in seen:
+            raise DomainValidationError(
+                f"C-40: duplicate reference for {invariant_id}; a trusted state holds at most one "
+                "reference per invariant_id"
+            )
+        seen.add(invariant_id)
+
+
 def _check_baseline_proofs(proofs: list[InvariantProof]) -> None:
     """``establish_baseline`` accepts only BASELINE proofs (C-40)."""
     for proof in proofs:
@@ -128,6 +140,7 @@ def _check_promotion_proofs(
                 f"C-40, SM-006: the proof for {proof.invariant_id} was carried forward from state "
                 f"{proof.source_state_id}, not from the current state {current.state_id}"
             )
+    _require_one_reference_per_invariant([proof.invariant_id for proof in proofs])
     # Coverage: no invariant on the current state may be dropped, and none may go back to an
     # older definition (C-40; retiring an invariant is the open C-41).
     proof_versions = {proof.invariant_id: proof.invariant_version for proof in proofs}
@@ -539,9 +552,7 @@ class TrustedState:
                     f"DATA-INT-009: reference to {ref.invariant_id} belongs to state "
                     f"{ref.state_id}, not {self.state_id}"
                 )
-        keys = [(r.invariant_id, r.invariant_version) for r in refs]
-        if len(set(keys)) != len(keys):
-            raise DomainValidationError("TrustedState.invariant_refs: duplicate invariant version")
+        _require_one_reference_per_invariant([r.invariant_id for r in refs])
         # origin is not part of state_hash (C-33), so a stored state is checked for it here:
         # a baseline holds BASELINE references only and every later state none (C-40).
         for ref in refs:
@@ -619,9 +630,7 @@ class TrustedState:
         require_text(normalization_version, "TrustedState.normalization_version")
         # Hash check happens in __post_init__; validate the inputs it needs first.
         require_uuid(lineage_id, "TrustedState.lineage_id")
-        keys = [(r.invariant_id, r.invariant_version) for r in refs]
-        if len(set(keys)) != len(keys):
-            raise DomainValidationError("TrustedState.invariant_refs: duplicate invariant version")
+        _require_one_reference_per_invariant([r.invariant_id for r in refs])
         state_hash = _trusted_state_hash(
             lineage_id, version, normalization_version, ordered_resources, refs
         )
