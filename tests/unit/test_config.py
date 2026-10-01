@@ -308,11 +308,11 @@ class TestSecrets(ConfigTestCase):
         self.assertNotIn(FAKE_SECRET, "\n".join(err.problems))
 
     def test_env_reference_is_stored_and_the_secret_is_never_read(self) -> None:
-        environ = TrackingEnviron({"CSX__LLM__API_KEY_REF": "env:CSX_LLM_API_KEY"})
+        environ = TrackingEnviron({"CSX__LLM__API_KEY_REF": "env:DAIL_LLM_API_KEY"})
         cfg = load_config(self.make_config(), environ=environ)
-        self.assertEqual(cfg.get("llm.api_key_ref"), "env:CSX_LLM_API_KEY")
+        self.assertEqual(cfg.get("llm.api_key_ref"), "env:DAIL_LLM_API_KEY")
         self.assertEqual(cfg.sources["llm.api_key_ref"], "ENVIRONMENT_VARIABLE")
-        self.assertNotIn("CSX_LLM_API_KEY", environ.accessed)
+        self.assertNotIn("DAIL_LLM_API_KEY", environ.accessed)
 
     def test_resolve_secret_returns_the_environment_value(self) -> None:
         value = resolve_secret("env:DAIL_TEST_KEY", environ={"DAIL_TEST_KEY": FAKE_SECRET})
@@ -326,6 +326,53 @@ class TestSecrets(ConfigTestCase):
     def test_resolve_secret_rejects_malformed_reference(self) -> None:
         with self.assertRaises(ConfigError):
             resolve_secret(FAKE_SECRET, environ={})
+
+    # C-25: names starting with CSX_ are reserved by the loader and never valid
+    # in a secret reference, in any configuration layer or in resolve_secret.
+    RESERVED_REF = "env:CSX_LLM_API_KEY"
+
+    def assert_reserved_rejection(self, err: ConfigError) -> None:
+        self.assert_problem(err, "llm.api_key_ref", "CSX_", "C-25")
+        self.assertNotIn(self.RESERVED_REF, str(err))
+        self.assertNotIn("CSX_LLM_API_KEY", "\n".join(err.problems))
+
+    def test_reserved_name_is_rejected_from_the_base_file(self) -> None:
+        llm_toml = (
+            'generation_enabled = false\nprovider = "fake"\n'
+            f'api_key_ref = "{self.RESERVED_REF}"\n'
+        )
+        base: dict[str, str | None] = {"llm": llm_toml}
+        err = self.load_error(self.make_config(base=base), environ={})
+        self.assert_problem(err, "base/llm.toml")
+        self.assert_reserved_rejection(err)
+
+    def test_reserved_name_is_rejected_from_the_environment_file(self) -> None:
+        envs: dict[str, str | None] = {"dev": f'[llm]\napi_key_ref = "{self.RESERVED_REF}"\n'}
+        err = self.load_error(self.make_config(envs=envs), environ={})
+        self.assert_problem(err, "environments/dev.toml")
+        self.assert_reserved_rejection(err)
+
+    def test_reserved_name_is_rejected_from_an_environment_variable(self) -> None:
+        err = self.load_error(
+            self.make_config(), environ={"CSX__LLM__API_KEY_REF": self.RESERVED_REF}
+        )
+        self.assert_problem(err, "environment variable CSX__LLM__API_KEY_REF")
+        self.assert_reserved_rejection(err)
+
+    def test_resolve_secret_rejects_a_reserved_name_without_reading_it(self) -> None:
+        environ = TrackingEnviron({"CSX_LLM_API_KEY": FAKE_SECRET})
+        with self.assertRaises(ConfigError) as ctx:
+            resolve_secret(self.RESERVED_REF, environ=environ)
+        self.assert_problem(ctx.exception, "CSX_", "C-25")
+        self.assertNotIn("CSX_LLM_API_KEY", environ.accessed)
+        self.assertNotIn(FAKE_SECRET, str(ctx.exception))
+
+    def test_a_name_that_only_contains_csx_is_accepted(self) -> None:
+        cfg = load_config(
+            self.make_config(), environ={"CSX__LLM__API_KEY_REF": "env:DAIL_CSX_LLM_KEY"}
+        )
+        self.assertEqual(cfg.get("llm.api_key_ref"), "env:DAIL_CSX_LLM_KEY")
+        self.assertEqual(resolve_secret("env:DAIL_CSX_KEY", environ={"DAIL_CSX_KEY": "v"}), "v")
 
 
 class TestSchemaVersion(ConfigTestCase):
@@ -359,6 +406,7 @@ class TestRuntimeOverrides(ConfigTestCase):
         self.assertEqual(cfg.get("observability.log_level"), "TRACE")
         self.assertEqual(cfg.overrides_applied, ("observability.log_level",))
 
+    # C-26: loader kept as is; a runtime override of a safety flag fails closed even to false.
     def test_override_of_any_other_key_is_rejected(self) -> None:
         valid_values: dict[str, object] = {
             "application.config_schema_version": 1,

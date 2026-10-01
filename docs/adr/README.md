@@ -20,3 +20,4 @@ project decisions (see `docs/DECISIONS_REGISTER.md`).
 | [011](ADR-011-relational-trusted-state-lineage.md) | Trusted-state lineage is relational (parent-linked rows), not Git | Accepted in build (C-11, 29 Sep 2026); paper wording change pending research review |
 | [012](ADR-012-state-indexed-verification.md) | Verification is state-indexed: `verify(trusted_state, candidate, work_item)` | Accepted (29 Sep 2026) |
 | [013](ADR-013-terrapreserve-separate-repository.md) | TerraPreserve benchmark lives in a separate repository | Accepted (N-01) |
+| [014](ADR-014-terraform-model-import-boundary.md) | `core.terraform_model` may import `core.domain` (rule R6 amended) | Accepted (C-27, 30 Sep 2026) |

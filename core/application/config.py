@@ -25,6 +25,9 @@ non-conservative value only in a reviewed configuration file.
 Secrets: a ``secret_ref`` value is a reference of the form ``env:NAME``. The
 loader validates and stores the reference string only; it never reads or
 stores the secret. ``resolve_secret`` reads the referenced variable at use time.
+Secret variable names must not start with ``CSX_``, a prefix the loader reserves
+for its own variables (C-25); such a reference is rejected in every layer and by
+``resolve_secret``, and the message names the key and the rule, never the reference.
 """
 
 from __future__ import annotations
@@ -65,6 +68,10 @@ ENVIRONMENTS_DIR_NAME = "environments"
 SCHEMA_VERSION_KEY = "application.config_schema_version"
 
 _SECRET_REF_PATTERN = re.compile(r"env:[A-Z][A-Z0-9_]*")
+_RESERVED_SECRET_RULE = (
+    f"secret variable names must not start with {ENV_VARIABLE_PREFIX}, a prefix reserved by "
+    "the loader (C-25)"
+)
 _ENV_SEGMENT_PATTERN = re.compile(r"[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*")
 _DIGITS_PATTERN = re.compile(r"[0-9]+")
 
@@ -250,6 +257,15 @@ class ResolvedConfig:
         }
 
 
+def _is_reserved_secret_ref(raw: object) -> bool:
+    """True for a well-formed ``env:NAME`` reference whose NAME starts with ``CSX_`` (C-25)."""
+    return (
+        isinstance(raw, str)
+        and _SECRET_REF_PATTERN.fullmatch(raw) is not None
+        and raw[len("env:") :].startswith(ENV_VARIABLE_PREFIX)
+    )
+
+
 def _expected(key: ConfigKey, from_environment_variable: bool) -> str:
     if key.type is ValueType.BOOL:
         return "exactly 'true' or 'false'" if from_environment_variable else "a boolean"
@@ -289,7 +305,11 @@ def _coerce(key: ConfigKey, raw: object, from_environment_variable: bool) -> tup
     if key.type is ValueType.ENUM:
         ok = isinstance(raw, str) and raw in (key.allowed or ())
         return (True, raw) if ok else (False, None)
-    ok = isinstance(raw, str) and _SECRET_REF_PATTERN.fullmatch(raw) is not None
+    ok = (
+        isinstance(raw, str)
+        and _SECRET_REF_PATTERN.fullmatch(raw) is not None
+        and not _is_reserved_secret_ref(raw)
+    )
     return (True, raw) if ok else (False, None)
 
 
@@ -314,6 +334,9 @@ class _Loader:
         if layer is ConfigLayer.RUNTIME_OVERRIDE and not key.runtime_overridable:
             self.problems.append(f"{where}: {key.dotted} is not runtime-overridable")
             ok = False
+        if key.type is ValueType.SECRET_REF and _is_reserved_secret_ref(raw):
+            self.problems.append(f"{where}: {key.dotted}: {_RESERVED_SECRET_RULE}")
+            return False
         valid, value = _coerce(key, raw, from_env)
         if not valid:
             self.problems.append(f"{where}: {key.dotted}: expected {_expected(key, from_env)}")
@@ -509,6 +532,8 @@ def resolve_secret(ref: str, environ: Mapping[str, str] | None = None) -> str:
     env_map: Mapping[str, str] = os.environ if environ is None else environ
     if not isinstance(ref, str) or _SECRET_REF_PATTERN.fullmatch(ref) is None:
         raise ConfigError(["secret reference must have the form env:NAME"])
+    if _is_reserved_secret_ref(ref):
+        raise ConfigError([f"secret reference: {_RESERVED_SECRET_RULE}"])
     name = ref[len("env:") :]
     value = env_map.get(name)
     if not value:

@@ -11,8 +11,8 @@ R3  nothing in core.* or evidence.* imports llm, experiments, scripts, apps,
 R4  evidence.* imports from core only core.domain.*.
 R5  core.identity, core.dependency, core.impact and core.verification do not
     import core.promotion (Doc 02 §15).
-R6  core.terraform_model imports no other core.* package, no evidence, and no
-    sqlite3.
+R6  core.terraform_model imports the standard library (except sqlite3) and
+    core.domain.*; no other core.* package and no evidence (C-27, ADR-014).
 R7  core.* and evidence.* import no third-party package (sys.stdlib_module_names).
     The per-package allowlist is empty; ADR-005 adds networkx for core.dependency
     in P3c.
@@ -124,7 +124,11 @@ def check_module(module: str, imports: set[str]) -> list[Violation]:
         if any(_within(module, e) for e in R5_ENGINES) and _within(name, "core.promotion"):
             violations.append(Violation("R5", module, name))
         if _within(module, "core.terraform_model") and (
-            (top == "core" and not _within(name, "core.terraform_model"))
+            (
+                top == "core"
+                and not _within(name, "core.terraform_model")
+                and not _within(name, "core.domain")
+            )
             or top in ("evidence", "sqlite3")
         ):
             violations.append(Violation("R6", module, name))
@@ -191,11 +195,28 @@ class TestCheckerSelfTest(unittest.TestCase):
             with self.subTest(rule=rule):
                 self.assertIn(rule, self.rules_for(module, source))
 
-    def test_r6_rejects_any_other_core_package_and_evidence(self) -> None:
-        self.assertIn(
-            "R6", self.rules_for("core.terraform_model.bad", "from core.domain import x\n")
-        )
-        self.assertIn("R6", self.rules_for("core.terraform_model.bad", "import evidence.store\n"))
+    def test_r6_rejects_any_other_core_package_evidence_and_sqlite3(self) -> None:
+        # C-27 / ADR-014: core.domain.* is allowed; every other core.* package,
+        # evidence and sqlite3 stay forbidden.
+        module = "core.terraform_model.bad"
+        for source in (
+            "from core.identity import x\n",
+            "from core.application import config\n",
+            "import evidence.store\n",
+            "import sqlite3\n",
+        ):
+            with self.subTest(source=source.strip()):
+                self.assertIn("R6", self.rules_for(module, source))
+
+    def test_r6_allows_core_domain_and_the_standard_library(self) -> None:
+        module = "core.terraform_model.ok"
+        for source in (
+            "from core.domain.enums import X\n",
+            "from core.domain import hashing\n",
+            "import json\nimport re\n",
+        ):
+            with self.subTest(source=source.strip().splitlines()[0]):
+                self.assertNotIn("R6", self.rules_for(module, source))
 
     def test_relative_imports_are_resolved(self) -> None:
         self.assertEqual(
