@@ -50,12 +50,14 @@ class TestBaselineAcceptsOnlyBaselineProofs(unittest.TestCase):
         with self.assertRaises(DomainValidationError) as ctx:
             baseline(proofs=[verified, proof(FUNC, evidence=2)])
         self.assertIn("C-40", str(ctx.exception))
+        self.assertIn("only a BASELINE proof can found a baseline", str(ctx.exception))
 
     def test_a_carried_forward_proof_cannot_found_a_baseline(self) -> None:
         carried = carried_proof(self.donor, self.donor_candidate, SEC)
         with self.assertRaises(DomainValidationError) as ctx:
             baseline(proofs=[carried, proof(FUNC, evidence=2)])
         self.assertIn("C-40", str(ctx.exception))
+        self.assertIn("only a BASELINE proof can found a baseline", str(ctx.exception))
 
 
 class TestPromoteChecksProofOrigin(unittest.TestCase):
