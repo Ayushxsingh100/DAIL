@@ -29,6 +29,8 @@ R11 ``sqlite3`` is imported only in core.persistence.*, evidence.* and core.appl
     (C-43, P1b).
 R12 core.persistence.* imports only the standard library, core.domain.* and itself (P1b). R1
     already keeps core.domain from importing core.persistence.
+R13 ``core.domain.codec`` (the route back from stored data into lifecycle objects, C-48) is
+    imported only by core.persistence.*; tests are exempt (they are not checked roots).
 ORACLE  nothing in this repository imports the TerraPreserve oracle (ADR-010).
 
 A self-test feeds in-memory sources that break each rule, so a checker that
@@ -52,6 +54,9 @@ R5_ENGINES = ("core.identity", "core.dependency", "core.impact", "core.verificat
 ORACLE_TOP_LEVEL_PREFIXES = ("oracle", "terrapreserve")
 # R11: the only places that may import sqlite3 (C-43).
 R11_ALLOWED_MODULES = ("core.persistence", "evidence", "core.application.health")
+# R13: the only importers of core.domain.codec (C-48).
+R13_CODEC = "core.domain.codec"
+R13_ALLOWED_MODULES = ("core.persistence",)
 # R7 per-package third-party allowlist. Empty until P3c (ADR-005: networkx in core.dependency).
 THIRD_PARTY_ALLOWLIST: dict[str, frozenset[str]] = {}
 SKIP_DIRS = frozenset(
@@ -136,6 +141,8 @@ def check_module(module: str, imports: set[str]) -> list[Violation]:
             violations.append(Violation("R2", module, name))
         if (in_core or in_evidence) and top in R3_FORBIDDEN_TOP_LEVEL:
             violations.append(Violation("R3", module, name))
+        if _within(name, R13_CODEC) and not any(_within(module, a) for a in R13_ALLOWED_MODULES):
+            violations.append(Violation("R13", module, name))
         if top == "sqlite3" and not any(_within(module, a) for a in R11_ALLOWED_MODULES):
             violations.append(Violation("R11", module, name))
         if (
@@ -399,6 +406,50 @@ class TestCheckerSelfTest(unittest.TestCase):
             with self.subTest(module=module):
                 self.assertIn("R11", self.rules_for(module, "import sqlite3\n"))
 
+    def test_r13_reports_the_codec_imported_outside_the_persistence_package(self) -> None:
+        sources = (
+            "from core.domain import codec\n",
+            "import core.domain.codec\n",
+            "from core.domain.codec import rebuild_trusted_state\n",
+            "from core.domain.codec import rebuild_candidate as rc\n",
+        )
+        for module in (
+            "core.application.bad",
+            "core.promotion.bad",
+            "llm.bad",
+            "experiments.bad",
+            "core.identity.bad",
+            "evidence.bad",
+            "scripts.bad",
+            "core.domain.bad",
+            "core.persistence_extra",
+        ):
+            for source in sources:
+                with self.subTest(module=module, source=source.strip()):
+                    self.assertIn("R13", self.rules_for(module, source))
+
+    def test_r13_reports_a_relative_import_of_the_codec(self) -> None:
+        self.assertIn("R13", self.rules_for("core.domain.bad", "from . import codec\n"))
+        self.assertIn("R13", self.rules_for("core.domain.bad", "from .codec import x\n"))
+
+    def test_r13_allows_the_persistence_package(self) -> None:
+        sources = (
+            "from core.domain import codec\n",
+            "from core.domain.codec import rebuild_trusted_state, rebuild_candidate\n",
+            "from ..domain import codec\n",
+        )
+        for module in ("core.persistence.sqlite", "core.persistence.schema"):
+            for source in sources:
+                with self.subTest(module=module, source=source.strip()):
+                    self.assertNotIn("R13", self.rules_for(module, source))
+        self.assertNotIn(
+            "R13", self.rules_for("core.persistence", "from core.domain import codec\n", True)
+        )
+
+    def test_r13_does_not_report_other_domain_modules(self) -> None:
+        for source in ("from core.domain import state\n", "from core.domain.hashing import h\n"):
+            self.assertNotIn("R13", self.rules_for("core.application.ok", source))
+
     def test_r12_reports_anything_but_the_standard_library_and_core_domain(self) -> None:
         module = "core.persistence.bad"
         for source in (
@@ -647,6 +698,17 @@ class TestArchitectureBoundaries(unittest.TestCase):
                 "evidence.store",
             },
         )
+
+    def test_the_only_codec_importer_is_the_sqlite_adapter(self) -> None:
+        importers = set()
+        for path in iter_python_files(CHECKED_ROOTS):
+            module, is_package = module_name(path)
+            if any(
+                _within(name, R13_CODEC)
+                for name in collect_imports(path.read_text(encoding="utf-8"), module, is_package)
+            ):
+                importers.add(module)
+        self.assertEqual(importers, {"core.persistence.sqlite"})
 
     def test_the_persistence_package_exists_and_is_checked(self) -> None:
         checked = {module_name(p)[0] for p in iter_python_files(CHECKED_ROOTS)}

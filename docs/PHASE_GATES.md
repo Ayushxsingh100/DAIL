@@ -18,11 +18,11 @@ An earlier version of this file marked P1 and P2 as PASSED. Those claims were wi
 
 Carried forward: required approvals = 0 (C-28, Accepted 30 Sep 2026: each PR description links its external review verdict as the approval record). Doc 14 §23's safety-regression and adversarial test gates are empty at P0; they must hold real tests from P3a onward and must not pass empty at later gates.
 
-## P1 — Domain Foundation — NOT PASSED
+## P1 — Domain Foundation — PASSED (external review, 2 Oct 2026, P1b merged at 549e48d; follow-up F1/F2 in this PR)
 
 P1a mini-gate: PASSED (external review, 1 Oct 2026, PR #3). Gaps 1–7 and 9 closed at domain level; gap 8 and database-level enforcement remain for P1b.
 
-Rewrite scheduled as P1a and P1b. Known gaps:
+Rewrite delivered as P1a and P1b. Gaps recorded before the rewrite:
 
 1. `InvariantStatus` must be exactly REGISTERED, VERIFYING, PROTECTED, AFFECTED, REVERIFYING, VIOLATED, UNCERTAIN (Doc 05 §4.1). The code mixes verification results into statuses.
 2. `VerificationResult` must be PASS, FAIL, UNKNOWN, UNSUPPORTED, VERIFIER_ERROR (Doc 05 §4.1). The code has ERROR and UNCERTAIN instead.
