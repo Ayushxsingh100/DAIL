@@ -14,11 +14,11 @@ mechanism, formal model, and evaluation methodology.
 | Phase | Status |
 |---|---|
 | P0 — Project Bootstrap | PASSED (30 Sep 2026) |
-| P1 — Domain Foundation | NOT PASSED; rewrite scheduled (P1a, P1b) |
+| P1 — Domain Foundation | PASSED (external review, 2 Oct 2026) |
 | P2 — Evidence Foundation | NOT PASSED; reconciliation scheduled (P2-fix) |
 | P3–P10 | NOT STARTED |
 
-Next package after P0-close: P1a.
+Next step: P2-fix.
 
 - Gate status and known gaps: [`docs/PHASE_GATES.md`](docs/PHASE_GATES.md)
 - Work packages and order: [`docs/BUILD_SEQUENCE.md`](docs/BUILD_SEQUENCE.md)
