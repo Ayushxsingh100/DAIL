@@ -423,7 +423,7 @@ class TestSM006(unittest.TestCase):
             self.assertEqual(ctx.exception.rule, "SM-006")
 
     def test_an_evaluation_that_was_never_verified_cannot_produce_a_proof(self) -> None:
-        registered = InvariantEvaluation.register(self.candidate, _extra_invariant())
+        registered = InvariantEvaluation.register(self.candidate, _extra_invariant(), self.v0)
         for ev in (registered, registered.start_verification()):
             with self.assertRaises(IllegalTransitionError):
                 ev.to_proof()

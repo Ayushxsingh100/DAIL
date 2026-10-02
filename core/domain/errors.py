@@ -52,3 +52,12 @@ class UnauthorizedConstructionError(DomainValidationError):
     ``dataclasses.replace`` and direct constructor calls cannot skip a transition
     (Doc 06 §30: "Represent transitions through domain functions").
     """
+
+
+class PersistenceError(DomainValidationError):
+    """A persistence adapter failure that is not a lifecycle violation (Doc 05 §22, §32).
+
+    Raised for an unusable database (wrong schema version, a stored row that fails validation, a
+    busy database, a failed write). A lifecycle violation keeps its own error: a stale parent is
+    ``StaleParentError`` and an illegal candidate change is ``IllegalTransitionError``.
+    """

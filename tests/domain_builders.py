@@ -180,7 +180,9 @@ def evaluation_for(
     lifecycle path the parent's reference allows (Doc 06 §8, §9, §12)."""
     ref = next((r for r in parent.invariant_refs if r.invariant_id == invariant_id), None)
     if ref is None:
-        return InvariantEvaluation.register(candidate, invariant(invariant_id)).start_verification()
+        return InvariantEvaluation.register(
+            candidate, invariant(invariant_id), parent
+        ).start_verification()
     if ref.status is InvariantStatus.PROTECTED:
         return InvariantEvaluation.affect(ref, candidate, "fixture").start_reverification()
     return InvariantEvaluation.reopen(ref, candidate, "fixture")

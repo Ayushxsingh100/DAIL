@@ -20,15 +20,21 @@ PASS = "PASS"
 FAIL = "FAIL"
 SKIPPED = "SKIPPED"
 
-# Every table created by LocalStorage.initialize_schema() (core/domain/storage.py)
+# Every table created by initialize_database() (core/persistence/schema.py, schema version 4)
 # and EvidenceStore.initialize_schema() (evidence/store.py). tests/unit/test_health.py
 # checks this constant against the real DDL.
 EXPECTED_TABLES: frozenset[str] = frozenset(
     {
-        # core/domain/storage.py
-        "trusted_state",
-        "candidate_state",
-        "invariant",
+        # core/persistence/schema.py
+        "patches",
+        "trusted_states",
+        "lineage_heads",
+        "candidates",
+        "resources",
+        "state_resources",
+        "candidate_resources",
+        "invariants",
+        "invariant_refs",
         "schema_meta",
         # evidence/store.py
         "evidence_payload",

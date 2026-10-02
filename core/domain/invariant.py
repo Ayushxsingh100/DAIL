@@ -675,14 +675,34 @@ class InvariantEvaluation:
         )
 
     @classmethod
-    def register(cls, candidate: object, invariant: Invariant) -> InvariantEvaluation:
-        """REGISTERED, for an invariant that has no reference on the parent state."""
-        from core.domain.state import CandidateState
+    def register(
+        cls, candidate: object, invariant: Invariant, parent: object
+    ) -> InvariantEvaluation:
+        """REGISTERED, for an invariant that has no reference on the parent state.
+
+        ``parent`` must be the candidate's own parent ``TrustedState`` and must hold no reference
+        with this ``invariant_id``; an invariant the parent already has goes through ``affect`` or
+        ``reopen`` (L1, C-31). Otherwise a protected invariant could re-enter as REGISTERED and be
+        verified as if new, shedding the parent's status.
+        """
+        from core.domain.state import CandidateState, TrustedState
 
         if not isinstance(candidate, CandidateState):
             raise DomainValidationError("InvariantEvaluation: candidate must be a CandidateState")
         if not isinstance(invariant, Invariant):
             raise DomainValidationError("InvariantEvaluation: invariant must be an Invariant")
+        if not isinstance(parent, TrustedState):
+            raise DomainValidationError("InvariantEvaluation: parent must be a TrustedState")
+        if parent.state_id != candidate.parent_state_id:
+            raise DomainValidationError(
+                f"L1, C-31: {parent.state_id} is not the candidate's parent "
+                f"{candidate.parent_state_id}"
+            )
+        if any(ref.invariant_id == invariant.invariant_id for ref in parent.invariant_refs):
+            raise DomainValidationError(
+                f"L1, C-31: the parent state already holds a reference for "
+                f"{invariant.invariant_id}; use affect or reopen, not register"
+            )
         return cls._create(
             candidate,
             invariant.invariant_id,

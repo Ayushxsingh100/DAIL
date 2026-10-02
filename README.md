@@ -49,9 +49,9 @@ python3.12 scripts/dev.py health      # one line per health check; exit 1 on any
 
 ## Development notes
 
-- From P1a the local development database (`.local/dail.db`) has schema version 3 (C-35). There
-  are no migrations before P1b: if bootstrap reports another schema version, delete
-  `.local/dail.db` and run bootstrap again.
+- From P1b the local development database (`.local/dail.db`) has schema version 4 (C-42, C-44).
+  There is no migration tooling before P8a: delete `.local/dail.db` once, then run bootstrap
+  again. Bootstrap refuses a database with any other schema version and says so.
 
 ## Windows notes
 
@@ -125,7 +125,8 @@ cloudspartanx/
 │   ├── base/                  # one versioned default file per area (Doc 14 §14)
 │   └── environments/          # dev, test, experiment, staging overrides (Doc 14 §17)
 ├── core/
-│   ├── domain/                # P1: domain objects, lifecycles, canonical hashing, local storage
+│   ├── domain/                # P1: domain objects, lifecycles, canonical hashing, repository ports
+│   ├── persistence/           # P1b: SQLite adapter behind the ports (schema version 4)
 │   ├── terraform_model/       # P3a: parser, normalizer, canonical security rule, fingerprints
 │   ├── identity/              # P3b: identity engine
 │   ├── dependency/            # P3c: dependency graph

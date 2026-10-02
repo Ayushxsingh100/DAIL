@@ -28,3 +28,7 @@ Doc 02 names "SQLAlchemy + SQLite" for the storage adapter. Doc 05 §26 makes do
 - Migrations become complex.
 - Multi-process access is needed.
 - A reviewer requires an ORM mapping.
+
+## Implemented in P1b
+
+The decision above is unchanged. P1b built it: the Doc 05 §26 ports are `typing.Protocol` classes in `core/domain/repositories.py`, and the stdlib `sqlite3` adapter is `core/persistence/` (schema version 4, C-42 to C-44). `sqlite3` may be imported only in `core/persistence/`, `evidence/` and `core/application/health.py` (contract rule R11, C-43). The interim `core/domain/storage.py` of P1a (C-35) is deleted.

@@ -112,7 +112,8 @@ def cmd_bootstrap(_args: argparse.Namespace) -> int:
     _ensure_repo_on_path()
     from core.application.config import ConfigError, load_config
     from core.application.health import run_health_checks
-    from core.domain.storage import LocalStorage
+    from core.domain.errors import PersistenceError
+    from core.persistence.schema import initialize_database
     from evidence.store import EvidenceStore
 
     print("== Loading configuration (environment: dev)")
@@ -131,7 +132,11 @@ def cmd_bootstrap(_args: argparse.Namespace) -> int:
 
     print("== Initializing local storage and evidence schemas")
     db_path = REPO_ROOT / str(config.get("database.path"))
-    LocalStorage(db_path).initialize_schema()
+    try:
+        initialize_database(db_path)
+    except PersistenceError as exc:
+        print(f"database not usable: {exc}", file=sys.stderr)
+        return EXIT_FAILURE
     EvidenceStore(db_path).initialize_schema()
 
     print("== Running tests (standard library unittest, no secrets, no network)")
