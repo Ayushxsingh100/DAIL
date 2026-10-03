@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any
 
 from core.domain.hashing import canonical_json, content_hash
+from core.domain.redaction import Redactor
 from evidence.ids import CorrelationContext, new_id
 from evidence.models import (
     ALLOWED_VALIDITY_TRANSITIONS,
@@ -42,7 +43,6 @@ from evidence.models import (
     EvidenceValidity,
     ValidityTransition,
 )
-from evidence.redaction import Redactor
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS evidence_payload (

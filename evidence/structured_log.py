@@ -13,9 +13,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from core.domain.redaction import Redactor
 from evidence.ids import CorrelationContext
 from evidence.models import LogEvent, LogLevel
-from evidence.redaction import Redactor
 
 
 class StructuredLogger:

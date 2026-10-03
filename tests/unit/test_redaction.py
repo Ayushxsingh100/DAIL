@@ -1,6 +1,6 @@
 import unittest
 
-from evidence.redaction import REDACTED, REDACTION_POLICY_VERSION, Redactor
+from core.domain.redaction import REDACTED, REDACTION_POLICY_VERSION, Redactor
 
 
 class TestRedaction(unittest.TestCase):

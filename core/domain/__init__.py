@@ -15,6 +15,11 @@ and record ids (C-33). Persistence: the repository ports (``repositories``, Doc 
 adapter's way back into the domain (``codec``, C-48); the SQLite adapter itself is
 ``core.persistence``, which this package never imports.
 
+Evidence (P2-fix; Doc 11, C-50 to C-57): ``evidence`` holds the single evidence record, its
+per-context validity rules and the proof checks; ``audit`` the append-only audit events;
+``redaction`` the deterministic secret redaction that lets the domain refuse an unredacted
+payload.
+
 Standard library only (ADR-004); contract rules R1 and R8-R10 are checked by
 ``tests/contract/test_architecture_boundaries.py``. See docs/SPEC_INDEX.md, docs/PHASE_GATES.md
 and docs/DECISIONS_REGISTER.md (C-29 to C-48).
