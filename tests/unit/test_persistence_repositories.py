@@ -152,7 +152,7 @@ class TestUnitOfWork(RepoCase):
             )
         with self.assertRaises(PersistenceError) as ctx, SqliteUnitOfWork(other):
             pass
-        self.assertIn("schema version 4", str(ctx.exception))
+        self.assertIn("schema version 5", str(ctx.exception))
 
     def test_constructing_a_unit_of_work_does_not_create_the_file(self) -> None:
         missing = Path(self._tmp.name) / "later.db"

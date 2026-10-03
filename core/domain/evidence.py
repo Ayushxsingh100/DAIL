@@ -29,7 +29,12 @@ from enum import StrEnum
 from typing import Any
 
 from core.domain import hashing
-from core.domain.errors import DomainValidationError, HashMismatchError, IllegalTransitionError
+from core.domain.errors import (
+    DomainValidationError,
+    HashMismatchError,
+    IllegalTransitionError,
+    PersistenceError,
+)
 from core.domain.ids import require_uuid
 from core.domain.jsonvalue import (
     iso_utc,
@@ -150,6 +155,10 @@ class EvidenceNotFoundError(DomainValidationError):
     """An operation named an evidence record that does not exist."""
 
 
+class BrokenReferenceError(PersistenceError):
+    """An ``evidence://`` reference names no stored artifact (Doc 11 §44: references resolve)."""
+
+
 class EvidenceConflictError(DomainValidationError):
     """An id that is already stored was submitted again with different content (Doc 11 §38)."""
 
@@ -170,6 +179,17 @@ def optional_uuid(value: object, field: str) -> str | None:
 
 def optional_sha256(value: object, field: str) -> str | None:
     return None if value is None else require_sha256(value, field)
+
+
+def require_reason(value: object, field: str) -> str:
+    """A reason is free text that is stored in a column and in an audit payload, so it is held to
+    the same rule as a payload: no secret-like value (Doc 11 §28). The service redacts it first."""
+    text = require_text(value, field)
+    if Redactor().contains_secret({"reason": text}):
+        raise DomainValidationError(
+            f"{field}: contains a secret-like value; redact it first (Doc 11 §28)"
+        )
+    return text
 
 
 # --- Contexts and artifact references (Doc 11 §8, §17; C-52, C-56) ---------------------------
@@ -576,7 +596,7 @@ class TransitionRequest:
             require_uuid(getattr(self, name), f"TransitionRequest.{name}")
         _check_scope_and_context("TransitionRequest", self.scope, self.context)
         require_enum(self.to_validity, EvidenceValidity, "TransitionRequest.to_validity")
-        require_text(self.reason, "TransitionRequest.reason")
+        require_reason(self.reason, "TransitionRequest.reason")
         optional_uuid(self.impact_ref, "TransitionRequest.impact_ref")
         object.__setattr__(self, "created_at", utc(self.created_at, "TransitionRequest.created_at"))
 
@@ -602,7 +622,7 @@ class SupersessionRequest:
             "operation_id",
         ):
             require_uuid(getattr(self, name), f"SupersessionRequest.{name}")
-        require_text(self.reason, "SupersessionRequest.reason")
+        require_reason(self.reason, "SupersessionRequest.reason")
         object.__setattr__(
             self, "created_at", utc(self.created_at, "SupersessionRequest.created_at")
         )
@@ -638,7 +658,7 @@ class ValidityTransition:
                 f"ValidityTransition.to_validity: {self.to_validity.value} is not a transition "
                 "target (C-52: no transition into REDACTED in P2)"
             )
-        require_text(self.reason, "ValidityTransition.reason")
+        require_reason(self.reason, "ValidityTransition.reason")
         optional_uuid(self.impact_ref, "ValidityTransition.impact_ref")
         optional_uuid(self.superseded_by, "ValidityTransition.superseded_by")
         if (self.to_validity is V.SUPERSEDED) != (self.superseded_by is not None):

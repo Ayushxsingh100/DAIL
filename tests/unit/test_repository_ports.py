@@ -32,7 +32,31 @@ EXPECTED: dict[str, set[str]] = {
     "CandidateRepository": {"create", "get", "save_transition"},
     "PatchRepository": {"save", "get"},
     "InvariantRepository": {"register_definition", "get_definition", "get_state_refs"},
-    "UnitOfWork": {"trusted_states", "candidates", "patches", "invariants"},
+    # P2-fix (C-50, Doc 05 §26, P2-fix prompt §4.3)
+    "EvidenceRepository": {
+        "append",
+        "get",
+        "list_for_attempt",
+        "list_for_run",
+        "list_for_state",
+        "list_for_candidate",
+        "list_for_correlation",
+        "resolve",
+        "append_transition",
+        "transitions",
+        "supersede",
+        "superseded_by",
+        "supersedes",
+    },
+    "AuditRepository": {"append", "get", "list_for_correlation", "list_for_candidate"},
+    "UnitOfWork": {
+        "trusted_states",
+        "candidates",
+        "patches",
+        "invariants",
+        "evidence",
+        "audit",
+    },
 }
 
 # Doc 06 §30: "Do not permit persistence-layer convenience methods to bypass lifecycle validation."

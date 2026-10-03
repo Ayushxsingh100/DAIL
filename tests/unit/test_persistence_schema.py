@@ -128,6 +128,39 @@ EXPECTED_TRIGGERS = {
 }
 
 
+# Schema 5 (P2-fix, C-59) appends these after the 50 schema-4 statements, which stay byte-identical.
+# Written out by hand from the prompt's section 4.4, not read from the schema module.
+SCHEMA_4_DDL_SHA256 = "3614feb7c9a7f669b9b4319d9bd4829cc206761fc23d0cac9ecfbd242610a960"
+SCHEMA_4_STATEMENTS = 50
+SCHEMA_5_TABLES = {
+    "evidence_artifacts",
+    "evidence_events",
+    "evidence_validity_transitions",
+    "evidence_supersessions",
+    "audit_events",
+}
+SCHEMA_5_TRIGGERS = {
+    # T1: append-only, including INSERT OR REPLACE from a plain connection
+    *(f"{t}_{kind}" for t in SCHEMA_5_TABLES for kind in ("no_update", "no_delete", "no_replace")),
+    # T2
+    "evidence_events_insert_candidate_parent",
+    "evidence_events_insert_candidate_hash",
+    # T3
+    "evidence_validity_transitions_insert_terminal",
+    "evidence_validity_transitions_insert_from",
+    "evidence_validity_transitions_insert_pair",
+    "evidence_validity_transitions_insert_own_context",
+    "evidence_validity_transitions_insert_superseded",
+    "evidence_validity_transitions_insert_integrity",
+    "evidence_validity_transitions_insert_impact",
+    # T4
+    "evidence_supersessions_insert_same_binding",
+    "evidence_supersessions_insert_open",
+    "evidence_supersessions_insert_new_valid",
+}
+SCHEMA_5_INDEXES = 8
+
+
 class DbCase(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
@@ -311,8 +344,8 @@ class TestInitialization(unittest.TestCase):
         self.assertFalse(self.path.exists())
         initialize_database(self.path)
         self.assertTrue(self.path.exists())
-        self.assertEqual(schema_version(self.path), "4")
-        self.assertEqual(SCHEMA_VERSION, "4")
+        self.assertEqual(schema_version(self.path), "5")
+        self.assertEqual(SCHEMA_VERSION, "5")
 
     def test_initialization_is_idempotent(self) -> None:
         initialize_database(self.path)
@@ -323,7 +356,7 @@ class TestInitialization(unittest.TestCase):
             after = conn.execute("SELECT type, name, sql FROM sqlite_master ORDER BY 2").fetchall()
             versions = conn.execute("SELECT * FROM schema_meta").fetchall()
         self.assertEqual(before, after)
-        self.assertEqual(versions, [("schema_version", "4")])
+        self.assertEqual(versions, [("schema_version", "5")])
 
     def test_the_parent_directory_is_created(self) -> None:
         nested = Path(self._tmp.name) / "nested" / "dirs" / "t.db"
@@ -331,9 +364,13 @@ class TestInitialization(unittest.TestCase):
         self.assertTrue(nested.exists())
 
     def test_exactly_the_step_4_tables_are_created(self) -> None:
+        # Schema 5 keeps every schema-4 table (a subset assertion) and adds the five
+        # evidence and audit tables; AUTOINCREMENT adds sqlite_sequence.
         initialize_database(self.path)
-        self.assertEqual(self.tables(), EXPECTED_TABLES)
-        self.assertEqual(set(TABLE_NAMES), EXPECTED_TABLES)
+        self.assertLessEqual(EXPECTED_TABLES, self.tables())
+        self.assertEqual(self.tables(), EXPECTED_TABLES | SCHEMA_5_TABLES | {"sqlite_sequence"})
+        self.assertLessEqual(EXPECTED_TABLES, set(TABLE_NAMES))
+        self.assertEqual(set(TABLE_NAMES), EXPECTED_TABLES | SCHEMA_5_TABLES)
 
     def test_exactly_the_expected_triggers_are_created(self) -> None:
         initialize_database(self.path)
@@ -342,8 +379,15 @@ class TestInitialization(unittest.TestCase):
                 row[0]
                 for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'trigger'")
             }
-        self.assertEqual(names, EXPECTED_TRIGGERS)
-        self.assertEqual(len(DDL), len(EXPECTED_TABLES) + len(EXPECTED_TRIGGERS))
+        self.assertLessEqual(EXPECTED_TRIGGERS, names)  # every schema-4 trigger is kept
+        self.assertEqual(names, EXPECTED_TRIGGERS | SCHEMA_5_TRIGGERS)
+        self.assertEqual(
+            len(DDL[:SCHEMA_4_STATEMENTS]), len(EXPECTED_TABLES) + len(EXPECTED_TRIGGERS)
+        )
+        self.assertEqual(
+            len(DDL),
+            SCHEMA_4_STATEMENTS + len(SCHEMA_5_TABLES) + SCHEMA_5_INDEXES + len(SCHEMA_5_TRIGGERS),
+        )
 
     def test_connections_have_foreign_keys_on(self) -> None:
         initialize_database(self.path)
@@ -361,14 +405,14 @@ class TestInitialization(unittest.TestCase):
             initialize_database(self.path)
         message = str(ctx.exception)
         self.assertIn("schema version 3", message)
-        self.assertIn("needs 4", message)
+        self.assertIn("needs 5", message)
         self.assertIn("C-44", message)
         self.assertIn("delete", message)
         self.assertEqual(self.tables(), {"schema_meta", "trusted_state"})
         self.assertEqual(schema_version(self.path), "3")
 
     def test_any_other_schema_version_is_refused(self) -> None:
-        for version in ("1", "2", "5", "unknown"):
+        for version in ("1", "2", "4", "6", "unknown"):
             with self.subTest(version=version):
                 path = Path(self._tmp.name) / f"v{version}.db"
                 with closing(sqlite3.connect(path)) as conn:
@@ -397,12 +441,24 @@ class TestInitialization(unittest.TestCase):
                 with self.assertRaises(PersistenceError):
                     initialize_database(path)
 
-    def test_a_database_that_only_holds_evidence_tables_is_accepted(self) -> None:
-        with closing(sqlite3.connect(self.path)) as conn:
-            conn.execute("CREATE TABLE evidence_record (x TEXT)")
-        initialize_database(self.path)
-        self.assertIn("evidence_record", self.tables())
-        self.assertIn("trusted_states", self.tables())
+    def test_a_database_that_only_holds_the_retired_evidence_tables_is_refused(
+        self,
+    ) -> None:
+        # C-44, C-50: the five tables of the interim evidence store are legacy names now,
+        # so a database that holds only those has no schema version and is refused.
+        for table in (
+            "evidence_payload",
+            "evidence_record",
+            "validity_transition",
+            "evidence_supersession",
+            "audit_event",
+        ):
+            with self.subTest(table=table):
+                path = Path(self._tmp.name) / f"{table}.db"
+                with closing(sqlite3.connect(path)) as conn:
+                    conn.execute(f"CREATE TABLE {table} (x TEXT)")
+                with self.assertRaises(PersistenceError):
+                    initialize_database(path)
 
     def test_a_dropped_trigger_is_restored_by_initialization(self) -> None:
         initialize_database(self.path)
