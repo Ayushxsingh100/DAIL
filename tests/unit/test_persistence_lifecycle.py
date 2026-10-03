@@ -45,7 +45,7 @@ from tests.domain_builders import (
     uid,
     verified_proof,
 )
-from tests.persistence_builders import SAFE, SAFE_OTHER, Boom, RepoCase, definitions
+from tests.persistence_builders import SAFE, SAFE_OTHER, Boom, RepoCase, definitions, seed_evidence
 
 CS = CandidateStatus
 S = InvariantStatus
@@ -83,6 +83,7 @@ class LifecycleCase(RepoCase):
     ) -> TrustedState:
         new_state = promote(promotable, parent, **kwargs)
         with self.uow() as u:
+            seed_evidence(u, new_state)
             u.trusted_states.save_promoted(new_state)
             u.candidates.save_transition(mark_promoted(promotable, new_state))
         return new_state
@@ -215,6 +216,7 @@ class TestMatrixCandidateRows(LifecycleCase):
         stale_state = promote(second, self.v0, decision=2)
         before = self.snapshot_counts()
         with self.uow() as u, self.assertRaises(StaleParentError) as ctx2:
+            seed_evidence(u, stale_state)
             u.trusted_states.save_promoted(stale_state)
         self.assertEqual(ctx2.exception.rule, "SM-010")
         self.assertEqual(self.snapshot_counts(), before)
@@ -410,6 +412,7 @@ class TestScenarioDoc06Section26(LifecycleCase):
             state_id=uid(11),
         )
         with self.uow() as u:
+            seed_evidence(u, v1)
             u.trusted_states.save_promoted(v1)
             u.candidates.save_transition(mark_promoted(s1, v1))
         current = self.current()
@@ -497,6 +500,7 @@ class TestMatrixPromotionDatabaseFailure(LifecycleCase):
                         raise Boom(point)
 
                 with self.assertRaises(Boom), self.uow(checkpoint=checkpoint) as u:
+                    seed_evidence(u, new_state)
                     u.trusted_states.save_promoted(new_state)
                     u.candidates.save_transition(mark_promoted(s1, new_state))
                 self.assertEqual(self.snapshot_counts(), before)
@@ -518,9 +522,11 @@ class TestMatrixPromotionDatabaseFailure(LifecycleCase):
                 raise Boom(point)
 
         with self.assertRaises(Boom), self.uow(checkpoint=fail_once) as u:
+            seed_evidence(u, new_state)
             u.trusted_states.save_promoted(new_state)
             u.candidates.save_transition(mark_promoted(s1, new_state))
         with self.uow() as u:  # the same promotion, no fault
+            seed_evidence(u, new_state)
             u.trusted_states.save_promoted(new_state)
             u.candidates.save_transition(mark_promoted(s1, new_state))
         current = self.current()

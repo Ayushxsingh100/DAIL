@@ -55,7 +55,15 @@ from tests.domain_builders import (
     resource,
     uid,
 )
-from tests.persistence_builders import SAFE, SAFE_OTHER, Boom, RepoCase, definitions, stages
+from tests.persistence_builders import (
+    SAFE,
+    SAFE_OTHER,
+    Boom,
+    RepoCase,
+    definitions,
+    seed_evidence,
+    stages,
+)
 
 CS = CandidateStatus
 
@@ -113,6 +121,7 @@ class TestUnitOfWork(RepoCase):
         with self.assertRaises(Boom) as ctx, self.uow() as u:
             for definition in definitions():
                 u.invariants.register_definition(definition)
+            seed_evidence(u, baseline())
             u.trusted_states.save_baseline(baseline())
             raise failure
         self.assertIs(ctx.exception, failure)
@@ -152,7 +161,7 @@ class TestUnitOfWork(RepoCase):
             )
         with self.assertRaises(PersistenceError) as ctx, SqliteUnitOfWork(other):
             pass
-        self.assertIn("schema version 4", str(ctx.exception))
+        self.assertIn("schema version 5", str(ctx.exception))
 
     def test_constructing_a_unit_of_work_does_not_create_the_file(self) -> None:
         missing = Path(self._tmp.name) / "later.db"
@@ -181,6 +190,7 @@ class TestUnitOfWork(RepoCase):
         seen: list[str] = []
         new_state = promote(promotable, v0)
         with self.uow(checkpoint=seen.append) as u:
+            seed_evidence(u, new_state)
             u.trusted_states.save_promoted(new_state)
             u.candidates.save_transition(mark_promoted(promotable, new_state))
         self.assertEqual(seen, list(CHECKPOINTS))
@@ -362,6 +372,7 @@ class TestLineage(RepoCase):
         other_lineage = uid(0xEE)
         other = baseline(lineage_id=other_lineage, state_id=uid(2))
         with self.uow() as u:
+            seed_evidence(u, other)
             u.trusted_states.save_baseline(other)
         with self.uow() as u:
             self.assertEqual(u.trusted_states.get_current(other_lineage), other)
@@ -401,6 +412,7 @@ class TestSaveBaseline(RepoCase):
         promotable = self.store_stages(v0, SAFE)[-1]
         v1 = promote(promotable, v0)
         with self.uow() as u, self.assertRaises(DomainValidationError) as ctx:
+            seed_evidence(u, v1, bound=False)
             u.trusted_states.save_baseline(v1)
         self.assertIn("version 0", str(ctx.exception))
 
@@ -409,6 +421,7 @@ class TestSaveBaseline(RepoCase):
         twin = baseline(state_id=uid(2))  # same lineage, version 0, another state id
         before = self.snapshot_counts()
         with self.uow() as u, self.assertRaises(DomainValidationError) as ctx:
+            seed_evidence(u, twin)
             u.trusted_states.save_baseline(twin)
         self.assertIn("already has a baseline", str(ctx.exception))
         self.assertEqual(self.snapshot_counts(), before)
@@ -416,11 +429,13 @@ class TestSaveBaseline(RepoCase):
     def test_the_same_baseline_cannot_be_saved_twice(self) -> None:
         v0 = self.seed()
         with self.uow() as u, self.assertRaises(DomainValidationError):
+            seed_evidence(u, v0)
             u.trusted_states.save_baseline(v0)
 
     def test_the_same_version_in_another_lineage_is_fine(self) -> None:
         self.seed()
         with self.uow() as u:
+            seed_evidence(u, baseline(lineage_id=uid(0xEE), state_id=uid(2)))
             u.trusted_states.save_baseline(baseline(lineage_id=uid(0xEE), state_id=uid(2)))
         self.assertEqual(self.count("trusted_states"), 2)
         self.assertEqual(self.count("lineage_heads"), 2)
@@ -433,6 +448,7 @@ class TestSaveBaseline(RepoCase):
 
     def test_a_reference_needs_its_definition_to_be_registered_first(self) -> None:
         with self.uow() as u, self.assertRaises(PersistenceError) as ctx:
+            seed_evidence(u, baseline(), bound=False)
             u.trusted_states.save_baseline(baseline())
         self.assertIn("FOREIGN KEY", str(ctx.exception))
         self.assertEqual(sum(self.snapshot_counts().values()), 0)
@@ -441,10 +457,13 @@ class TestSaveBaseline(RepoCase):
         v0 = self.seed()
         with self.uow() as u:
             with self.assertRaises(DomainValidationError):
+                seed_evidence(u, v0.to_dict())
                 u.trusted_states.save_baseline(v0.to_dict())  # type: ignore[arg-type]
             with self.assertRaises(DomainValidationError):
+                seed_evidence(u, new_candidate(v0))
                 u.trusted_states.save_baseline(new_candidate(v0))  # type: ignore[arg-type]
             with self.assertRaises(DomainValidationError):
+                seed_evidence(u, v0.to_dict())
                 u.trusted_states.save_promoted(v0.to_dict())  # type: ignore[arg-type]
 
 
@@ -483,6 +502,7 @@ class TestSavePromoted(RepoCase):
         stale_state = promote(second, v0, decision=2)
         before = self.snapshot_counts()
         with self.uow() as u, self.assertRaises(StaleParentError) as ctx:
+            seed_evidence(u, stale_state)
             u.trusted_states.save_promoted(stale_state)
         self.assertEqual(ctx.exception.rule, "SM-010")
         self.assertEqual(self.snapshot_counts(), before)
@@ -523,6 +543,7 @@ class TestSavePromoted(RepoCase):
             self.assertRaises(StaleParentError) as ctx,
             self.uow() as u,
         ):
+            seed_evidence(u, new_state)
             u.trusted_states.save_promoted(new_state)
         self.assertEqual(ctx.exception.rule, "SM-010")
         self.assertEqual(self.snapshot_counts(), before)
@@ -532,12 +553,14 @@ class TestSavePromoted(RepoCase):
     def test_the_baseline_cannot_be_saved_as_a_promotion(self) -> None:
         v0 = self.seed()
         with self.uow() as u, self.assertRaises(DomainValidationError):
+            seed_evidence(u, v0)
             u.trusted_states.save_promoted(v0)
 
     def test_a_lineage_without_a_baseline_cannot_be_promoted(self) -> None:
         v0 = baseline()
         promotable = promote(stages(v0, SAFE)[-1], v0)  # built entirely in memory, never stored
         with self.uow() as u, self.assertRaises(PersistenceError) as ctx:
+            seed_evidence(u, promotable, bound=False)
             u.trusted_states.save_promoted(promotable)
         self.assertIn("no baseline", str(ctx.exception))
 
@@ -573,9 +596,11 @@ class TestPromotionDatabaseFailure(RepoCase):
 
         if catch_inside:
             with self.uow(checkpoint=checkpoint) as u, suppress(Boom):  # swallowed by the caller
+                seed_evidence(u, self.new_state, bound=False)
                 u.trusted_states.save_promoted(self.new_state)
             return
         with self.assertRaises(Boom), self.uow(checkpoint=checkpoint) as u:
+            seed_evidence(u, self.new_state)
             u.trusted_states.save_promoted(self.new_state)
             u.candidates.save_transition(mark_promoted(self.promotable, self.new_state))
 
@@ -605,6 +630,7 @@ class TestPromotionDatabaseFailure(RepoCase):
     def test_the_control_without_a_fault_does_advance(self) -> None:
         """So that the failure tests above are not vacuous."""
         with self.uow() as u:
+            seed_evidence(u, self.new_state)
             u.trusted_states.save_promoted(self.new_state)
             u.candidates.save_transition(mark_promoted(self.promotable, self.new_state))
         after = self.snapshot_counts()
@@ -626,6 +652,7 @@ class TestPromotionDatabaseFailure(RepoCase):
                 raise Boom(point)
 
         with self.assertRaises(Boom), self.uow(checkpoint=checkpoint) as u:
+            seed_evidence(u, self.new_state)
             u.trusted_states.save_promoted(self.new_state)
         self.assert_nothing_advanced()
 
@@ -641,6 +668,7 @@ class TestPromotionDatabaseFailure(RepoCase):
             self.assertRaises(PersistenceError) as ctx,
             self.uow() as u,
         ):
+            seed_evidence(u, self.new_state)
             u.trusted_states.save_promoted(self.new_state)
             u.candidates.save_transition(mark_promoted(self.promotable, self.new_state))
         self.assertIn("commit failed", str(ctx.exception))
@@ -669,6 +697,7 @@ class TestConcurrentPromotion(RepoCase):
             try:
                 barrier.wait(timeout=10)
                 with SqliteUnitOfWork(self.path, timeout=20.0) as u:
+                    seed_evidence(u, new_state)
                     u.trusted_states.save_promoted(new_state)
                     u.candidates.save_transition(mark_promoted(candidate, new_state))
             except BaseException as exc:  # reported below, in the main thread
@@ -906,6 +935,7 @@ class TestSaveTransitionEnforcesTheLifecycle(RepoCase):
             u.candidates.save_transition(self.promotable)
         v1 = promote(self.promotable, self.v0, decision=1)
         with self.uow() as u:
+            seed_evidence(u, v1)
             u.trusted_states.save_promoted(v1)
             # ``other`` has the same parent but other resources: v1 is not its promotion.
             with self.assertRaises(IllegalTransitionError):
@@ -996,6 +1026,7 @@ class TestSharedResourceRecords(RepoCase):
         v1 = promote(promotable, v0, decision=8)
         before = self.snapshot_counts()
         with self.uow() as u, self.assertRaises(PersistenceError) as ctx:
+            seed_evidence(u, v1, bound=False)
             u.trusted_states.save_promoted(v1)
         self.assertIn("13.3", str(ctx.exception))
         self.assertEqual(self.snapshot_counts(), before)

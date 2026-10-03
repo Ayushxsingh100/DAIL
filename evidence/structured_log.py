@@ -1,9 +1,13 @@
-"""Structured, machine-readable logging (Doc 11 Sections 14-15).
+"""Structured, machine-readable logging (Doc 11 Sections 14-15; C-58).
 
 Logs are supplementary, never authoritative (Doc 11 Section 2/50): they can
 never serve as promotion proof. Metadata is redacted before it is written,
 and every entry must carry correlation/operation IDs so a workflow can be
 reconstructed across components.
+
+The logger has a severity threshold, INFO by default (Doc 11 §15: TRACE is "disabled by default in
+production"). An entry below the threshold is dropped before anything is built or written: it is
+not in ``entries`` and never reaches the sink.
 """
 
 from __future__ import annotations
@@ -13,9 +17,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from core.domain.redaction import Redactor
 from evidence.ids import CorrelationContext
 from evidence.models import LogEvent, LogLevel
-from evidence.redaction import Redactor
 
 
 class StructuredLogger:
@@ -24,10 +28,15 @@ class StructuredLogger:
         service: str,
         sink_path: str | Path | None = None,
         redactor: Redactor | None = None,
+        *,
+        threshold: LogLevel = LogLevel.INFO,
     ) -> None:
         if not service:
             raise ValueError("service must be non-empty")
+        if not isinstance(threshold, LogLevel):
+            raise ValueError("threshold must be a LogLevel")
         self.service = service
+        self.threshold = threshold
         self._sink = Path(sink_path) if sink_path else None
         if self._sink:
             self._sink.parent.mkdir(parents=True, exist_ok=True)
@@ -51,7 +60,12 @@ class StructuredLogger:
         duration_ms: float | None = None,
         error_code: str | None = None,
         metadata: dict[str, Any] | None = None,
-    ) -> LogEvent:
+    ) -> LogEvent | None:
+        """Write one entry, or return ``None`` if ``level`` is below the threshold."""
+        if not isinstance(level, LogLevel):
+            raise ValueError("level must be a LogLevel")
+        if level.severity < self.threshold.severity:
+            return None
         safe_meta = self._redactor.redact(metadata or {}).payload
         event = LogEvent(
             timestamp=datetime.now(UTC),

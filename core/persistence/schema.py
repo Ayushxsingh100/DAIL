@@ -1,5 +1,6 @@
-"""SQLite schema version 4: tables, constraints and triggers (Doc 05 §20-§23, §32, §36;
-Doc 06 §5, §6, §20, §22, §30; C-42, C-44, C-46, C-47; P1b step 4).
+"""SQLite schema version 5: tables, constraints and triggers (Doc 05 §16, §20-§23, §32, §36;
+Doc 06 §5, §6, §20, §22, §30; Doc 11; C-42, C-44, C-46, C-47, C-51 to C-60; P1b step 4,
+P2-fix step 3).
 
 The database is the second line of defense. P1a enforces the SM rules in the domain; here the
 database refuses the same illegal moves when application code is wrong (Doc 05 §36: "Promotion
@@ -33,6 +34,12 @@ and the primary key stops a second link for that address. The adapter writes the
 all its links in one transaction, and every read cross-checks the links against ``content_json``
 (13.2).
 
+Schema 5 (P2-fix) appends the evidence and audit tables after the 50 schema-4 statements, which
+stay byte-identical: ``evidence_artifacts`` (content-addressed payloads), ``evidence_events``,
+``evidence_validity_transitions``, ``evidence_supersessions`` and ``audit_events``. They are
+append-only (no UPDATE, DELETE or REPLACE, including from a plain connection), and the
+transition rules of C-52 and C-53 are triggers as well as domain functions.
+
 There is no migration tooling before P8a (C-44): a database with any other schema version is
 refused with instructions to delete the local development database.
 """
@@ -43,13 +50,29 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
+from core.domain.audit import ActorType, AuditEventType
 from core.domain.enums import CandidateStatus, ProofOrigin
 from core.domain.errors import PersistenceError
+from core.domain.evidence import (
+    CREATION_VALIDITIES,
+    TRANSITION_TARGETS,
+    EvidenceKind,
+    EvidenceValidity,
+)
 from core.domain.lifecycle import CANDIDATE_TRANSITIONS, TRUSTED_REF_STATUSES
 
-SCHEMA_VERSION = "4"
+SCHEMA_VERSION = "5"
 
-# Tables (and the schema-3 names) that mark a database as belonging to this application.
+# The evidence and audit tables of schema 5 (P2-fix; C-59).
+EVIDENCE_TABLES = (
+    "evidence_artifacts",
+    "evidence_events",
+    "evidence_validity_transitions",
+    "evidence_supersessions",
+    "audit_events",
+)
+
+# Tables (and the older names) that mark a database as belonging to this application.
 DOMAIN_TABLES = (
     "patches",
     "trusted_states",
@@ -60,8 +83,19 @@ DOMAIN_TABLES = (
     "candidate_resources",
     "invariants",
     "invariant_refs",
+    *EVIDENCE_TABLES,
 )
-LEGACY_TABLES = ("trusted_state", "candidate_state", "invariant")
+# The schema-3 names and the five tables of the interim evidence store (retired by P2-fix).
+LEGACY_TABLES = (
+    "trusted_state",
+    "candidate_state",
+    "invariant",
+    "evidence_payload",
+    "evidence_record",
+    "validity_transition",
+    "evidence_supersession",
+    "audit_event",
+)
 TABLE_NAMES = frozenset((*DOMAIN_TABLES, "schema_meta"))
 
 # DATA-INT-006 and Doc 05 §23: no UPDATE and no DELETE on these.
@@ -431,7 +465,379 @@ def _triggers() -> tuple[str, ...]:
     return tuple(triggers)
 
 
-DDL: tuple[str, ...] = (*_TABLES, *_triggers())
+# --- Schema 5: evidence and audit tables (P2-fix step 3; Doc 05 §16, §20, §22; Doc 11 §4, §6-§9,
+# §13, §16, §17, §32, §33, §38; C-51 to C-59). Appended after the 50 schema-4 statements, which
+# stay byte-identical (the golden hash of ``DDL[:50]`` is pinned by a test).
+
+_HEX = "[0-9a-f]"
+_UUID_GLOB = "-".join(_HEX * count for count in (8, 4, 4, 4, 12))
+_KINDS = _quoted([kind.value for kind in EvidenceKind])
+_AUDIT_TYPES = _quoted([event_type.value for event_type in AuditEventType])
+_ACTOR_TYPES = _quoted([actor.value for actor in ActorType])
+_VALIDITIES = _quoted([validity.value for validity in EvidenceValidity])
+_TARGETS = _quoted(sorted(validity.value for validity in TRANSITION_TARGETS))
+_CREATION = _quoted(sorted(validity.value for validity in CREATION_VALIDITIES))
+
+
+def _uuid(column: str, *, null: bool = False) -> str:
+    """A CHECK that the column holds a canonical lowercase UUID (Doc 05 §3; C-55)."""
+    canonical = f"({column} GLOB '{_UUID_GLOB}' AND length({column}) = 36)"
+    return f"CHECK ({column} IS NULL OR {canonical})" if null else f"CHECK ({canonical})"
+
+
+def _sha256(column: str, *, null: bool = False) -> str:
+    """A CHECK that the column holds 64 lowercase hexadecimal characters (Doc 11 §16)."""
+    digest = f"(length({column}) = 64 AND {column} NOT GLOB '*[^0-9a-f]*')"
+    return f"CHECK ({column} IS NULL OR {digest})" if null else f"CHECK ({digest})"
+
+
+_EVIDENCE_TABLE_DDL = (
+    f"""CREATE TABLE IF NOT EXISTS evidence_artifacts (
+    content_hash  TEXT NOT NULL PRIMARY KEY {_sha256("content_hash")},
+    payload_json  TEXT NOT NULL CHECK (json_valid(payload_json))
+)""",
+    f"""CREATE TABLE IF NOT EXISTS evidence_events (
+    seq                       INTEGER PRIMARY KEY AUTOINCREMENT,
+    evidence_id               TEXT NOT NULL UNIQUE {_uuid("evidence_id")},
+    run_id                    TEXT NOT NULL {_uuid("run_id")},
+    attempt_id                TEXT {_uuid("attempt_id", null=True)},
+    correlation_id            TEXT NOT NULL {_uuid("correlation_id")},
+    operation_id              TEXT NOT NULL {_uuid("operation_id")},
+    kind                      TEXT NOT NULL CHECK (kind IN ({_KINDS})),
+    event_name                TEXT NOT NULL CHECK (length(event_name) > 0),
+    state_id                  TEXT {_uuid("state_id", null=True)}
+                              REFERENCES trusted_states(state_id) DEFERRABLE INITIALLY DEFERRED,
+    candidate_id              TEXT {_uuid("candidate_id", null=True)}
+                              REFERENCES candidates(candidate_id),
+    parent_state_id           TEXT {_uuid("parent_state_id", null=True)}
+                              REFERENCES trusted_states(state_id),
+    state_hash                TEXT {_sha256("state_hash", null=True)},
+    content_hash              TEXT NOT NULL REFERENCES evidence_artifacts(content_hash),
+    hash_algorithm            TEXT NOT NULL CHECK (hash_algorithm = 'sha256'),
+    payload_ref               TEXT NOT NULL,
+    provenance_json           TEXT NOT NULL CHECK (json_valid(provenance_json)),
+    validity                  TEXT NOT NULL CHECK (validity IN ({_CREATION})),
+    schema_version            TEXT NOT NULL CHECK (length(schema_version) > 0),
+    redaction_policy_version  TEXT CHECK (redaction_policy_version IS NULL
+                                          OR length(redaction_policy_version) > 0),
+    created_at                TEXT NOT NULL,
+    content_json              TEXT NOT NULL CHECK (json_valid(content_json)),
+    CHECK (payload_ref = 'evidence://' || lower(kind) || '/' || content_hash),
+    CHECK (candidate_id IS NULL OR (attempt_id IS NOT NULL AND parent_state_id IS NOT NULL)),
+    CHECK (state_id IS NULL OR candidate_id IS NOT NULL OR state_hash IS NOT NULL),
+    CHECK (state_id IS NOT NULL OR candidate_id IS NOT NULL
+           OR (state_hash IS NULL AND parent_state_id IS NULL)),
+    CHECK (kind NOT IN ('IMPACT', 'PROMOTION') OR candidate_id IS NOT NULL)
+)""",
+    f"""CREATE TABLE IF NOT EXISTS evidence_validity_transitions (
+    seq             INTEGER PRIMARY KEY AUTOINCREMENT,
+    transition_id   TEXT NOT NULL UNIQUE {_uuid("transition_id")},
+    evidence_id     TEXT NOT NULL {_uuid("evidence_id")}
+                    REFERENCES evidence_events(evidence_id),
+    scope           TEXT NOT NULL CHECK (scope IN ('CONTEXT', 'RECORD')),
+    context_kind    TEXT CHECK (context_kind IS NULL OR context_kind IN ('STATE', 'CANDIDATE')),
+    context_id      TEXT {_uuid("context_id", null=True)},
+    from_validity   TEXT NOT NULL CHECK (from_validity IN ({_VALIDITIES})),
+    to_validity     TEXT NOT NULL CHECK (to_validity IN ({_TARGETS})),
+    reason          TEXT NOT NULL CHECK (length(reason) > 0),
+    impact_ref      TEXT {_uuid("impact_ref", null=True)} REFERENCES evidence_events(evidence_id),
+    superseded_by   TEXT {_uuid("superseded_by", null=True)}
+                    REFERENCES evidence_events(evidence_id),
+    correlation_id  TEXT NOT NULL {_uuid("correlation_id")},
+    operation_id    TEXT NOT NULL {_uuid("operation_id")},
+    created_at      TEXT NOT NULL,
+    CHECK ((scope = 'RECORD' AND context_kind IS NULL AND context_id IS NULL)
+           OR (scope = 'CONTEXT' AND context_kind IS NOT NULL AND context_id IS NOT NULL)),
+    CHECK ((to_validity = 'SUPERSEDED') = (superseded_by IS NOT NULL)),
+    CHECK (scope = 'RECORD' OR to_validity != 'SUPERSEDED')
+)""",
+    f"""CREATE TABLE IF NOT EXISTS evidence_supersessions (
+    old_evidence_id  TEXT NOT NULL PRIMARY KEY {_uuid("old_evidence_id")}
+                     REFERENCES evidence_events(evidence_id),
+    new_evidence_id  TEXT NOT NULL UNIQUE {_uuid("new_evidence_id")}
+                     REFERENCES evidence_events(evidence_id),
+    created_at       TEXT NOT NULL,
+    CHECK (old_evidence_id != new_evidence_id)
+)""",
+    f"""CREATE TABLE IF NOT EXISTS audit_events (
+    sequence        INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id        TEXT NOT NULL UNIQUE {_uuid("event_id")},
+    event_type      TEXT NOT NULL CHECK (event_type IN ({_AUDIT_TYPES})),
+    event_version   INTEGER NOT NULL CHECK (event_version >= 1),
+    correlation_id  TEXT NOT NULL {_uuid("correlation_id")},
+    operation_id    TEXT NOT NULL {_uuid("operation_id")},
+    actor_type      TEXT NOT NULL CHECK (actor_type IN ({_ACTOR_TYPES})),
+    actor_id        TEXT CHECK (actor_id IS NULL OR length(actor_id) > 0),
+    state_id        TEXT {_uuid("state_id", null=True)},
+    candidate_id    TEXT {_uuid("candidate_id", null=True)},
+    decision_id     TEXT {_uuid("decision_id", null=True)},
+    timestamp       TEXT NOT NULL,
+    payload_hash    TEXT NOT NULL REFERENCES evidence_artifacts(content_hash),
+    payload_ref     TEXT NOT NULL,
+    CHECK (payload_ref = 'evidence://audit/' || payload_hash)
+)""",
+    "CREATE INDEX IF NOT EXISTS ix_evidence_events_run ON evidence_events(run_id)",
+    "CREATE INDEX IF NOT EXISTS ix_evidence_events_attempt ON evidence_events(attempt_id)",
+    "CREATE INDEX IF NOT EXISTS ix_evidence_events_state ON evidence_events(state_id)",
+    "CREATE INDEX IF NOT EXISTS ix_evidence_events_candidate ON evidence_events(candidate_id)",
+    "CREATE INDEX IF NOT EXISTS ix_evidence_events_correlation "
+    "ON evidence_events(correlation_id)",
+    "CREATE INDEX IF NOT EXISTS ix_evidence_transitions_evidence "
+    "ON evidence_validity_transitions(evidence_id)",
+    "CREATE INDEX IF NOT EXISTS ix_audit_events_correlation ON audit_events(correlation_id)",
+    "CREATE INDEX IF NOT EXISTS ix_audit_events_candidate ON audit_events(candidate_id)",
+)
+
+# The key (or keys) whose reuse INSERT OR REPLACE would turn into a silent overwrite (D3).
+_EVIDENCE_NO_REPLACE_KEYS = {
+    "evidence_artifacts": "content_hash = NEW.content_hash",
+    "evidence_events": "evidence_id = NEW.evidence_id OR seq = NEW.seq",
+    "evidence_validity_transitions": "transition_id = NEW.transition_id OR seq = NEW.seq",
+    "evidence_supersessions": "old_evidence_id = NEW.old_evidence_id",
+    "audit_events": "event_id = NEW.event_id OR sequence = NEW.sequence",
+}
+
+
+def _context_validity() -> str:
+    """SQL for the effective validity of ``NEW.evidence_id`` in the context ``NEW.context_kind``,
+    ``NEW.context_id`` (C-52 R1 to R4), before the row being inserted."""
+    return (
+        "COALESCE("
+        "(SELECT t.to_validity FROM evidence_validity_transitions t "
+        "WHERE t.evidence_id = NEW.evidence_id AND t.scope = 'RECORD' "
+        "ORDER BY t.seq DESC LIMIT 1), "
+        "(SELECT t.to_validity FROM evidence_validity_transitions t "
+        "WHERE t.evidence_id = NEW.evidence_id AND t.scope = 'CONTEXT' "
+        "AND t.context_kind = NEW.context_kind AND t.context_id = NEW.context_id "
+        "ORDER BY t.seq DESC LIMIT 1), "
+        "(SELECT e.validity FROM evidence_events e WHERE e.evidence_id = NEW.evidence_id "
+        "AND ((NEW.context_kind = 'STATE' AND e.state_id = NEW.context_id) "
+        "OR (NEW.context_kind = 'CANDIDATE' AND e.candidate_id = NEW.context_id))), "
+        "'UNCERTAIN')"
+    )
+
+
+def _primary_validity(evidence: str) -> str:
+    """SQL for the validity of the evidence ``evidence`` in its primary context: its candidate if
+    set, else its state; an unbound record has only its creation validity (C-52)."""
+    return (
+        "COALESCE("
+        "(SELECT t.to_validity FROM evidence_validity_transitions t "
+        "JOIN evidence_events e ON e.evidence_id = t.evidence_id "
+        f"WHERE t.evidence_id = {evidence} AND t.scope = 'CONTEXT' "
+        "AND t.context_kind = CASE WHEN e.candidate_id IS NOT NULL THEN 'CANDIDATE' ELSE 'STATE' "
+        "END AND t.context_id = COALESCE(e.candidate_id, e.state_id) "
+        "ORDER BY t.seq DESC LIMIT 1), "
+        f"(SELECT e.validity FROM evidence_events e WHERE e.evidence_id = {evidence}))"
+    )
+
+
+def _data_int_007_triggers() -> list[str]:
+    """T5, DATA-INT-007 (Doc 05 §22; C-47, C-60): "Evidence references must point to existing
+    records." Every id in a stored trusted state's ``evidence_refs`` and in every
+    ``invariant_refs.evidence_ids`` must exist in ``evidence_events``. P2 checks existence only;
+    whether the evidence has the right binding is checked in P6 (C-60)."""
+    return [
+        _trigger(
+            "trusted_states_insert_evidence_refs",
+            "BEFORE INSERT",
+            "trusted_states",
+            "DATA-INT-007: every evidence reference of a trusted state must name stored "
+            "evidence",
+            "EXISTS (SELECT 1 FROM json_each(json_extract(NEW.content_json, "
+            "'$.evidence_refs')) j WHERE NOT EXISTS (SELECT 1 FROM evidence_events e "
+            "WHERE e.evidence_id = j.value))",
+        ),
+        _trigger(
+            "invariant_refs_insert_evidence_ids",
+            "BEFORE INSERT",
+            "invariant_refs",
+            "DATA-INT-007: every evidence id of an invariant reference must name stored "
+            "evidence",
+            "EXISTS (SELECT 1 FROM json_each(NEW.evidence_ids) j WHERE NOT EXISTS "
+            "(SELECT 1 FROM evidence_events e WHERE e.evidence_id = j.value))",
+        ),
+    ]
+
+
+def _evidence_triggers() -> tuple[str, ...]:
+    triggers: list[str] = []
+
+    # T1. Append-only: no UPDATE, no DELETE, and no INSERT OR REPLACE (D3). The REPLACE guard
+    # fires BEFORE INSERT, so it holds on a plain sqlite3.connect with recursive_triggers off.
+    for table in EVIDENCE_TABLES:
+        for event in ("UPDATE", "DELETE"):
+            triggers.append(
+                _trigger(
+                    f"{table}_no_{event.lower()}",
+                    f"BEFORE {event}",
+                    table,
+                    f"DATA-INT-006: {table} is append-only (Doc 11 §4, Doc 05 §16.2)",
+                    "1",
+                )
+            )
+        triggers.append(
+            _trigger(
+                f"{table}_no_replace",
+                "BEFORE INSERT",
+                table,
+                f"DATA-INT-006: {table} row already exists; REPLACE would rewrite history",
+                f"EXISTS (SELECT 1 FROM {table} WHERE {_EVIDENCE_NO_REPLACE_KEYS[table]})",
+            )
+        )
+
+    # T2. Evidence bound to a candidate names that candidate's parent and state hash (Doc 11 §9,
+    # §44). Both hashes may be null only while the candidate has none.
+    triggers.append(
+        _trigger(
+            "evidence_events_insert_candidate_parent",
+            "BEFORE INSERT",
+            "evidence_events",
+            "Doc 11 §9: evidence bound to a candidate must name the candidate's parent state",
+            "NEW.candidate_id IS NOT NULL AND NEW.parent_state_id IS NOT "
+            "(SELECT c.parent_state_id FROM candidates c WHERE c.candidate_id = NEW.candidate_id)",
+        )
+    )
+    triggers.append(
+        _trigger(
+            "evidence_events_insert_candidate_hash",
+            "BEFORE INSERT",
+            "evidence_events",
+            "Doc 11 §44: evidence bound to a candidate must carry the candidate's state_hash",
+            "NEW.candidate_id IS NOT NULL AND NEW.state_hash IS NOT "
+            "(SELECT c.state_hash FROM candidates c WHERE c.candidate_id = NEW.candidate_id)",
+        )
+    )
+
+    # T3. Validity transitions: exactly C-52.
+    transitions = "evidence_validity_transitions"
+    triggers.append(
+        _trigger(
+            "evidence_validity_transitions_insert_terminal",
+            "BEFORE INSERT",
+            transitions,
+            "C-52: a record has at most one RECORD-scope transition, and nothing follows it",
+            "EXISTS (SELECT 1 FROM evidence_validity_transitions t "
+            "WHERE t.evidence_id = NEW.evidence_id AND t.scope = 'RECORD')",
+        )
+    )
+    triggers.append(
+        _trigger(
+            "evidence_validity_transitions_insert_from",
+            "BEFORE INSERT",
+            transitions,
+            "C-52: from_validity must equal the effective validity before the transition",
+            "NEW.from_validity IS NOT (CASE WHEN NEW.scope = 'CONTEXT' THEN "
+            f"{_context_validity()} ELSE {_primary_validity('NEW.evidence_id')} END)",
+        )
+    )
+    triggers.append(
+        _trigger(
+            "evidence_validity_transitions_insert_pair",
+            "BEFORE INSERT",
+            transitions,
+            "C-52: this validity change is not allowed for its scope",
+            "NOT ((NEW.scope = 'CONTEXT' AND ("
+            "(NEW.from_validity = 'VALID' AND NEW.to_validity IN ('INVALID', 'UNCERTAIN')) "
+            "OR (NEW.from_validity = 'UNCERTAIN' AND NEW.to_validity IN ('INVALID', 'VALID')))) "
+            "OR (NEW.scope = 'RECORD' AND NEW.to_validity IN ('INVALID', 'SUPERSEDED') "
+            "AND NEW.from_validity IN ('VALID', 'UNCERTAIN', 'INVALID')))",
+        )
+    )
+    triggers.append(
+        _trigger(
+            "evidence_validity_transitions_insert_own_context",
+            "BEFORE INSERT",
+            transitions,
+            "C-52: UNCERTAIN -> VALID only in a context the record was produced for",
+            "NEW.scope = 'CONTEXT' AND NEW.from_validity = 'UNCERTAIN' "
+            "AND NEW.to_validity = 'VALID' AND NOT EXISTS (SELECT 1 FROM evidence_events e "
+            "WHERE e.evidence_id = NEW.evidence_id "
+            "AND ((NEW.context_kind = 'STATE' AND e.state_id = NEW.context_id) "
+            "OR (NEW.context_kind = 'CANDIDATE' AND e.candidate_id = NEW.context_id)))",
+        )
+    )
+    triggers.append(
+        _trigger(
+            "evidence_validity_transitions_insert_superseded",
+            "BEFORE INSERT",
+            transitions,
+            "C-52, C-53: SUPERSEDED requires superseded_by and its supersession row",
+            "NEW.to_validity = 'SUPERSEDED' AND (NEW.superseded_by IS NULL OR NOT EXISTS "
+            "(SELECT 1 FROM evidence_supersessions s WHERE s.old_evidence_id = NEW.evidence_id "
+            "AND s.new_evidence_id = NEW.superseded_by))",
+        )
+    )
+    triggers.append(
+        _trigger(
+            "evidence_validity_transitions_insert_integrity",
+            "BEFORE INSERT",
+            transitions,
+            "C-52, Doc 11 §46: a RECORD-scope INVALID is an integrity failure; its reason "
+            "starts with INTEGRITY:",
+            "NEW.scope = 'RECORD' AND NEW.to_validity = 'INVALID' "
+            "AND substr(NEW.reason, 1, 10) != 'INTEGRITY:'",
+        )
+    )
+    triggers.append(
+        _trigger(
+            "evidence_validity_transitions_insert_impact",
+            "BEFORE INSERT",
+            transitions,
+            "C-52, Doc 11 §32: INVALID in a candidate context needs an impact_ref naming IMPACT "
+            "evidence bound to that candidate",
+            "NEW.scope = 'CONTEXT' AND NEW.context_kind = 'CANDIDATE' "
+            "AND NEW.to_validity = 'INVALID' AND NOT EXISTS (SELECT 1 FROM evidence_events i "
+            "WHERE i.evidence_id = NEW.impact_ref AND i.kind = 'IMPACT' "
+            "AND i.candidate_id = NEW.context_id)",
+        )
+    )
+
+    # T4. Supersession rows: same kind and same binding, both bound, not self (C-53). Neither
+    # record may already have its RECORD-scope transition, and the new one must be VALID.
+    triggers.append(
+        _trigger(
+            "evidence_supersessions_insert_same_binding",
+            "BEFORE INSERT",
+            "evidence_supersessions",
+            "C-53: old and new evidence must have the same kind, state and candidate, both "
+            "bound, and differ",
+            "NOT EXISTS (SELECT 1 FROM evidence_events o, evidence_events n "
+            "WHERE o.evidence_id = NEW.old_evidence_id AND n.evidence_id = NEW.new_evidence_id "
+            "AND o.evidence_id != n.evidence_id AND o.kind = n.kind "
+            "AND o.state_id IS n.state_id AND o.candidate_id IS n.candidate_id "
+            "AND (o.state_id IS NOT NULL OR o.candidate_id IS NOT NULL))",
+        )
+    )
+    triggers.append(
+        _trigger(
+            "evidence_supersessions_insert_open",
+            "BEFORE INSERT",
+            "evidence_supersessions",
+            "C-53: neither record may already have its RECORD-scope transition",
+            "EXISTS (SELECT 1 FROM evidence_validity_transitions t WHERE t.scope = 'RECORD' "
+            "AND t.evidence_id IN (NEW.old_evidence_id, NEW.new_evidence_id))",
+        )
+    )
+    triggers.extend(_data_int_007_triggers())
+    triggers.append(
+        _trigger(
+            "evidence_supersessions_insert_new_valid",
+            "BEFORE INSERT",
+            "evidence_supersessions",
+            "C-53: the new evidence must be VALID in its primary context",
+            f"{_primary_validity('NEW.new_evidence_id')} IS NOT 'VALID'",
+        )
+    )
+    return tuple(triggers)
+
+
+DDL: tuple[str, ...] = (
+    *_TABLES,
+    *_triggers(),
+    *_EVIDENCE_TABLE_DDL,
+    *_evidence_triggers(),
+)
 
 
 def open_connection(path: str | Path, *, timeout: float = 5.0) -> sqlite3.Connection:
@@ -462,14 +868,14 @@ def _refuse_other_versions(conn: sqlite3.Connection, path: Path) -> None:
 
 
 def initialize_database(path: str | Path) -> None:
-    """Create the schema-4 tables and triggers and record the version. Idempotent; creates the
-    parent directory. Refuses a database whose schema version is not 4 and changes nothing then."""
+    """Create the schema-5 tables and triggers and record the version. Idempotent; creates the
+    parent directory. Refuses a database whose schema version is not 5 and changes nothing then."""
     db_path = Path(path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     try:
         with closing(open_connection(db_path)) as conn:
             if conn.execute("SELECT json_valid('[]')").fetchone()[0] != 1:
-                raise PersistenceError("this SQLite build has no JSON1; schema 4 needs it")
+                raise PersistenceError("this SQLite build has no JSON1; schema 5 needs it")
             conn.execute("BEGIN IMMEDIATE")
             try:
                 _refuse_other_versions(conn, db_path)

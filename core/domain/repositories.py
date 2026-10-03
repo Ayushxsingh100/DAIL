@@ -8,8 +8,8 @@ The SQLite adapter is ``core.persistence`` (ADR-004).
 The set extends Doc 05 §26 with a ``PatchRepository`` (Doc 05 §9, §33: the raw patch is retained
 independently of its candidate) and a ``UnitOfWork`` that carries the Doc 05 §32 transaction:
 every repository of one unit of work is bound to one transaction, which commits on a clean exit
-and rolls back on any exception. ``EvidenceRepository`` arrives in P2-fix and
-``AnalysisRepository`` in P3 to P6.
+and rolls back on any exception. ``EvidenceRepository`` and ``AuditRepository`` arrive in
+P2-fix (Doc 05 §26, Doc 11; C-42, C-43, C-50); ``AnalysisRepository`` in P3 to P6.
 
 Doc 06 §30: "Do not permit persistence-layer convenience methods to bypass lifecycle validation."
 So there is no ``update``, ``set_status`` or ``delete``: a candidate changes only through
@@ -21,8 +21,19 @@ pointer, SM-010).
 from __future__ import annotations
 
 from types import TracebackType
-from typing import Protocol
+from typing import Any, Protocol
 
+from core.domain.audit import AuditAppendResult, AuditEvent, AuditSubmission
+from core.domain.evidence import (
+    ArtifactRef,
+    EvidenceAppendResult,
+    EvidenceEvent,
+    EvidenceSubmission,
+    SupersessionRequest,
+    TransitionAppendResult,
+    TransitionRequest,
+    ValidityTransition,
+)
 from core.domain.invariant import Invariant, InvariantRef
 from core.domain.patch import Patch
 from core.domain.state import CandidateState, TrustedState
@@ -96,6 +107,81 @@ class InvariantRepository(Protocol):
         ...
 
 
+class EvidenceRepository(Protocol):
+    """Append-only evidence (Doc 05 §16, §26; Doc 11; C-50 to C-56, C-59).
+
+    There is no ``update`` or ``delete``: a record never changes, and its validity changes only by
+    appending a transition (Doc 11 §32). Nothing accepts an ``EvidenceEvent``, a
+    ``ValidityTransition`` or a ``ProofCheck`` as authority: evidence enters through an
+    ``EvidenceSubmission``, a transition through a ``TransitionRequest`` or a
+    ``SupersessionRequest``. Every list is in append order.
+    """
+
+    def append(self, submission: EvidenceSubmission) -> EvidenceAppendResult:
+        """Store a record and its payload. The same ``evidence_id`` with identical content is a
+        duplicate (nothing is written, ``duplicate`` is true); with different content it raises
+        ``EvidenceConflictError`` (Doc 11 §38)."""
+        ...
+
+    def get(self, evidence_id: str) -> EvidenceEvent | None:
+        """The record, rebuilt and re-validated, or ``None``."""
+        ...
+
+    def list_for_attempt(self, attempt_id: str) -> tuple[EvidenceEvent, ...]: ...
+
+    def list_for_run(self, run_id: str) -> tuple[EvidenceEvent, ...]: ...
+
+    def list_for_state(self, state_id: str) -> tuple[EvidenceEvent, ...]: ...
+
+    def list_for_candidate(self, candidate_id: str) -> tuple[EvidenceEvent, ...]: ...
+
+    def list_for_correlation(self, correlation_id: str) -> tuple[EvidenceEvent, ...]: ...
+
+    def resolve(self, ref: ArtifactRef) -> Any:
+        """The JSON payload a reference names. ``PersistenceError`` for a broken reference, and for
+        a stored text that is not the canonical text of its value (Doc 11 §45)."""
+        ...
+
+    def append_transition(self, request: TransitionRequest) -> TransitionAppendResult:
+        """Append a validity transition (C-52) and its EVIDENCE_VALIDITY_CHANGED audit event in one
+        step. A redelivered ``transition_id`` creates neither a second row nor a second event."""
+        ...
+
+    def transitions(self, evidence_id: str) -> tuple[ValidityTransition, ...]:
+        """The record's transitions in sequence order."""
+        ...
+
+    def supersede(self, request: SupersessionRequest) -> TransitionAppendResult:
+        """Write the supersession row, the RECORD-scope SUPERSEDED transition and the audit event
+        atomically (Doc 11 §33; C-53)."""
+        ...
+
+    def superseded_by(self, evidence_id: str) -> str | None:
+        """The id of the record that superseded this one, or ``None``."""
+        ...
+
+    def supersedes(self, evidence_id: str) -> str | None:
+        """The id of the record this one superseded, or ``None``."""
+        ...
+
+
+class AuditRepository(Protocol):
+    """Append-only audit events (Doc 11 §12, §13, §38; C-57)."""
+
+    def append(self, submission: AuditSubmission) -> AuditAppendResult:
+        """Store an event. The same ``event_id`` with identical content is a duplicate; with any
+        other difference it raises ``ConflictingDuplicateEventError`` (Doc 11 §38)."""
+        ...
+
+    def get(self, event_id: str) -> AuditEvent | None: ...
+
+    def list_for_correlation(self, correlation_id: str) -> tuple[AuditEvent, ...]:
+        """One workflow, in sequence order (Doc 11 §19, §20)."""
+        ...
+
+    def list_for_candidate(self, candidate_id: str) -> tuple[AuditEvent, ...]: ...
+
+
 class UnitOfWork(Protocol):
     """One transaction over every repository (Doc 05 §32).
 
@@ -114,6 +200,12 @@ class UnitOfWork(Protocol):
 
     @property
     def invariants(self) -> InvariantRepository: ...
+
+    @property
+    def evidence(self) -> EvidenceRepository: ...
+
+    @property
+    def audit(self) -> AuditRepository: ...
 
     def __enter__(self) -> UnitOfWork: ...
 
