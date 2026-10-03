@@ -32,3 +32,7 @@ Doc 02 names "SQLAlchemy + SQLite" for the storage adapter. Doc 05 §26 makes do
 ## Implemented in P1b
 
 The decision above is unchanged. P1b built it: the Doc 05 §26 ports are `typing.Protocol` classes in `core/domain/repositories.py`, and the stdlib `sqlite3` adapter is `core/persistence/` (schema version 4, C-42 to C-44). `sqlite3` may be imported only in `core/persistence/`, `evidence/` and `core/application/health.py` (contract rule R11, C-43). The interim `core/domain/storage.py` of P1a (C-35) is deleted.
+
+## Updated in P2-fix
+
+The decision is unchanged. P2-fix (C-50, C-59) moved the evidence and audit storage into `core/persistence/` (schema version 5, with `EvidenceRepository` and `AuditRepository` ports in `core/domain/repositories.py`), so `evidence/` no longer imports `sqlite3`: contract rule R11 now allows it only in `core/persistence/` and `core/application/health.py`.

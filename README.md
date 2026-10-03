@@ -15,10 +15,10 @@ mechanism, formal model, and evaluation methodology.
 |---|---|
 | P0 — Project Bootstrap | PASSED (30 Sep 2026) |
 | P1 — Domain Foundation | PASSED (external review, 2 Oct 2026) |
-| P2 — Evidence Foundation | NOT PASSED; reconciliation scheduled (P2-fix) |
+| P2 — Evidence Foundation | NOT PASSED; P2-fix implemented on `feature/p2-fix`, awaiting external review |
 | P3–P10 | NOT STARTED |
 
-Next step: P2-fix.
+Next step: external review of P2-fix.
 
 - Gate status and known gaps: [`docs/PHASE_GATES.md`](docs/PHASE_GATES.md)
 - Work packages and order: [`docs/BUILD_SEQUENCE.md`](docs/BUILD_SEQUENCE.md)
@@ -49,7 +49,7 @@ python3.12 scripts/dev.py health      # one line per health check; exit 1 on any
 
 ## Development notes
 
-- From P1b the local development database (`.local/dail.db`) has schema version 4 (C-42, C-44).
+- From P2-fix the local development database (`.local/dail.db`) has schema version 5 (C-44, C-59).
   There is no migration tooling before P8a: delete `.local/dail.db` once, then run bootstrap
   again. Bootstrap refuses a database with any other schema version and says so.
 
@@ -125,8 +125,9 @@ cloudspartanx/
 │   ├── base/                  # one versioned default file per area (Doc 14 §14)
 │   └── environments/          # dev, test, experiment, staging overrides (Doc 14 §17)
 ├── core/
-│   ├── domain/                # P1: domain objects, lifecycles, canonical hashing, repository ports
-│   ├── persistence/           # P1b: SQLite adapter behind the ports (schema version 4)
+│   ├── domain/                # P1/P2: domain objects, lifecycles, canonical hashing, evidence, audit,
+│   │                          # redaction, repository ports
+│   ├── persistence/           # P1b/P2-fix: SQLite adapter behind the ports (schema version 5)
 │   ├── terraform_model/       # P3a: parser, normalizer, canonical security rule, fingerprints
 │   ├── identity/              # P3b: identity engine
 │   ├── dependency/            # P3c: dependency graph
@@ -135,7 +136,7 @@ cloudspartanx/
 │   ├── promotion/             # P6a/P6b: promotion decision and transaction
 │   └── application/           # configuration + health (P0-close); scope policy (P4);
 │                              # EvaluationOrchestrator (P6b)
-├── evidence/                  # P2: evidence records, audit events, redaction, structured logs
+├── evidence/                  # P2: evidence service, correlation context, structured logs, replay mode
 ├── llm/                       # P7: adapter/, prompts/, schemas/, validation/
 ├── experiments/               # P8: trial harness, conditions, metrics
 ├── fixtures/                  # the 15 Doc 12 §7 canonical fixtures (Doc 04 §15 layout)
