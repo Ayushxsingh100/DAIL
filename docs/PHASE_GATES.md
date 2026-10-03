@@ -37,16 +37,30 @@ Rewrite delivered as P1a and P1b. Gaps recorded before the rewrite:
 8. The repository interfaces of Doc 05 §26 are missing.
 9. The lifecycle tests must be rewritten from the Doc 06 §31 test matrix.
 
-## P2 — Evidence Foundation — NOT PASSED
+## P2 — Evidence Foundation — PASSED (external review, 4 Oct 2026, PR #6 at 5488079)
 
-Reconciliation scheduled as P2-fix. Known gaps:
+Gaps 1–6 recorded before P2-fix are closed by P2-fix (PR #6, C-50 to C-61): per-context evidence validity, the Doc 11 §5 taxonomy, `run_id` and `attempt_id` binding, `evidence://<type>/<content_hash>` references, one `Provenance` class, and the Doc 11 §15 log levels with the unified event and replay-mode enums.
 
-1. Evidence invalidation is global but must be per context. Doc 11 §7 defines INVALID as "no longer valid for the referenced new-state context", and Doc 06 §15 says a rejected candidate leaves vN's evidence valid for vN. `EvidenceStore.current_validity(evidence_id)` takes no context.
-2. The evidence type taxonomy must follow Doc 11 §5.
-3. `run_id` and `attempt_id` binding is missing (Doc 05 §16.1, Doc 11 §10).
-4. Artifact references must use `evidence://<type>/<content_hash>` (Doc 11 §17).
-5. The `Provenance` object is missing; it must be the union of Doc 05 §6 and Doc 11 §21.
-6. Log levels must be ERROR, WARN, INFO, DEBUG, TRACE (Doc 11 §15), and the lifecycle events of Doc 06 §28 must be added to the Doc 11 §12 taxonomy.
+| Exit criterion (Doc 15 §9.2) | Status | Evidence |
+|---|---|---|
+| Evidence persists and resolves | PASS | `test_persistence_evidence` (round trip, artifact resolve, broken reference, deferred state foreign key: commit together, rollback together); `test_data_int_007` (DATA-INT-007 in the adapter and in triggers T5); `test_evidence_schema` (missing state fails at commit) |
+| Hashes verify | PASS | `test_evidence_domain` (hash stability, redacted payload hashes differently); `test_evidence_service::TestHashesVerify` and `TestCanonicalTextIsPartOfIntegrity` (VALID, TAMPERED, MISSING_PAYLOAD); append-time recompute (A1); adversarial probe 3 (a tampered record is unusable as proof and Doc 11 §46 is carried out) |
+| Lineage queries work | PASS | `list_for_attempt`, `_run`, `_state`, `_candidate`, `_correlation`; `events_for_correlation` in sequence order; `validity_history`; `supersession_chain`; `test_p2_gate` (Doc 11 §41 and §42 chains, ordered reconstruction from one correlation id, join to `trusted_states.lineage`) |
+| Invalidation preserves history | PASS | per-context validity (C-52): v0's evidence is INVALID for c1 and still VALID for v0 (`test_p2fix_reproducer`, `test_p2_gate`); append-only tables including REPLACE from a plain connection (`test_evidence_schema::TestT1AppendOnly`, adversarial probes 1 and 7) |
+| Redaction tests pass | PASS | `test_redaction` (13); secrets refused at the port and absent from the database bytes (adversarial probe 2); log metadata redacted; the policy version is recorded iff something was redacted |
+| Duplicate events are handled | PASS | evidence, audit and transition idempotency including two-connection races (`test_persistence_evidence::TestIdempotency`); conflicting redelivery raises (adversarial probes 8 and 9) |
+
+Suite at the reviewed commit: 1194 tests, black, ruff and mypy clean (venv modules; `dev.py lint` cannot run on the author's Windows machine).
+
+Carried forward:
+
+- C-60: DATA-INT-007 checks existence only in P2; P6 adds the binding and proof-type checks.
+- C-62 (supersession subject identity, before P5) and C-63 (redaction coverage, before P7a) are Open.
+- C-37 input from the P2-fix report goes to the P6a prompt.
+- The Doc 11 §40 queries that need dependency, impact, verification or LLM data are deferred to P3c–P7.
+- The REDACTED transition and the Doc 11 §18 hash chain are not implemented.
+
+M1 (Doc 15 §21): not declared — 'Basic fixture loading works' is pending (D2/P3a).
 
 ## P3–P10 — NOT STARTED
 

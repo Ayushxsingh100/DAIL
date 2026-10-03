@@ -15,10 +15,10 @@ mechanism, formal model, and evaluation methodology.
 |---|---|
 | P0 — Project Bootstrap | PASSED (30 Sep 2026) |
 | P1 — Domain Foundation | PASSED (external review, 2 Oct 2026) |
-| P2 — Evidence Foundation | NOT PASSED; P2-fix implemented on `feature/p2-fix`, awaiting external review |
+| P2 — Evidence Foundation | PASSED (external review, 4 Oct 2026) |
 | P3–P10 | NOT STARTED |
 
-Next step: external review of P2-fix.
+Next step: the research track (Invariant Registry Specification and D0 amendments), then D1.
 
 - Gate status and known gaps: [`docs/PHASE_GATES.md`](docs/PHASE_GATES.md)
 - Work packages and order: [`docs/BUILD_SEQUENCE.md`](docs/BUILD_SEQUENCE.md)
