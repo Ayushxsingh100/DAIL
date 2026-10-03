@@ -493,6 +493,67 @@ class TestP2Gate(unittest.TestCase):
         self.assertIn(T.EVIDENCE_VALIDITY_CHANGED, types)  # the supersession (C-57)
         self.assertEqual(self._count("trusted_states"), 2)
 
+    def test_list_for_attempt_returns_exactly_the_attempts_records(self) -> None:
+        """Doc 05 §26: ``list_for_attempt(attempt_id)``. Two candidates, two attempts: each attempt
+        sees its own records and nothing else, and v0's baseline evidence (no attempt) is in
+        neither.
+        """
+        contexts = {}
+        records: dict[str, list[str]] = {}
+        for n, content in enumerate(('remove "ssh"\n', 'remove "ssh"; narrow "ec2_to_rds"\n'), 1):
+            ctx = self.ctx.with_attempt()
+            candidate = self._candidate(content, sequence=n)
+            self._save_candidate(candidate)
+            candidate = self._to_analyzing(candidate, "ssh-closed")
+            with SqliteUnitOfWork(self.db) as uow:
+                records[ctx.attempt_id or ""] = [
+                    self._record(
+                        uow,
+                        ctx,
+                        kind,
+                        {"n": n, "kind": kind.value},
+                        **self._for_candidate(candidate),
+                    ).evidence_id
+                    for kind in (K.IMPACT, K.VERIFICATION)
+                ]
+            contexts[n] = ctx
+        with SqliteUnitOfWork(self.db) as uow:
+            for attempt_id, expected in records.items():
+                got = [e.evidence_id for e in self.svc.evidence_for_attempt(uow, attempt_id)]
+                self.assertEqual(got, expected)
+            self.assertEqual(
+                self.svc.evidence_for_attempt(uow, self.base_ctx.attempt_id or new_uuid()), ()
+            )
+            every_attempt_record = {r for ids in records.values() for r in ids}
+            self.assertNotIn(self.e_func0, every_attempt_record)
+
+    def test_the_chains_join_to_the_trusted_state_lineage(self) -> None:
+        """Doc 11 §40 (lineage queries): every record of a chain joins to the lineage it belongs
+        to, through its candidate or through its trusted state."""
+        self.test_rejected_candidate_chain()
+        with closing(sqlite3.connect(self.db)) as conn:
+            via_candidate = {
+                r[0]
+                for r in conn.execute(
+                    "SELECT DISTINCT c.lineage_id FROM evidence_events e "
+                    "JOIN candidates c ON c.candidate_id = e.candidate_id"
+                )
+            }
+            via_state = {
+                r[0]
+                for r in conn.execute(
+                    "SELECT DISTINCT s.lineage_id FROM evidence_events e "
+                    "JOIN trusted_states s ON s.state_id = e.state_id"
+                )
+            }
+            unjoined = conn.execute(
+                "SELECT COUNT(*) FROM evidence_events e WHERE e.candidate_id IS NULL "
+                "AND e.state_id IS NULL"
+            ).fetchone()[0]
+        self.assertEqual(via_candidate, {LINEAGE})
+        self.assertEqual(via_state, {LINEAGE})
+        self.assertEqual(unjoined, 0)  # every record of the gate scenario is bound to something
+
 
 if __name__ == "__main__":
     unittest.main()
