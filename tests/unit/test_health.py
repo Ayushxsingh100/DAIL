@@ -12,7 +12,6 @@ from pathlib import Path
 from core.application.config import ResolvedConfig, load_config
 from core.application.health import EXPECTED_TABLES, run_health_checks
 from core.persistence.schema import initialize_database
-from evidence.store import EvidenceStore
 
 BASE_FILES: dict[str, str] = {
     "application": "config_schema_version = 1\n",
@@ -55,7 +54,6 @@ class HealthTestCase(unittest.TestCase):
 
     def init_db(self) -> None:
         initialize_database(self.db_path)
-        EvidenceStore(self.db_path).initialize_schema()
 
     def results(self, cfg: ResolvedConfig) -> dict[str, tuple[str, str]]:
         return {r.name: (r.status, r.detail) for r in run_health_checks(cfg, self.repo)}

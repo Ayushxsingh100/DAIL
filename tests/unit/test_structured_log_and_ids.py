@@ -1,12 +1,23 @@
+"""Correlation context and structured logging (Doc 11 §10, §11, §14, §15; C-39, C-55).
+
+Migrated from the interim version: ids are canonical UUIDs (C-55), ``CorrelationContext`` carries a
+required ``run_id``, and ``new_id`` (prefixed ids) is gone.
+"""
+
 import json
 import tempfile
 import unittest
+import uuid
 from datetime import UTC
 from pathlib import Path
 
-from evidence.ids import CorrelationContext, new_id
+from core.domain.errors import DomainValidationError
+from evidence.ids import CorrelationContext
 from evidence.models import LogEvent, LogLevel
 from evidence.structured_log import StructuredLogger
+
+ATTEMPT = "00000000-0000-0000-0000-0000000a0001"
+REQUEST = "00000000-0000-0000-0000-0000000b0009"
 
 
 class TestCorrelationContext(unittest.TestCase):
@@ -19,23 +30,60 @@ class TestCorrelationContext(unittest.TestCase):
         a = CorrelationContext.new()
         b = a.new_operation()
         self.assertEqual(a.correlation_id, b.correlation_id)
+        self.assertEqual(a.run_id, b.run_id)
         self.assertNotEqual(a.operation_id, b.operation_id)
 
     def test_attempt_and_request_ids_propagate(self) -> None:
-        c = CorrelationContext.new().with_attempt("att-1").with_request("req-9")
-        self.assertEqual((c.attempt_id, c.request_id), ("att-1", "req-9"))
-        self.assertEqual(c.new_operation().attempt_id, "att-1")
+        c = CorrelationContext.new().with_attempt(ATTEMPT).with_request(REQUEST)
+        self.assertEqual((c.attempt_id, c.request_id), (ATTEMPT, REQUEST))
+        self.assertEqual(c.new_operation().attempt_id, ATTEMPT)
 
     def test_empty_ids_rejected(self) -> None:
+        good = CorrelationContext.new()
         with self.assertRaises(ValueError):
-            CorrelationContext("", "op")
+            CorrelationContext(good.run_id, "", good.operation_id)
         with self.assertRaises(ValueError):
-            CorrelationContext("c", "")
+            CorrelationContext(good.run_id, good.correlation_id, "")
 
-    def test_new_id_is_prefixed_and_unique(self) -> None:
-        ids = {new_id("evd") for _ in range(200)}
-        self.assertEqual(len(ids), 200)
-        self.assertTrue(all(i.startswith("evd-") for i in ids))
+    def test_ids_are_canonical_uuids_and_unique(self) -> None:
+        """Replaces ``test_new_id_is_prefixed_and_unique``: the prefixed ids are retired (C-55)."""
+        seen: set[str] = set()
+        for _ in range(100):
+            ctx = CorrelationContext.new().with_attempt().with_request()
+            for value in (
+                ctx.run_id,
+                ctx.correlation_id,
+                ctx.operation_id,
+                ctx.attempt_id,
+                ctx.request_id,
+            ):
+                assert value is not None
+                self.assertEqual(str(uuid.UUID(value)), value)
+                seen.add(value)
+        self.assertEqual(len(seen), 500)
+
+    def test_every_id_is_validated(self) -> None:
+        good = CorrelationContext.new()
+        for field in ("run_id", "correlation_id", "operation_id", "attempt_id", "request_id"):
+            for bad in ("corr-0123456789abcdef", str(uuid.uuid4()).upper(), "", 7):
+                with self.subTest(field=field, value=bad), self.assertRaises(DomainValidationError):
+                    kwargs = {
+                        "run_id": good.run_id,
+                        "correlation_id": good.correlation_id,
+                        "operation_id": good.operation_id,
+                        field: bad,
+                    }
+                    CorrelationContext(**kwargs)  # type: ignore[arg-type]
+
+    def test_the_run_id_is_required(self) -> None:
+        with self.assertRaises(TypeError):
+            CorrelationContext(correlation_id=ATTEMPT, operation_id=REQUEST)  # type: ignore[call-arg]
+
+    def test_new_takes_the_callers_run_or_mints_one(self) -> None:
+        self.assertEqual(CorrelationContext.new(ATTEMPT).run_id, ATTEMPT)
+        self.assertNotEqual(CorrelationContext.new().run_id, CorrelationContext.new().run_id)
+        with self.assertRaises(DomainValidationError):
+            CorrelationContext.new("run-1")
 
 
 class TestStructuredLogger(unittest.TestCase):

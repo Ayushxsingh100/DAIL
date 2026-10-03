@@ -25,8 +25,8 @@ R9  no lifecycle bypass through deserialization: ``from_dict`` on TrustedState, 
     defines them.
 R10 determinism in core.domain: no ``datetime.now``/``utcnow``, ``date.today``, ``time.time`` or
     ``random``, and ``uuid4`` only in core.domain.ids.
-R11 ``sqlite3`` is imported only in core.persistence.*, evidence.* and core.application.health
-    (C-43, P1b).
+R11 ``sqlite3`` is imported only in core.persistence.* and core.application.health (C-43, P1b;
+    tightened by P2-fix, C-50: evidence/ no longer imports it).
 R12 core.persistence.* imports only the standard library, core.domain.* and itself (P1b). R1
     already keeps core.domain from importing core.persistence.
 R13 ``core.domain.codec`` (the route back from stored data into lifecycle objects, C-48) is
@@ -52,8 +52,8 @@ R5_ENGINES = ("core.identity", "core.dependency", "core.impact", "core.verificat
 # ADR-010: the oracle lives in the TerraPreserve repository. Any top-level
 # module named oracle or starting with "terrapreserve" is treated as the oracle.
 ORACLE_TOP_LEVEL_PREFIXES = ("oracle", "terrapreserve")
-# R11: the only places that may import sqlite3 (C-43).
-R11_ALLOWED_MODULES = ("core.persistence", "evidence", "core.application.health")
+# R11: the only places that may import sqlite3 (C-43, tightened by C-50).
+R11_ALLOWED_MODULES = ("core.persistence", "core.application.health")
 # R13: the only importers of core.domain.codec (C-48).
 R13_CODEC = "core.domain.codec"
 R13_ALLOWED_MODULES = ("core.persistence",)
@@ -380,6 +380,13 @@ class TestCheckerSelfTest(unittest.TestCase):
             "llm.bad",
             "scripts.bad",
             "scripts.dev",
+            # C-50: the evidence package no longer touches the database
+            "evidence",
+            "evidence.bad",
+            "evidence.store",
+            "evidence.service",
+            "evidence.ids",
+            "evidence.structured_log",
         ):
             for source in (
                 "import sqlite3\n",
@@ -389,13 +396,11 @@ class TestCheckerSelfTest(unittest.TestCase):
                 with self.subTest(module=module, source=source.strip()):
                     self.assertIn("R11", self.rules_for(module, source))
 
-    def test_r11_allows_sqlite3_in_the_three_places_c_43_names(self) -> None:
+    def test_r11_allows_sqlite3_only_in_core_persistence_and_the_health_check(self) -> None:
         for module in (
             "core.persistence.schema",
             "core.persistence.sqlite",
             "core.persistence",
-            "evidence.store",
-            "evidence.bad",
             "core.application.health",
         ):
             with self.subTest(module=module):
@@ -695,7 +700,6 @@ class TestArchitectureBoundaries(unittest.TestCase):
                 "core.persistence.schema",
                 "core.persistence.sqlite",
                 "core.application.health",
-                "evidence.store",
             },
         )
 
