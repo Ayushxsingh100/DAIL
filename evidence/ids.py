@@ -39,11 +39,11 @@ class CorrelationContext:
             require_uuid(self.request_id, "CorrelationContext.request_id")
 
     @classmethod
-    def new(cls, run_id: str | None = None) -> CorrelationContext:
-        """A new workflow. The run is the caller's (P8 creates runs); without one a fresh run id is
-        minted, which suits a single-run test or script."""
+    def new(cls, run_id: str) -> CorrelationContext:
+        """A new workflow in a run. The run id is required and is never minted here: a run is
+        created by the caller (P8), and evidence must name the run it belongs to (C-55)."""
         return cls(
-            run_id=new_uuid() if run_id is None else run_id,
+            run_id=run_id,
             correlation_id=new_uuid(),
             operation_id=new_uuid(),
         )

@@ -1047,10 +1047,19 @@ class _Evidence:
             raise BrokenReferenceError(
                 f"{ref.uri}: no stored artifact; the reference is broken (Doc 11 §44)"
             )
+        text = row["payload_json"]
         try:
-            return json.loads(row["payload_json"])
+            value = json.loads(text)
         except ValueError:
             raise PersistenceError(f"{ref.uri}: the stored artifact is not valid JSON") from None
+        # Append guarantees canonical text (A1), so any other text, even one with the same
+        # parsed value and hash (extra whitespace, a repeated key), has been edited (Doc 11 §45).
+        if canonical_json(value) != text:
+            raise PersistenceError(
+                f"{ref.uri}: the stored artifact is not the canonical text of its value; it was "
+                "edited after it was appended (Doc 11 §45)"
+            )
+        return value
 
     def transitions(self, evidence_id: str) -> tuple[ValidityTransition, ...]:
         with _guard("list validity transitions"):

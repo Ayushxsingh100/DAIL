@@ -112,7 +112,7 @@ class TestP2Gate(unittest.TestCase):
         self.db = Path(self._tmp.name) / "dail.db"
         initialize_database(self.db)
         self.svc = EvidenceService()
-        self.base_ctx = CorrelationContext.new()  # the baseline's own workflow
+        self.base_ctx = CorrelationContext.new(new_uuid())  # the baseline's own workflow
         self.ctx = CorrelationContext.new(self.base_ctx.run_id)  # a candidate workflow, same run
         # v0 and its evidence: the evidence ids are chosen first, so the state can link to them
         self.e_func0 = new_uuid()

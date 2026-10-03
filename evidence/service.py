@@ -346,7 +346,7 @@ class EvidenceService:
             payload = uow.evidence.resolve(ArtifactRef.parse(event.payload_ref))
         except BrokenReferenceError:
             return IntegrityStatus.MISSING_PAYLOAD
-        except PersistenceError:  # the stored text is no longer valid JSON
+        except PersistenceError:  # the stored text is not valid JSON, or not canonical
             return IntegrityStatus.TAMPERED
         if hashing.content_hash(payload) != event.content_hash:
             return IntegrityStatus.TAMPERED

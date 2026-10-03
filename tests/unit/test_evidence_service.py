@@ -8,6 +8,7 @@ validity (C-52), UUID ids (C-55), ``evidence://`` references (C-56) and the 19 a
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import unittest
 from contextlib import closing
@@ -30,6 +31,8 @@ from core.domain.evidence import (
     IntegrityStatus,
     TransitionScope,
 )
+from core.domain.hashing import canonical_json, content_hash
+from core.domain.ids import new_uuid
 from evidence.ids import CorrelationContext
 from evidence.service import EvidenceService
 from tests.domain_builders import at, baseline, uid
@@ -211,6 +214,75 @@ class TestHashesVerify(ServiceCase):
             conn.commit()
         with self.uow() as u:
             self.assertIs(self.svc.verify_integrity(u, rec.evidence_id), IntegrityStatus.TAMPERED)
+
+
+class TestCanonicalTextIsPartOfIntegrity(ServiceCase):
+    """Doc 11 §45 (F2). Append guarantees that the stored text is the canonical text of its value,
+    so any other text is tampering, even when the parsed value and the hash are unchanged."""
+
+    EDITS = {
+        "whitespace only": '{"result": "PASS"}',
+        "a repeated key": '{"result":"FAIL","result":"PASS"}',
+    }
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.rec = self.put({"result": "PASS"})
+
+    def edit_text(self, text: str) -> None:
+        self.assertEqual(json.loads(text), {"result": "PASS"})  # the parsed value is unchanged
+        self.assertEqual(content_hash(json.loads(text)), self.rec.content_hash)  # so is the hash
+        self.assertNotEqual(text, canonical_json(json.loads(text)))
+        self.tamper(
+            "UPDATE evidence_artifacts SET payload_json = ? WHERE content_hash = ?",
+            (text, self.rec.content_hash),
+        )
+
+    def test_an_edit_that_keeps_the_value_and_the_hash_is_tampered(self) -> None:
+        for label, text in self.EDITS.items():
+            with self.subTest(edit=label):
+                self.edit_text(text)
+                with self.uow() as u:
+                    self.assertIs(
+                        self.svc.verify_integrity(u, self.rec.evidence_id), IntegrityStatus.TAMPERED
+                    )
+
+    def test_the_edited_record_is_not_proof(self) -> None:
+        for label, text in self.EDITS.items():
+            with self.subTest(edit=label):
+                self.edit_text(text)
+                with self.uow() as u:
+                    check = self.svc.usable_as_proof(u, self.rec.evidence_id, self.v0_ctx)
+                self.assertFalse(check.usable)
+                self.assertTrue(any(r.startswith("P5") and "TAMPERED" in r for r in check.reasons))
+
+    def check_failure_recorded(self, text: str) -> None:
+        self.edit_text(text)
+        with self.uow() as u:
+            status = self.svc.record_integrity_failure(u, self.rec.evidence_id, ctx=self.ctx)
+            (transition,) = self.svc.validity_history(u, self.rec.evidence_id)
+            events = self.svc.events_for_correlation(u, self.ctx.correlation_id)
+        self.assertIs(status, IntegrityStatus.TAMPERED)
+        self.assertIs(transition.scope, TransitionScope.RECORD)
+        self.assertIs(transition.to_validity, V.INVALID)
+        self.assertTrue(transition.reason.startswith("INTEGRITY:"))
+        self.assertIn(AuditEventType.ERROR_OCCURRED, [e.event_type for e in events])
+
+    def test_the_integrity_failure_is_recorded_for_a_whitespace_edit(self) -> None:
+        self.check_failure_recorded(self.EDITS["whitespace only"])
+
+    def test_the_integrity_failure_is_recorded_for_a_repeated_key(self) -> None:
+        self.check_failure_recorded(self.EDITS["a repeated key"])
+
+    def test_the_canonical_text_still_verifies(self) -> None:
+        with self.uow() as u:
+            self.assertIs(self.svc.verify_integrity(u, self.rec.evidence_id), IntegrityStatus.VALID)
+            self.assertEqual(self.svc.resolve_payload(u, self.rec.evidence_id), {"result": "PASS"})
+
+    def test_resolve_refuses_the_edited_text(self) -> None:
+        self.edit_text(self.EDITS["whitespace only"])
+        with self.uow() as u, self.assertRaises(PersistenceError):
+            self.svc.resolve_payload(u, self.rec.evidence_id)
 
 
 class TestAppendOnly(ServiceCase):
@@ -769,7 +841,7 @@ class TestLineageQueries(ServiceCase):
     def test_queries_by_state_candidate_run_attempt_and_correlation(self) -> None:
         a = self.put({"n": 1})
         b = self.put_for(self.c1, {"n": 2})
-        other_ctx = CorrelationContext.new()
+        other_ctx = CorrelationContext.new(new_uuid())
         c = self.put({"n": 3}, ctx=other_ctx)
         with self.uow() as u:
             svc = self.svc
@@ -833,7 +905,7 @@ class TestLineageQueries(ServiceCase):
             self.assertEqual(len(self.svc.events_for_candidate(u, cid)), 4)
 
     def test_correlation_is_isolated_between_workflows(self) -> None:
-        other = CorrelationContext.new()
+        other = CorrelationContext.new(new_uuid())
         with self.uow() as u:
             self.svc.append_audit_event(
                 u, event_type=AuditEventType.IMPACT_COMPLETED, ctx=self.ctx, payload={}

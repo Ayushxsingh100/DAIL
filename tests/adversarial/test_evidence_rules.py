@@ -32,6 +32,7 @@ from core.domain.evidence import (
     ValidityTransition,
 )
 from core.domain.hashing import canonical_json, content_hash
+from core.domain.ids import new_uuid
 from core.persistence.schema import open_connection
 from evidence.ids import CorrelationContext
 from evidence.models import LogLevel
@@ -759,7 +760,7 @@ class TestProbe9ConflictingRedelivery(EvidenceAdversarialCase):
             "state_hash": {"state_hash": "cd" * 32},
             "validity": {"validity": V.UNCERTAIN},
             "schema_version": {"schema_version": "2"},
-            "run": {"ctx": CorrelationContext.new()},
+            "run": {"ctx": CorrelationContext.new(new_uuid())},
             "operation": {"ctx": self.ctx.new_operation()},
         }
         for label, change in changes.items():
@@ -782,7 +783,7 @@ class TestProbe9ConflictingRedelivery(EvidenceAdversarialCase):
             "state": {"state_id": self.v0.state_id},
             "decision": {"decision_id": uid(0x7A02)},
             "payload": {"payload": {"reason": "other"}},
-            "correlation": {"ctx": CorrelationContext.new()},
+            "correlation": {"ctx": CorrelationContext.new(new_uuid())},
             "operation": {"ctx": self.ctx.new_operation()},
             "type": {
                 "event_type": AuditEventType.ESCALATED,

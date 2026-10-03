@@ -138,7 +138,8 @@ class EvidenceRepository(Protocol):
     def list_for_correlation(self, correlation_id: str) -> tuple[EvidenceEvent, ...]: ...
 
     def resolve(self, ref: ArtifactRef) -> Any:
-        """The JSON payload a reference names; ``PersistenceError`` for a broken reference."""
+        """The JSON payload a reference names. ``PersistenceError`` for a broken reference, and for
+        a stored text that is not the canonical text of its value (Doc 11 §45)."""
         ...
 
     def append_transition(self, request: TransitionRequest) -> TransitionAppendResult:

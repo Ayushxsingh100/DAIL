@@ -14,6 +14,7 @@ from pathlib import Path
 
 from core.application.config import LOG_LEVELS
 from core.domain.errors import DomainValidationError
+from core.domain.ids import new_uuid
 from evidence.ids import CorrelationContext
 from evidence.models import LogEvent, LogLevel, ReplayMode
 from evidence.structured_log import StructuredLogger
@@ -24,24 +25,24 @@ REQUEST = "00000000-0000-0000-0000-0000000b0009"
 
 class TestCorrelationContext(unittest.TestCase):
     def test_new_context_has_distinct_ids(self) -> None:
-        a, b = CorrelationContext.new(), CorrelationContext.new()
+        a, b = CorrelationContext.new(new_uuid()), CorrelationContext.new(new_uuid())
         self.assertNotEqual(a.correlation_id, b.correlation_id)
         self.assertNotEqual(a.correlation_id, a.operation_id)
 
     def test_new_operation_preserves_correlation(self) -> None:
-        a = CorrelationContext.new()
+        a = CorrelationContext.new(new_uuid())
         b = a.new_operation()
         self.assertEqual(a.correlation_id, b.correlation_id)
         self.assertEqual(a.run_id, b.run_id)
         self.assertNotEqual(a.operation_id, b.operation_id)
 
     def test_attempt_and_request_ids_propagate(self) -> None:
-        c = CorrelationContext.new().with_attempt(ATTEMPT).with_request(REQUEST)
+        c = CorrelationContext.new(new_uuid()).with_attempt(ATTEMPT).with_request(REQUEST)
         self.assertEqual((c.attempt_id, c.request_id), (ATTEMPT, REQUEST))
         self.assertEqual(c.new_operation().attempt_id, ATTEMPT)
 
     def test_empty_ids_rejected(self) -> None:
-        good = CorrelationContext.new()
+        good = CorrelationContext.new(new_uuid())
         with self.assertRaises(ValueError):
             CorrelationContext(good.run_id, "", good.operation_id)
         with self.assertRaises(ValueError):
@@ -51,7 +52,7 @@ class TestCorrelationContext(unittest.TestCase):
         """Replaces ``test_new_id_is_prefixed_and_unique``: the prefixed ids are retired (C-55)."""
         seen: set[str] = set()
         for _ in range(100):
-            ctx = CorrelationContext.new().with_attempt().with_request()
+            ctx = CorrelationContext.new(new_uuid()).with_attempt().with_request()
             for value in (
                 ctx.run_id,
                 ctx.correlation_id,
@@ -65,7 +66,7 @@ class TestCorrelationContext(unittest.TestCase):
         self.assertEqual(len(seen), 500)
 
     def test_every_id_is_validated(self) -> None:
-        good = CorrelationContext.new()
+        good = CorrelationContext.new(new_uuid())
         for field in ("run_id", "correlation_id", "operation_id", "attempt_id", "request_id"):
             for bad in ("corr-0123456789abcdef", str(uuid.uuid4()).upper(), "", 7):
                 with self.subTest(field=field, value=bad), self.assertRaises(DomainValidationError):
@@ -81,16 +82,17 @@ class TestCorrelationContext(unittest.TestCase):
         with self.assertRaises(TypeError):
             CorrelationContext(correlation_id=ATTEMPT, operation_id=REQUEST)  # type: ignore[call-arg]
 
-    def test_new_takes_the_callers_run_or_mints_one(self) -> None:
+    def test_new_requires_a_run_id_and_never_mints_one(self) -> None:
+        with self.assertRaises(TypeError):
+            CorrelationContext.new()  # type: ignore[call-arg]
         self.assertEqual(CorrelationContext.new(ATTEMPT).run_id, ATTEMPT)
-        self.assertNotEqual(CorrelationContext.new().run_id, CorrelationContext.new().run_id)
         with self.assertRaises(DomainValidationError):
             CorrelationContext.new("run-1")
 
 
 class TestStructuredLogger(unittest.TestCase):
     def setUp(self) -> None:
-        self.ctx = CorrelationContext.new()
+        self.ctx = CorrelationContext.new(new_uuid())
 
     def test_event_has_every_doc11_section14_field(self) -> None:
         log = StructuredLogger("dail")
@@ -234,7 +236,7 @@ class TestLoggerThreshold(unittest.TestCase):
     """Doc 11 §15: TRACE is "disabled by default in production"; the default threshold is INFO."""
 
     def setUp(self) -> None:
-        self.ctx = CorrelationContext.new()
+        self.ctx = CorrelationContext.new(new_uuid())
 
     def emit(self, log: StructuredLogger, level: LogLevel) -> LogEvent | None:
         return log.log(

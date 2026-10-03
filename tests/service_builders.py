@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from core.domain.evidence import EvidenceContext, EvidenceEvent, EvidenceKind
+from core.domain.ids import new_uuid
 from evidence.ids import CorrelationContext
 from evidence.service import EvidenceService
 from tests.evidence_builders import prov
@@ -26,7 +27,7 @@ class ServiceCase(RepoCase):
     def setUp(self) -> None:
         super().setUp()
         self.svc = EvidenceService()
-        self.ctx = CorrelationContext.new()
+        self.ctx = CorrelationContext.new(new_uuid())
         self.attempt_ctx = self.ctx.with_attempt()
         self.v0 = self.seed()
         self.c1 = self.store_stages(self.v0, SAFE, n=1, sequence=1, upto=3)[3]
