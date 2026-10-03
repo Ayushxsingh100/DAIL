@@ -359,24 +359,89 @@ class EvidenceStore:
 
     # --- validity ---------------------------------------------------------
 
-    def _current_validity(self, conn: sqlite3.Connection, evidence_id: str) -> EvidenceValidity:
+    def _validity_in(
+        self,
+        conn: sqlite3.Connection,
+        evidence_id: str,
+        *,
+        state_id: str | None = None,
+        candidate_id: str | None = None,
+    ) -> EvidenceValidity:
+        """Effective validity of evidence in one context (C-52, Doc 06 §10, §15).
+
+        A transition is CONTEXT scope when it names a candidate or a state, and RECORD scope
+        (every context) when it names neither. In order:
+          R1  a RECORD-scope transition, if the record has one (the latest);
+          R2  otherwise the latest CONTEXT transition for this context;
+          R3  otherwise, if the context is one the record was produced for, its creation validity;
+          R4  otherwise UNCERTAIN: evidence is never implicitly valid outside its own context.
+        """
+        base = conn.execute(
+            "SELECT validity, state_id, candidate_id FROM evidence_record WHERE evidence_id = ?",
+            (evidence_id,),
+        ).fetchone()
+        if base is None:
+            raise EvidenceNotFoundError(evidence_id)
         row = conn.execute(
             "SELECT to_validity FROM validity_transition WHERE evidence_id = ? "
-            "ORDER BY seq DESC LIMIT 1",
+            "AND candidate_id IS NULL AND state_id IS NULL ORDER BY seq DESC LIMIT 1",
             (evidence_id,),
         ).fetchone()
         if row is not None:
             return EvidenceValidity(row[0])
+        if candidate_id is not None:
+            row = conn.execute(
+                "SELECT to_validity FROM validity_transition WHERE evidence_id = ? "
+                "AND candidate_id = ? ORDER BY seq DESC LIMIT 1",
+                (evidence_id, candidate_id),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT to_validity FROM validity_transition WHERE evidence_id = ? "
+                "AND state_id = ? AND candidate_id IS NULL ORDER BY seq DESC LIMIT 1",
+                (evidence_id, state_id),
+            ).fetchone()
+        if row is not None:
+            return EvidenceValidity(row[0])
+        own = (candidate_id is not None and base[2] == candidate_id) or (
+            candidate_id is None and state_id is not None and base[1] == state_id
+        )
+        return EvidenceValidity(base[0]) if own else EvidenceValidity.UNCERTAIN
+
+    def _primary_validity(self, conn: sqlite3.Connection, evidence_id: str) -> EvidenceValidity:
+        """Validity in the record's primary context: its candidate if set, else its state; an
+        unbound record has only its RECORD-scope transition or its creation validity."""
         base = conn.execute(
-            "SELECT validity FROM evidence_record WHERE evidence_id = ?", (evidence_id,)
+            "SELECT validity, state_id, candidate_id FROM evidence_record WHERE evidence_id = ?",
+            (evidence_id,),
         ).fetchone()
         if base is None:
             raise EvidenceNotFoundError(evidence_id)
-        return EvidenceValidity(base[0])
+        if base[2] is None and base[1] is None:
+            row = conn.execute(
+                "SELECT to_validity FROM validity_transition WHERE evidence_id = ? "
+                "AND candidate_id IS NULL AND state_id IS NULL ORDER BY seq DESC LIMIT 1",
+                (evidence_id,),
+            ).fetchone()
+            return EvidenceValidity(row[0]) if row is not None else EvidenceValidity(base[0])
+        return self._validity_in(conn, evidence_id, state_id=base[1], candidate_id=base[2])
 
     def current_validity(self, evidence_id: str) -> EvidenceValidity:
+        """Validity in the record's primary context (its candidate if set, else its state).
+        Use ``validity_in`` to ask about a specific context."""
         with self._connect() as conn:
-            return self._current_validity(conn, evidence_id)
+            return self._primary_validity(conn, evidence_id)
+
+    def validity_in(
+        self, evidence_id: str, *, state_id: str | None = None, candidate_id: str | None = None
+    ) -> EvidenceValidity:
+        """Validity in one context: give exactly one of ``state_id`` and ``candidate_id``."""
+        if (state_id is None) == (candidate_id is None):
+            raise ValueError("validity_in needs exactly one of state_id and candidate_id")
+        with self._connect() as conn:
+            return self._validity_in(
+                conn, evidence_id, state_id=state_id, candidate_id=candidate_id
+            )
 
     def validity_history(self, evidence_id: str) -> list[ValidityTransition]:
         with self._connect() as conn:
@@ -418,7 +483,20 @@ class EvidenceStore:
     ) -> ValidityTransition:
         if not reason or not reason.strip():
             raise ValueError("a validity change requires a non-empty reason (Doc 11 Section 32)")
-        current = self._current_validity(conn, evidence_id)
+        # The transition's context (C-52): the candidate if one is passed, else the state; with
+        # neither it is RECORD scope and describes every context.
+        context_state = state_id if candidate_id is None else None
+        if candidate_id is None and state_id is None:
+            current = self._primary_validity(conn, evidence_id)
+        else:
+            if to is EvidenceValidity.SUPERSEDED:
+                raise InvalidValidityTransition(
+                    f"evidence {evidence_id!r}: SUPERSEDED applies to the whole record, not to "
+                    "one context (C-52)"
+                )
+            current = self._validity_in(
+                conn, evidence_id, state_id=context_state, candidate_id=candidate_id
+            )
         if to not in ALLOWED_VALIDITY_TRANSITIONS[current]:
             raise InvalidValidityTransition(
                 f"evidence {evidence_id!r}: illegal validity transition "
@@ -431,7 +509,7 @@ class EvidenceStore:
             to_validity=to,
             reason=reason,
             candidate_id=candidate_id,
-            state_id=state_id,
+            state_id=context_state,
             impact_report_ref=impact_report_ref,
             superseded_by=superseded_by,
         )
@@ -528,7 +606,7 @@ class EvidenceStore:
         if old_id == new_id_:
             raise ValueError("evidence cannot supersede itself")
         with self._connect() as conn:
-            if self._current_validity(conn, new_id_) is not EvidenceValidity.VALID:
+            if self._primary_validity(conn, new_id_) is not EvidenceValidity.VALID:
                 raise InvalidValidityTransition(
                     f"replacement evidence {new_id_!r} must itself be VALID to supersede"
                 )
@@ -575,9 +653,17 @@ class EvidenceStore:
             rec = self.get_evidence(evidence_id)
         except EvidenceNotFoundError:
             return ProofCheck(False, ("evidence not found",))
-        validity = self.current_validity(evidence_id)
-        if validity is not EvidenceValidity.VALID:
-            reasons.append(f"validity is {validity.value}, not VALID")
+        # Validity is read in the expected context (C-52): being INVALID for another candidate
+        # does not make evidence unusable for the state it describes (Doc 06 §15).
+        expected: list[tuple[str | None, str | None]] = (
+            [(None, candidate_id)] if candidate_id is not None else []
+        )
+        if state_id is not None:
+            expected.append((state_id, None))
+        for ctx_state, ctx_candidate in expected:
+            validity = self.validity_in(evidence_id, state_id=ctx_state, candidate_id=ctx_candidate)
+            if validity is not EvidenceValidity.VALID:
+                reasons.append(f"validity is {validity.value}, not VALID")
         if not rec.is_bound:
             reasons.append("evidence has no state/candidate binding")
         if state_id is not None and rec.state_id != state_id:

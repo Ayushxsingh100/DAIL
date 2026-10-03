@@ -221,8 +221,15 @@ class TestP2Gate(unittest.TestCase):
             candidate_id=c1.candidate_id,
             impact_report_ref=impact.evidence_id,
         )
-        # ... so the old PASS is no longer proof, even though it is still on record.
-        self.assertFalse(
+        # ... so the old PASS is INVALID for c1 (Doc 11 §7: "no longer valid for the referenced
+        # new-state context") ...
+        self.assertIs(
+            self.store.validity_in(self.baseline_func.evidence_id, candidate_id=c1.candidate_id),
+            EvidenceValidity.INVALID,
+        )
+        # ... but it still describes s0, and "a rejected candidate does not consume or rewrite the
+        # evidence attached to the active Trusted State" (Doc 06 §15; C-52): usable for s0.
+        self.assertTrue(
             self.store.usable_as_proof(
                 self.baseline_func.evidence_id, state_id=self.s0.state_id
             ).usable
