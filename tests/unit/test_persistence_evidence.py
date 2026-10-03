@@ -51,7 +51,7 @@ from tests.evidence_builders import (
     state_submission,
     submission,
 )
-from tests.persistence_builders import SAFE, SAFE_OTHER, Boom, RepoCase
+from tests.persistence_builders import SAFE, SAFE_OTHER, Boom, RepoCase, seed_evidence
 
 K = EvidenceKind
 V = EvidenceValidity
@@ -96,6 +96,9 @@ def supersession(n: int, old: str, new: str, reason: str = "re-verified") -> Sup
 
 class EvidenceCase(RepoCase):
     """A database with trusted state v0 (SSH open) and two candidates of it at ANALYZING."""
+
+    seed_bound = False
+    hide_seeded_evidence = True
 
     def setUp(self) -> None:
         super().setUp()
@@ -143,7 +146,11 @@ class TestAppendAndRead(EvidenceCase):
         sub = state_submission(1, self.v0, payload={"b": 1, "a": [2, 3]})
         self.append(sub)
         self.assertEqual(
-            self.scalar("SELECT payload_json FROM evidence_artifacts"), '{"a":[2,3],"b":1}'
+            self.scalar(
+                "SELECT payload_json FROM evidence_artifacts WHERE content_hash = ?",
+                (sub.event.content_hash,),
+            ),
+            '{"a":[2,3],"b":1}',
         )
 
     def test_unknown_evidence_is_none_and_a_transition_on_it_raises(self) -> None:
@@ -240,7 +247,9 @@ class TestAppendRules(EvidenceCase):
 
     def test_a2_an_artifact_that_exists_with_different_text_refuses_the_append(self) -> None:
         self.append(state_submission(1, self.v0, payload={"v": 1}))
-        digest = self.scalar("SELECT content_hash FROM evidence_artifacts")
+        digest = self.scalar(
+            "SELECT content_hash FROM evidence_events WHERE evidence_id = ?", (eid(1),)
+        )
         self.tamper(
             "UPDATE evidence_artifacts SET payload_json = ? WHERE content_hash = ?",
             ('{"v":2}', digest),
@@ -803,12 +812,14 @@ class TestDeferredStateForeignKey(EvidenceCase):
     def test_evidence_written_before_its_state_commits_with_it(self) -> None:
         with self.uow() as u:
             u.evidence.append(state_submission(1, self.new_state))
+            seed_evidence(u, self.new_state)
             u.trusted_states.save_baseline(self.new_state)
         self.assertEqual(self.count("evidence_events", "state_id = ?", (uid(0x77),)), 1)
         self.assertEqual(self.count("trusted_states", "state_id = ?", (uid(0x77),)), 1)
 
     def test_evidence_written_after_its_state_commits_with_it(self) -> None:
         with self.uow() as u:
+            seed_evidence(u, self.new_state)
             u.trusted_states.save_baseline(self.new_state)
             u.evidence.append(state_submission(1, self.new_state))
         self.assertEqual(self.count("evidence_events", "state_id = ?", (uid(0x77),)), 1)
@@ -824,6 +835,7 @@ class TestDeferredStateForeignKey(EvidenceCase):
     def test_evidence_and_its_state_are_rolled_back_together(self) -> None:
         with self.assertRaises(Boom), self.uow() as u:
             u.evidence.append(state_submission(1, self.new_state))
+            seed_evidence(u, self.new_state)
             u.trusted_states.save_baseline(self.new_state)
             raise Boom
         self.assertEqual(self.count("evidence_events"), 0)

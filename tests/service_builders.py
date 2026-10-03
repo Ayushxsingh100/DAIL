@@ -20,6 +20,9 @@ K = EvidenceKind
 
 
 class ServiceCase(RepoCase):
+    seed_bound = False
+    hide_seeded_evidence = True
+
     def setUp(self) -> None:
         super().setUp()
         self.svc = EvidenceService()

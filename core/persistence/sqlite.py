@@ -436,8 +436,32 @@ class _TrustedStates:
                 )
             self._s.hit("after_lineage_head_update")
 
+    def _check_evidence_exists(self, state: TrustedState) -> None:
+        """A5, DATA-INT-007 (C-47, C-60): every evidence id the state links to, in its
+        ``evidence_refs`` and in every invariant reference, must name stored evidence. Existence
+        only: whether the evidence has the right binding is P6's check (C-60). The database
+        repeats this in triggers."""
+        wanted = {
+            *state.evidence_refs,
+            *(e for ref in state.invariant_refs for e in ref.evidence_ids),
+        }
+        found = {
+            row[0]
+            for row in self._s.conn.execute(
+                "SELECT evidence_id FROM evidence_events WHERE evidence_id IN "
+                f"({', '.join('?' for _ in wanted)})",
+                tuple(wanted),
+            )
+        }
+        if wanted - found:
+            raise PersistenceError(
+                f"DATA-INT-007: trusted state {state.state_id} links to evidence that is not "
+                f"stored: {', '.join(sorted(wanted - found))}"
+            )
+
     def _insert_state(self, state: TrustedState) -> None:
         conn = self._s.conn
+        self._check_evidence_exists(state)
         conn.execute(
             "INSERT INTO trusted_states (state_id, lineage_id, version, parent_state_id, "
             "state_hash, commit_decision_id, content_json) VALUES (?, ?, ?, ?, ?, ?, ?)",

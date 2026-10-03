@@ -157,6 +157,9 @@ SCHEMA_5_TRIGGERS = {
     "evidence_supersessions_insert_same_binding",
     "evidence_supersessions_insert_open",
     "evidence_supersessions_insert_new_valid",
+    # T5, DATA-INT-007 (C-47, C-60): evidence references must name stored evidence
+    "trusted_states_insert_evidence_refs",
+    "invariant_refs_insert_evidence_ids",
 }
 SCHEMA_5_INDEXES = 8
 

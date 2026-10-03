@@ -632,6 +632,34 @@ def _primary_validity(evidence: str) -> str:
     )
 
 
+def _data_int_007_triggers() -> list[str]:
+    """T5, DATA-INT-007 (Doc 05 §22; C-47, C-60): "Evidence references must point to existing
+    records." Every id in a stored trusted state's ``evidence_refs`` and in every
+    ``invariant_refs.evidence_ids`` must exist in ``evidence_events``. P2 checks existence only;
+    whether the evidence has the right binding is checked in P6 (C-60)."""
+    return [
+        _trigger(
+            "trusted_states_insert_evidence_refs",
+            "BEFORE INSERT",
+            "trusted_states",
+            "DATA-INT-007: every evidence reference of a trusted state must name stored "
+            "evidence",
+            "EXISTS (SELECT 1 FROM json_each(json_extract(NEW.content_json, "
+            "'$.evidence_refs')) j WHERE NOT EXISTS (SELECT 1 FROM evidence_events e "
+            "WHERE e.evidence_id = j.value))",
+        ),
+        _trigger(
+            "invariant_refs_insert_evidence_ids",
+            "BEFORE INSERT",
+            "invariant_refs",
+            "DATA-INT-007: every evidence id of an invariant reference must name stored "
+            "evidence",
+            "EXISTS (SELECT 1 FROM json_each(NEW.evidence_ids) j WHERE NOT EXISTS "
+            "(SELECT 1 FROM evidence_events e WHERE e.evidence_id = j.value))",
+        ),
+    ]
+
+
 def _evidence_triggers() -> tuple[str, ...]:
     triggers: list[str] = []
 
@@ -791,6 +819,7 @@ def _evidence_triggers() -> tuple[str, ...]:
             "AND t.evidence_id IN (NEW.old_evidence_id, NEW.new_evidence_id))",
         )
     )
+    triggers.extend(_data_int_007_triggers())
     triggers.append(
         _trigger(
             "evidence_supersessions_insert_new_valid",

@@ -34,7 +34,7 @@ from tests.evidence_builders import (
     supersession_request,
     transition_request,
 )
-from tests.persistence_builders import SAFE, SAFE_OTHER, RepoCase
+from tests.persistence_builders import SAFE, SAFE_OTHER, RepoCase, seed_evidence
 
 K = EvidenceKind
 V = EvidenceValidity
@@ -69,6 +69,9 @@ class TestGoldenHash(unittest.TestCase):
 
 
 class SchemaCase(RepoCase):
+    seed_bound = False
+    hide_seeded_evidence = True
+
     """v0, two ANALYZING candidates c1 and c2, and (after ``add_evidence``) nine records:
 
     E1 VERIFICATION about v0       E2 IMPACT for c1        E3 VERIFICATION about v0, UNCERTAIN
@@ -507,6 +510,7 @@ class TestT2CandidateBinding(SchemaCase):
         super().setUp()
         self.other_state = baseline(state_id=uid(0x77), lineage_id=uid(0xCC))
         with self.uow() as u:
+            seed_evidence(u, self.other_state)
             u.trusted_states.save_baseline(self.other_state)
 
     def test_matching_parent_and_hash_are_accepted(self) -> None:

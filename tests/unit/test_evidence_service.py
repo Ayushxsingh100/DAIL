@@ -34,6 +34,7 @@ from evidence.ids import CorrelationContext
 from evidence.service import EvidenceService
 from tests.domain_builders import at, baseline, uid
 from tests.evidence_builders import prov
+from tests.persistence_builders import seed_evidence
 from tests.service_builders import ServiceCase
 
 K = EvidenceKind
@@ -692,6 +693,7 @@ class TestRecord(ServiceCase):
                 state_id=new_state.state_id,
                 state_hash=new_state.state_hash,
             )
+            seed_evidence(u, new_state)
             u.trusted_states.save_baseline(new_state)
         self.assertEqual(self.count("evidence_events", "state_id = ?", (uid(0x77),)), 1)
 
