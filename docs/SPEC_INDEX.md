@@ -29,6 +29,8 @@ which document to consult for a given decision.
 - [`BUILD_SEQUENCE.md`](BUILD_SEQUENCE.md) — the 18 work packages and their order.
 - [`DECISIONS_REGISTER.md`](DECISIONS_REGISTER.md) — recorded conflicts and their resolutions.
 - The TerraPreserve D0 dataset specification (research project; implemented in the TerraPreserve repository).
+- [`docs/specs/INVARIANT_REGISTRY_v1.md`](specs/INVARIANT_REGISTRY_v1.md) — the four protected invariants: exact predicates, results, footprints and conformance vectors (C-17). Normative for P4, P5, D4 and D5.
+- [`docs/specs/D0_AMENDMENTS_v1.0.1.md`](specs/D0_AMENDMENTS_v1.0.1.md) — amends TerraPreserve D0 v1.0 (N-03, N-04, N-08; gt_class; canonical topology).
 
 ## Precedence
 
