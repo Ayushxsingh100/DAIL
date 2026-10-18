@@ -5,7 +5,7 @@ LLM-Generated Terraform Infrastructure States.**
 
 This repository implements DAIL: a Terraform-specific, stateful
 remediation-control mechanism that treats previously verified infrastructure
-properties as protected obligations across iterative state transitions. See
+properties  protected obligations across iterative state transitions. See
 the paper (`DAIL_Paper_LaTeX.tex`, in the research repo) for the full
 mechanism, formal model, and evaluation methodology.
 
