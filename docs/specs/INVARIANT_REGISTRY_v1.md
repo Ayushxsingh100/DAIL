@@ -11,7 +11,7 @@
 
 **Markers.**
 - **[PAPER]** marks a semantic choice the paper must state; show these to the advisor.
-- **[TO VERIFY AT D1]** marks a Terraform or AWS behaviour not yet confirmed against the pinned Terraform and AWS provider versions.
+- **[TO VERIFY AT D1]** marked a Terraform or AWS behaviour not yet confirmed against the pinned Terraform and AWS provider versions. D1 Prompt C resolved every such marker (23 Oct 2026). Each is now **[VERIFIED AT D1: CONFIRMED or CHANGED (item)]**, or **[OPEN AFTER D1: UNRESOLVED (item)]** when it could not be settled, with a link to the evidence in `RESOLUTION.md` at a pinned TerraPreserve commit (§12).
 
 **Normative words.** MUST, MUST NOT and MAY are used in the RFC 2119 sense.
 
@@ -66,7 +66,7 @@ An attribute is **resolved** when its value can be determined from the configura
 
 **Moves.**
 - Explicit `moved` blocks MUST be followed when comparing two configurations.
-- Terraform's implicit move when `count` is added to or removed from a single-instance resource MUST be followed too. [TO VERIFY AT D1: the implicit-move rules for `count` and `for_each` in the pinned Terraform version.]
+- Terraform's implicit move when `count` is added to or removed from a single-instance resource MUST be followed too. [VERIFIED AT D1: CONFIRMED (V10): Terraform 1.15.8 moves `x` to `x[0]` when `count` is added and `x[0]` back to `x` when `count` is removed. It does not move implicitly into or out of `for_each`, or between `count` and `for_each`; those need `moved` blocks. [RES V10][d1-res]. New fact recorded as C-76.]
 
 ### 2.4 Result values and combination
 
@@ -81,11 +81,11 @@ Each invariant section defines how its sub-results combine, because existential 
 ### 2.5 CIDRs and protocols
 
 **CIDRs.**
-- IPv4 and IPv6 CIDRs are parsed strictly. A CIDR that is syntactically invalid, or has host bits set, makes the rule containing it UNSUPPORTED. [TO VERIFY AT D1: the provider rejects host-bit CIDRs at validation.]
+- IPv4 and IPv6 CIDRs are parsed strictly. A CIDR that is syntactically invalid, or has host bits set, makes the rule containing it UNSUPPORTED. [VERIFIED AT D1: CONFIRMED (V08): `terraform validate` rejects host-bit and malformed IPv4 and IPv6 CIDRs in `aws_security_group_rule`, in inline `aws_security_group` rules and in `aws_vpc.cidr_block`. [RES V08][d1-res].]
 - Order and duplicates inside CIDR lists never matter (Doc 04 §8.1).
 - "Covers" means set containment of address ranges. A list of CIDRs covers a range R when the union of the listed ranges contains R.
 
-**Protocols.** `protocol` is compared case-insensitively. [TO VERIFY AT D1: the provider accepts upper-case values.] It canonicalises as:
+**Protocols.** `protocol` is compared case-insensitively. [VERIFIED AT D1: CONFIRMED (V09): upper-case values are accepted; the plan JSON shows the normalised lower-case name (`-1` for all, a name for a protocol number). [RES V09][d1-res]. See C-75.] It canonicalises as:
 
 | Configured value | Canonical | Ports |
 |---|---|---|
@@ -102,7 +102,7 @@ For TCP, `from_port > to_port` makes the rule UNSUPPORTED.
 
 ### 2.6 Canonical security-group rule set
 
-AWS security groups contain **allow rules only**; there are no deny rules. [TO VERIFY AT D1: cite the AWS security-group documentation.] Adding a rule can only widen what a group permits. §3 and §6 depend on this.
+AWS security groups contain **allow rules only**; there are no deny rules. [VERIFIED AT D1: CONFIRMED (V11): Amazon VPC User Guide, "Security group rules": "You can specify allow rules, but not deny rules." [RES V11][d1-res].] Adding a rule can only widen what a group permits. §3 and §6 depend on this.
 
 **Rule sets.** For each configured `aws_security_group` instance *g*:
 - `In(g)` is *g*'s inline `ingress` blocks, plus every `aws_security_group_rule` with `type = "ingress"` whose `security_group_id` resolves to a reference to *g*.
@@ -125,9 +125,9 @@ AWS security groups contain **allow rules only**; there are no deny rules. [TO V
 
 **Unresolved targets.** An `aws_security_group_rule` whose `security_group_id` is external or unresolved belongs to a pseudo-group keyed by that value: the literal ID, or `UNRESOLVED:<rule address>`.
 
-**MIXED groups.** A group *g* is **MIXED** when it has at least one inline rule block (ingress or egress) and is also the target of at least one `aws_security_group_rule`. The provider documents that combining the two forms on one group causes conflicting rule management, so the applied rule set is not determined by the configuration. [TO VERIFY AT D1: the provider documentation for the pinned version.]
+**MIXED groups.** A group *g* is **MIXED** when it has at least one inline rule block (ingress or egress) and is also the target of at least one `aws_security_group_rule`. The provider documents that combining the two forms on one group causes conflicting rule management, so the applied rule set is not determined by the configuration. [VERIFIED AT D1: CONFIRMED (X01): provider documentation v6.53.0 (`security_group`, `security_group_rule`): combining inline rules with `aws_security_group_rule` "may cause rule conflicts, perpetual differences, and result in rules being overwritten". [RES X01][d1-res].]
 
-**Default egress.** When Terraform creates a security group inside a VPC, it removes AWS's default allow-all egress rule. `Out(g)` is therefore exactly what the configuration declares, and may be empty. This comes from the provider's `aws_security_group` documentation (note on egress rules). [TO VERIFY AT D1: the same note for the pinned provider version.]
+**Default egress.** When Terraform creates a security group inside a VPC, it removes AWS's default allow-all egress rule. `Out(g)` is therefore exactly what the configuration declares, and may be empty. This comes from the provider's `aws_security_group` documentation (note on egress rules). [VERIFIED AT D1: CONFIRMED (V06): the note is in the v6.53.0 documentation and the create function revokes the default IPv4 and IPv6 egress rules. Documentary evidence only; this cannot be observed without `apply`. [RES V06][d1-res].]
 
 ### 2.7 Unsupported constructs
 
@@ -139,7 +139,7 @@ A resource type outside §1.3 changes a result only if it appears in the invaria
 | INV-SEC-003 | none |
 | INV-FUNC-001 | `aws_vpc_security_group_ingress_rule`, `aws_vpc_security_group_egress_rule`, `aws_default_security_group`, `aws_network_interface`, `aws_network_interface_attachment`, `aws_network_interface_sg_attachment`, `aws_network_acl`, `aws_network_acl_rule`, `aws_network_acl_association`, `aws_default_network_acl`, `aws_route`, `aws_default_route_table`, `aws_main_route_table_association`, `aws_vpc_ipv4_cidr_block_association`, `aws_vpc_peering_connection`, `aws_ec2_transit_gateway_vpc_attachment`, `aws_vpc_endpoint` |
 
-[TO VERIFY AT D1: complete both lists against the pinned provider's resource index. Any further resource that creates security-group rules, attaches security groups, filters subnet traffic or adds routes inside a VPC must be added before the freeze.]
+[VERIFIED AT D1: CHANGED (V12, heuristic): the lists are not shown to be complete. A keyword heuristic over the 1,678 resource types of provider 6.53.0 lists candidates the authors must decide on before the freeze, for example `aws_vpc_security_group_rules_exclusive`, `aws_vpc_security_group_vpc_association`, `aws_vpn_gateway_route_propagation`, `aws_vpc_route_server_propagation` and `aws_default_subnet`. The lists above are unchanged. [RES V12][d1-res]. See C-74 and C-78.]
 
 **Tolerated type.** `aws_db_subnet_group` is tolerated, not relevant, under C-15 and §6.2. RDS placement is taken from the RDS security groups' VPC, and the subnet group's subnets are not modelled. The evidence MUST record this assumption.
 
@@ -237,7 +237,7 @@ The evidence reports the IPv4 and IPv6 clauses separately (C-13).
 3.7 **Checkov (advisory only, C-12).**
 - `CKV_AWS_24`, "Ensure no security groups allow ingress from 0.0.0.0:0 to port 22". Checkov's policy index lists it for `aws_security_group` and `aws_security_group_rule`.
 - Checkov tests a single rule's CIDR, not the union of a group's rules, and has no IPv6 clause here. Disagreements are therefore expected, are recorded, and never change a result.
-- [TO VERIFY AT D1: the semantics in the pinned Checkov version.]
+- [VERIFIED AT D1: CHANGED (V04): Checkov 3.3.30 also scans `aws_vpc_security_group_ingress_rule`, tests `::/0` (but not for that resource), and ignores the protocol unless it is `-1`. The first bullet (resource list) and the words "has no IPv6 clause here" above are affected; both are left as written. [RES V04][d1-res]. See C-73.]
 
 ---
 
@@ -249,7 +249,7 @@ The evidence reports the IPv4 and IPv6 clauses separately (C-13).
 
 4.3 **Why it exists.** It catches the regression D0 Decision 4 describes: a "repair" that restores INV-FUNC-001 by opening 5432 to the internet.
 
-4.4 **Checkov.** No Checkov policy dedicated to port 5432 was found in the policy listings searched for this draft. [TO VERIFY AT D1 against the pinned Checkov version. If none exists, record "none; custom predicate only" (C-14).]
+4.4 **Checkov.** No Checkov policy dedicated to port 5432 was found in the policy listings searched for this draft. [VERIFIED AT D1: CONFIRMED (V02): none; custom predicate only (C-14). No Checkov 3.3.30 check mentions port 5432, and no check distinguishes a public from a private 5432 rule. [RES V02][d1-res].]
 
 ---
 
@@ -258,7 +258,7 @@ The evidence reports the IPv4 and IPv6 clauses separately (C-13).
 5.1 **Identity.** `INV-SEC-003`, version 1. Name: "RDS not publicly accessible". Category SECURITY.
 
 5.2 **Statement and predicate.** For every configured `aws_db_instance` instance *d*, `publicly_accessible(d)` is false.
-- An absent attribute is false. The provider default is `false`; the provider schema and third-party rule documentation agree. [TO VERIFY AT D1 against the pinned provider version.]
+- An absent attribute is false. The provider default is `false`; the provider schema and third-party rule documentation agree. [VERIFIED AT D1: CONFIRMED (V05): `Default: false` in the v6.53.0 source; the plan JSON shows `false` for an unset attribute. [RES V05][d1-res]. See C-75.]
 - With zero `aws_db_instance` instances the predicate holds vacuously. The evidence records the count, 0.
 
 5.3 **Results.**
@@ -279,7 +279,7 @@ The evidence reports the IPv4 and IPv6 clauses separately (C-13).
 
 5.6 **Checkov (advisory).**
 - Candidate: `CKV_AWS_17`. The policy index lists it for `aws_db_instance` as data "not public accessible".
-- [TO VERIFY AT D1: that it tests `publicly_accessible` in the pinned version.]
+- [VERIFIED AT D1: CONFIRMED (V03): `CKV_AWS_17` inspects `publicly_accessible` and FAILs only on `true`; absent PASSes; an unresolved reference gives no result. It also scans `aws_rds_cluster_instance`. [RES V03][d1-res].]
 
 ---
 
@@ -296,7 +296,7 @@ For example, `S = aws_instance.app` and `D = aws_db_instance.database`. Endpoint
 **[PAPER]** A PASS means the configuration-level prerequisites hold within this model (Doc 09 §9). It does not mean packets flow at runtime.
 
 6.2 **Network model** (C-15, made precise):
-- **M1, RDS network context.** `VPC(D)` is the VPC that all of `D`'s security groups (`vpc_security_group_ids`) belong to. RDS subnets are not modelled. `aws_db_subnet_group` is tolerated (§2.7). The assumption, recorded in evidence, is that AWS requires the instance's security groups and its subnet group to be in the same VPC. [TO VERIFY AT D1: cite the AWS RDS documentation for this requirement.]
+- **M1, RDS network context.** `VPC(D)` is the VPC that all of `D`'s security groups (`vpc_security_group_ids`) belong to. RDS subnets are not modelled. `aws_db_subnet_group` is tolerated (§2.7). The assumption, recorded in evidence, is that AWS requires the instance's security groups and its subnet group to be in the same VPC. [OPEN AFTER D1: UNRESOLVED (X02): no AWS RDS page read states the requirement, and AWS documents a Security Group VPC Association feature under which a group can serve resources in other VPCs. M1 stays an uncited assumption. [RES X02][d1-res]. See C-77.]
 - **M2, EC2 placement.** `VPC(S)` is the `vpc_id` of the configured `aws_subnet` that `S.subnet_id` references.
 - **M3, intra-VPC routing.** Routing inside a VPC is the VPC **local route**. AWS documents that the local route cannot be deleted, but **its target can be replaced, and more-specific routes can redirect east–west traffic to a middlebox** (network interface, Gateway Load Balancer endpoint or NAT gateway). Such routing is not modelled. Therefore **any route in any `aws_route_table` of `VPC(D)` whose destination is contained in the VPC CIDR and whose target is not `local` makes the result UNSUPPORTED.** Routes whose destination is wider than the VPC CIDR (for example `0.0.0.0/0` to an internet gateway) never apply to intra-VPC traffic, because the most specific route wins. **[PAPER]**
 - **M4, network ACLs.** Network ACLs are not modelled. When no NACL-related type from §2.7 is present, every subnet is assumed to use the default network ACL, which AWS documents as allowing all inbound and outbound traffic. That assumption is recorded in evidence. If any NACL-related type is present, the result is UNSUPPORTED (§2.7).
@@ -307,7 +307,7 @@ For example, `S = aws_instance.app` and `D = aws_db_instance.database`. Endpoint
 ```
 E1  S and D both exist in the configuration.
 E2  The listener port: D.port, if set, equals 5432; if D.port is absent, D.engine is
-    "postgres". [TO VERIFY AT D1: the RDS default port for the postgres engine is 5432.]
+    "postgres". [VERIFIED AT D1: CONFIRMED (V07): AWS CreateDBInstance documents 5432 for RDS for PostgreSQL. The provider sets no default, so the plan JSON shows an unset `port` as unknown. [RES V07][d1-res]. See C-75.]
 E3  D has a non-empty, resolved vpc_security_group_ids. Each entry references a configured
     aws_security_group with a resolved vpc_id, and they all share one VPC(D).
 E4  S has a resolved subnet_id that references a configured aws_subnet, and VPC(S) = VPC(D).
@@ -373,9 +373,9 @@ E7  M3 and M4 hold: no intra-VPC non-local route and no NACL-related type.
 
 ## 7. Spec consistency notes (for the register; not part of the predicates)
 
-7.1 **Doc 04 §7.6** lists `security_group_ids` for `aws_instance`. The provider's VPC-placement argument is `vpc_security_group_ids`; `security_groups` takes names. [TO VERIFY AT D1. If confirmed, raise a Doc 04 errata row.]
+7.1 **Doc 04 §7.6** lists `security_group_ids` for `aws_instance`. The provider's VPC-placement argument is `vpc_security_group_ids`; `security_groups` takes names. [VERIFIED AT D1: CONFIRMED (V13): `aws_instance` has no `security_group_ids`; `vpc_security_group_ids` holds IDs and `security_groups` holds names. Doc 04 errata row: C-79. [RES V13][d1-res].]
 
-7.2 **Doc 04 §7.8** lists `security_group_id(s)` as the SG-to-SG source field of `aws_security_group_rule`. The provider argument is `source_security_group_id`. [TO VERIFY AT D1.]
+7.2 **Doc 04 §7.8** lists `security_group_id(s)` as the SG-to-SG source field of `aws_security_group_rule`. The provider argument is `source_security_group_id`. [VERIFIED AT D1: CONFIRMED (V14): `source_security_group_id` is the source; `security_group_id` is required and names the rule's own group. Doc 04 errata row: C-80. [RES V14][d1-res].]
 
 7.3 **Doc 09 §8 versus §3.3.** Doc 09 §8 scopes INV-SEC-001 to the protected workload; this registry uses every group (C-64). Doc 08 §14's example path (security-group change → EC2 → invariant) is therefore not relevant to SEC-001 v1. That path only affects DAIL's impact precision, not safety.
 
@@ -461,15 +461,18 @@ The oracle uses its own IDs under the `tp.oracle.` prefix. Oracle results are L2
 
 ## 12. Open items
 
-**[TO VERIFY AT D1]**, against the pinned Terraform, AWS provider and Checkov versions:
-- §2.3: implicit moves for `count` and `for_each`.
-- §2.5: host-bit CIDRs rejected; upper-case protocols accepted.
-- §2.6: AWS security groups are allow-only (cite); the warning against mixing inline and separate rules; the default-egress removal note.
-- §2.7: complete the relevant-unsupported lists.
-- §5.2: `publicly_accessible` defaults to `false`.
-- §6.2 M1: the requirement that an RDS instance's security groups and subnet group share a VPC.
-- §6.3 E2: the postgres default port is 5432.
-- §3.7, §4.4, §5.6: Checkov semantics and IDs.
-- §7.1–7.2: Doc 04 field-name errata.
+**Resolved at D1 (23 Oct 2026)** against Terraform 1.15.8, AWS provider 6.53.0 and Checkov 3.3.30. Evidence: [RESOLUTION.md at terrapreserve commit `ff70de82622b7d275bbf0f2490f0ce521786246e`][d1-res].
+- §2.3: implicit moves for `count` and `for_each`. CONFIRMED (V10); new fact C-76.
+- §2.5: host-bit CIDRs rejected (V08, CONFIRMED); upper-case protocols accepted (V09, CONFIRMED); plan-JSON facts C-75.
+- §2.6: allow-only (V11), mixing warning (X01) and default-egress removal (V06): all CONFIRMED.
+- §2.7: relevant-unsupported lists. CHANGED (V12, heuristic): candidates for the authors, C-74 and C-78. The lists are unchanged.
+- §5.2: `publicly_accessible` defaults to `false`. CONFIRMED (V05).
+- §6.2 M1: RDS security groups and subnet group share a VPC. UNRESOLVED (X02); C-77.
+- §6.3 E2: the postgres default port is 5432. CONFIRMED (V07); the plan JSON shows an unset port as unknown (C-75).
+- §3.7: Checkov `CKV_AWS_24` semantics. CHANGED (V04); C-73. §4.4: none, custom predicate only. CONFIRMED (V02). §5.6: `CKV_AWS_17`. CONFIRMED (V03).
+- §7.1–7.2: Doc 04 field-name errata. CONFIRMED (V13, V14); C-79 and C-80.
+- Oracle input path (D0 amendments A3.4): an offline plan works (V01, CONFIRMED); C-75 lists what is unknown in the plan JSON.
 
 **Advisor confirmation** is needed for the [PAPER] items: §1.2, §2.7, §3.3, §6.1, §6.2 M3, and §6.4 rows 7–8.
+
+[d1-res]: https://github.com/Ayushxsingh100/terrapreserve/blob/ff70de82622b7d275bbf0f2490f0ce521786246e/validation/d1_to_verify/RESOLUTION.md

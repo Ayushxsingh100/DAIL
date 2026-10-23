@@ -10,7 +10,7 @@
 Each amendment gives a decision and its reason, in D0's style.
 - **[PAPER]** marks a change the paper must reflect; show these to the advisor.
 - **[ADVISOR]** marks a decision that needs the advisor's agreement.
-- **[TO VERIFY]** marks a fact still to be checked, and says when.
+- **[TO VERIFY]** marks a fact still to be checked, and says when. Markers due at D1 were resolved on 23 Oct 2026 and now read **[VERIFIED AT D1: CONFIRMED or CHANGED (item)]** or **[OPEN AFTER D1: UNRESOLVED (item)]**; see `INVARIANT_REGISTRY_v1.md` §12.
 
 ---
 
@@ -96,8 +96,8 @@ truth_recall     = |M ∩ truth_changed|   / |truth_changed|          must be 10
 
 | Option | What it can establish | Cost risk | Trade-offs |
 |---|---|---|---|
-| **(a) New AWS account on the Free plan** | Real deployment, real security-group and route behaviour, live TCP tests; possibly Reachability Analyzer | None on the Free plan (no charges until upgrade, per AWS) | Six months and the credit cap; which services the Free plan allows [TO VERIFY before step 17: EC2, RDS and VPC Reachability Analyzer eligibility]; sign-up identity and payment verification [TO VERIFY]; strict teardown needed; one account per person, so a second attempt is impossible |
-| **(b) Local AWS emulator** (LocalStack Hobby, or MIT-licensed alternatives such as MiniStack, Floci, LocalEmu) | API acceptance and deployability of the configuration only | None | LocalStack Hobby is non-commercial only (whether research use qualifies is [TO VERIFY]), and whether it includes EC2 and RDS is [TO VERIFY]. The alternatives' EC2/RDS claims are third-party and unverified. **Emulators are not known to enforce security-group, route or NACL semantics at packet level, nor to implement Reachability Analyzer [TO VERIFY per tool], so they cannot calibrate INV-FUNC-001.** |
+| **(a) New AWS account on the Free plan** | Real deployment, real security-group and route behaviour, live TCP tests; possibly Reachability Analyzer | None on the Free plan (no charges until upgrade, per AWS) | Six months and the credit cap; which services the Free plan allows [OPEN AFTER D1: UNRESOLVED (X03), still due before step 17: EC2, RDS and VPC Reachability Analyzer eligibility; not a pinned-version fact and not checked in D1. [RES X03][d1-res]]; sign-up identity and payment verification [OPEN AFTER D1: UNRESOLVED (X03)]; strict teardown needed; one account per person, so a second attempt is impossible |
+| **(b) Local AWS emulator** (LocalStack Hobby, or MIT-licensed alternatives such as MiniStack, Floci, LocalEmu) | API acceptance and deployability of the configuration only | None | LocalStack Hobby is non-commercial only (whether research use qualifies is [OPEN AFTER D1: UNRESOLVED (X04)]), and whether it includes EC2 and RDS is [OPEN AFTER D1: UNRESOLVED (X04)]. The alternatives' EC2/RDS claims are third-party and unverified. **Emulators are not known to enforce security-group, route or NACL semantics at packet level, nor to implement Reachability Analyzer [OPEN AFTER D1: UNRESOLVED (X04), per tool; [RES X04][d1-res]], so they cannot calibrate INV-FUNC-001.** |
 | **(c) Offline only** | Nothing at runtime | None | Requires a stated limitation: labels are model truth under the registry. Validity rests on two diverse implementations (DAIL and the oracle), adjudication, and the hand-checked canonical fixtures. |
 
 **Recommendation.**
@@ -108,7 +108,7 @@ truth_recall     = |M ∩ truth_changed|   / |truth_changed|          must be 10
 **Why.** Only (a) produces L3 evidence (Doc 09 §10). Under (c), D0 Decision 3's "calibrated against AWS" language and the plan's "Reachability Analyzer plus live TCP" calibration must be reworded.
 
 **A3.4 Oracle input path risk.** D5 currently says the oracle reads `terraform show -json <planfile>`. Producing a plan normally needs provider credentials and API calls.
-- [TO VERIFY AT D1: whether a plan can be produced offline for these nine types, with mock credentials and the provider's skip flags, without data sources.]
+- [VERIFIED AT D1: CONFIRMED (V01): a plan for all nine types plus `aws_db_subnet_group` is produced offline with mock credentials in environment variables and the four `skip_*` flags, and `terraform show -json` lists every resource. Many values are unknown in the plan JSON (every `id` reference, `port` when unset, inline `ingress`/`egress` when not configured); wiring must be read from its `configuration` section. [RES V01][d1-res]. See C-75.]
 - If it cannot, the oracle's input path changes to a second HCL parser that is not DAIL's. The input path stays different from DAIL's (ADR-010), and N-08 stays satisfied.
 
 ---
@@ -132,8 +132,8 @@ The registry is the **only** artefact the two implementations share. Oracle resu
 | ID | Property | Checkov (advisory only, C-12) |
 |---|---|---|
 | INV-SEC-001 | No group's TCP/22 ingress CIDRs together cover `0.0.0.0/0`, and none cover `::/0` (IPv6 clause reported separately) | `CKV_AWS_24` (single-rule check; differences recorded) |
-| INV-SEC-002 | Same for TCP/5432 | None found yet [TO VERIFY AT D1] |
-| INV-SEC-003 | `aws_db_instance.publicly_accessible` is false (absent counts as false) | Candidate `CKV_AWS_17` [TO VERIFY AT D1] |
+| INV-SEC-002 | Same for TCP/5432 | None; custom predicate only [VERIFIED AT D1: CONFIRMED (V02); [RES V02][d1-res]] |
+| INV-SEC-003 | `aws_db_instance.publicly_accessible` is false (absent counts as false) | `CKV_AWS_17` [VERIFIED AT D1: CONFIRMED (V03); [RES V03][d1-res]] |
 | INV-FUNC-001 | Configuration-level EC2 → RDS TCP/5432, registry §6 | None (custom) |
 
 The scope is every security group, attached or not (registry C-64). Semantics, footprints and conformance vectors are in the registry.
@@ -183,3 +183,5 @@ For change-request families (F1, F5, F7) there is no target. The "final target" 
 | C-72 | `gt_class` definition and exclusion of indeterminate scenarios; gate 11 (A7). | Accepted (pending advisor) |
 
 The status of N-03 and N-04 changes to "Resolved by C-69 / C-70 (step 4)". N-08 stays Accepted, and C-71 records the route decisions still open under it.
+
+[d1-res]: https://github.com/Ayushxsingh100/terrapreserve/blob/ff70de82622b7d275bbf0f2490f0ce521786246e/validation/d1_to_verify/RESOLUTION.md
