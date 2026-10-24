@@ -426,8 +426,10 @@ class TestLimits(DirectoryCase):
         self.assertEqual(self.load({"main.tf": at_limit}).status, OK)
         beyond = at_limit + "#"
         with tempfile.TemporaryDirectory() as directory:
-            Path(directory, "main.tf").write_text(beyond, encoding="utf-8")
+            # write_bytes: text mode would turn the newline into CRLF on Windows (one byte more)
+            Path(directory, "main.tf").write_bytes(beyond.encode("utf-8"))
             outcome = load_configuration(Path(directory))
+        self.assertEqual(len(beyond.encode("utf-8")), MAX_FILE_BYTES + 1)
         self.assertEqual(outcome.status, UNSUPPORTED)
         self.assertIsNone(outcome.configuration)
         self.assertEqual(self.codes(outcome), ["limit.file_size"])

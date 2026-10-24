@@ -34,7 +34,8 @@ Where Terraform restricts HCL further (top-level block types, labels, meta-argum
 
 **Consequences.**
 
-- Fidelity risk: a grammar rule that differs from Terraform's own parser could accept invalid input or reject valid input. Mitigations: hand-written conformance cases whose expected trees come from the spec text, CI `terraform validate` on every fixture, and a planned cross-check on a TerraDS sample (P3a-2 or D3). Spec ambiguities are recorded in `DECISIONS_REGISTER.md`.
+- Fidelity risk: a grammar rule that differs from Terraform's own parser could accept invalid input or reject valid input. Mitigations: hand-written conformance cases whose expected trees come from the spec text, CI `terraform validate` on every fixture, and a planned cross-check on a TerraDS sample (P3a-2 or D3). Spec ambiguities and the differences found against Terraform 1.15.8 are recorded in `DECISIONS_REGISTER.md` (C-95); further Terraform structural rules and block types in C-96; the raw-byte file hash in C-97.
+- What `OK` means in P3a-1: valid HCL, valid structure for the rules of C-94 and C-96, inside the input subset and limits. It does not mean that Terraform would accept the configuration: the rules listed as not enforced in C-96 are left to later work and to the CI `terraform validate` of the fixtures.
 - Pure Python is slow on large modules; the limits bound the cost.
 - The immutable syntax tree and the `ParseOutcome` that wraps it are the only inputs to P3a-2. `OK` is a trust claim, so `ParseOutcome` and `ParsedConfiguration` can be built only by the loader.
 
