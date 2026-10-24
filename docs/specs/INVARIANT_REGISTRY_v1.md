@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Status** | DRAFT for review (step 4 of 29), 4 Oct 2026. Becomes normative when merged under `docs/specs/`. |
-| **Register** | Implements C-17. Decisions proposed here are listed in §11 (C-64 onward). |
+| **Status** | Normative. Frozen as git tag `registry-v1.0` on the commit that merges this version (C-85). Changes after the tag go in a new file (§1.4). |
+| **Register** | Implements C-17. Decisions proposed here are listed in §11 (C-64 onward). Decisions recorded on 24 Oct 2026 (D2 step 6): C-74, C-76, C-77, C-78, C-84, C-85. |
 | **Registry version** | `invariant_registry_version = 1`. Every invariant below is `version = 1`. |
 | **Readers** | DAIL verifiers (P5), DAIL impact analysis (P4), the TerraPreserve generator (D4), the independent oracle (D5, ADR-010), the paper. |
 
@@ -11,6 +11,7 @@
 
 **Markers.**
 - **[PAPER]** marks a semantic choice the paper must state; show these to the advisor.
+- **[DECIDED date, C-NN]** marks an authors' decision on a D1 finding, recorded in the register row named.
 - **[TO VERIFY AT D1]** marked a Terraform or AWS behaviour not yet confirmed against the pinned Terraform and AWS provider versions. D1 Prompt C resolved every such marker (23 Oct 2026). Each is now **[VERIFIED AT D1: CONFIRMED or CHANGED (item)]**, or **[OPEN AFTER D1: UNRESOLVED (item)]** when it could not be settled, with a link to the evidence in `RESOLUTION.md` at a pinned TerraPreserve commit (§12).
 
 **Normative words.** MUST, MUST NOT and MAY are used in the RFC 2119 sense.
@@ -27,8 +28,10 @@
 
 1.4 **Versioning rule.**
 - Any change to an invariant's predicate, scope, footprint (§2.9) or result conditions creates a new invariant version and increments `invariant_registry_version`.
-- A change of wording only, with identical results on every input, creates neither.
-- The registry is frozen together with D0, before D4 starts.
+- A change of wording only, with identical results on every input, creates no new invariant version. After the tag it still needs a new registry file and increments `invariant_registry_version` (C-85).
+- The registry is frozen by the tag `registry-v1.0` (C-85). The D0 amendments are frozen separately, before D4 starts.
+- **Tagging (C-85).** This version is identified by the git tag `registry-v1.0`. After the tag this file is never edited. Any change is a new file (`INVARIANT_REGISTRY_v1.1.md`, and so on) that increments `invariant_registry_version`, and increments `invariant_version` for each invariant whose predicate, scope, footprint or result conditions change (Doc 06 §4.2). A wording-only change still needs a new file but bumps no `invariant_version`. Fixtures, the oracle and evidence cite the tag.
+- **Edits before the tag.** C-74, C-76, C-77, C-78 and C-84 changed result conditions before the tag, and every invariant stays at version 1. This is allowed because nothing had consumed version 1 yet: no fixture, oracle label or verification evidence cited its semantics.
 
 ---
 
@@ -39,6 +42,8 @@
 The input is one Terraform root-module configuration directory together with the scenario's variable values. It is evaluated with the pinned Terraform and AWS provider versions; ADR-013 requires these pins to be identical in both repositories.
 
 An implementation MAY read HCL directly, or the JSON plan representation (`terraform show -json`). Both MUST yield the resolved values defined in §2.2. The oracle uses a different input path from DAIL (ADR-010). Neither path's convenience may change a result defined here.
+
+**Parent.** A candidate is evaluated together with its parent: the configuration of the Trusted State it was generated from (ADR-012). A baseline has no parent. The parent is read only by the inline-rule retention rule (§2.6, C-84); every other result definition (§3 to §6) reads the evaluated configuration alone. When TerraPreserve labels a trajectory, the parent of step k is step k − 1, which need not be a Trusted State.
 
 ### 2.2 Resolved values
 
@@ -67,6 +72,7 @@ An attribute is **resolved** when its value can be determined from the configura
 **Moves.**
 - Explicit `moved` blocks MUST be followed when comparing two configurations.
 - Terraform's implicit move when `count` is added to or removed from a single-instance resource MUST be followed too. [VERIFIED AT D1: CONFIRMED (V10): Terraform 1.15.8 moves `x` to `x[0]` when `count` is added and `x[0]` back to `x` when `count` is removed. It does not move implicitly into or out of `for_each`, or between `count` and `for_each`; those need `moved` blocks. [RES V10][d1-res]. New fact recorded as C-76.]
+- There is no implicit move into or out of `for_each`, or between `count` and `for_each`. Such a change is a delete and a create unless a `moved` block says otherwise. [DECIDED 24 Oct 2026: C-76. No predicate changes.]
 
 ### 2.4 Result values and combination
 
@@ -125,7 +131,22 @@ AWS security groups contain **allow rules only**; there are no deny rules. [VERI
 
 **Unresolved targets.** An `aws_security_group_rule` whose `security_group_id` is external or unresolved belongs to a pseudo-group keyed by that value: the literal ID, or `UNRESOLVED:<rule address>`.
 
-**MIXED groups.** A group *g* is **MIXED** when it has at least one inline rule block (ingress or egress) and is also the target of at least one `aws_security_group_rule`. The provider documents that combining the two forms on one group causes conflicting rule management, so the applied rule set is not determined by the configuration. [VERIFIED AT D1: CONFIRMED (X01): provider documentation v6.53.0 (`security_group`, `security_group_rule`): combining inline rules with `aws_security_group_rule` "may cause rule conflicts, perpetual differences, and result in rules being overwritten". [RES X01][d1-res].]
+**MIXED groups.** A group *g* is **MIXED** when it has at least one inline rule block (form *blocks*; ingress or egress) and is also the target of at least one `aws_security_group_rule`. The provider documents that combining the two forms on one group causes conflicting rule management, so the applied rule set is not determined by the configuration. [VERIFIED AT D1: CONFIRMED (X01): provider documentation v6.53.0 (`security_group`, `security_group_rule`): combining inline rules with `aws_security_group_rule` "may cause rule conflicts, perpetual differences, and result in rules being overwritten". [RES X01][d1-res].]
+
+**Inline-rule forms (C-84).** For each direction (ingress, egress), a configured group *g* uses one of three forms in the configuration:
+- *blocks*: one or more inline `ingress` (or `egress`) blocks;
+- *explicit empty*: `ingress = []` (or `egress = []`);
+- *absent*: the argument is not written.
+
+The provider processes these arguments in attributes-as-blocks mode. An absent argument leaves the existing rules in place; an explicit empty list removes them (Terraform 1.15.x language documentation, "Attributes as Blocks", <https://developer.hashicorp.com/terraform/language/v1.15.x/attr-as-blocks>; provider 6.53.0 `security_group` documentation, <https://github.com/hashicorp/terraform-provider-aws/blob/v6.53.0/website/docs/r/security_group.html.markdown#L111>; evidence record [RES V12][d1-res]; corroborated by the open provider issue <https://github.com/hashicorp/terraform-provider-aws/issues/20046>). So:
+- *explicit empty*: *g* has no inline rules in that direction;
+- *absent*, and *g* has no parent counterpart (a baseline, or a group the candidate creates): no inline rules, because the group is deployed fresh;
+- *absent*, and *g*'s parent counterpart (after following moves, §2.3) used *explicit empty* or was *absent*: no inline rules;
+- *absent*, and *g*'s parent counterpart used *blocks*: *g* is **RETAINED-INLINE** in that direction. Its applied rules are the parent's rules, which the configuration no longer shows. §3.4 and §6.4 make results that read that direction UNSUPPORTED.
+
+When the parent is a Trusted State, it cannot itself be RETAINED-INLINE for a required invariant, because that result would have blocked its promotion. In TerraPreserve trajectories, no generated step is RETAINED-INLINE (D0 amendments A10). In both cases one parent is enough. Rules created outside the configuration are not modelled. **[PAPER]**
+
+**MIXED, explicit empty (C-84).** A group is also MIXED when it uses *explicit empty* in a direction and is the target of at least one `aws_security_group_rule` of that direction. The explicit empty list tells the group resource to remove rules that the separate resource adds, so the applied rule set is not determined by the configuration (provider 6.53.0 documentation, mixing warning, X01; documentary evidence only, not observed with `apply`). **[PAPER]**
 
 **Default egress.** When Terraform creates a security group inside a VPC, it removes AWS's default allow-all egress rule. `Out(g)` is therefore exactly what the configuration declares, and may be empty. This comes from the provider's `aws_security_group` documentation (note on egress rules). [VERIFIED AT D1: CONFIRMED (V06): the note is in the v6.53.0 documentation and the create function revokes the default IPv4 and IPv6 egress rules. Documentary evidence only; this cannot be observed without `apply`. [RES V06][d1-res].]
 
@@ -135,11 +156,11 @@ A resource type outside §1.3 changes a result only if it appears in the invaria
 
 | Invariant | Relevant-unsupported types (presence anywhere in the configuration) |
 |---|---|
-| INV-SEC-001, INV-SEC-002 | `aws_vpc_security_group_ingress_rule`, `aws_default_security_group` |
+| INV-SEC-001, INV-SEC-002 | `aws_vpc_security_group_ingress_rule`, `aws_default_security_group`, `aws_vpc_security_group_rules_exclusive` |
 | INV-SEC-003 | none |
-| INV-FUNC-001 | `aws_vpc_security_group_ingress_rule`, `aws_vpc_security_group_egress_rule`, `aws_default_security_group`, `aws_network_interface`, `aws_network_interface_attachment`, `aws_network_interface_sg_attachment`, `aws_network_acl`, `aws_network_acl_rule`, `aws_network_acl_association`, `aws_default_network_acl`, `aws_route`, `aws_default_route_table`, `aws_main_route_table_association`, `aws_vpc_ipv4_cidr_block_association`, `aws_vpc_peering_connection`, `aws_ec2_transit_gateway_vpc_attachment`, `aws_vpc_endpoint` |
+| INV-FUNC-001 | `aws_vpc_security_group_ingress_rule`, `aws_vpc_security_group_egress_rule`, `aws_default_security_group`, `aws_network_interface`, `aws_network_interface_attachment`, `aws_network_interface_sg_attachment`, `aws_network_acl`, `aws_network_acl_rule`, `aws_network_acl_association`, `aws_default_network_acl`, `aws_route`, `aws_default_route_table`, `aws_main_route_table_association`, `aws_vpc_ipv4_cidr_block_association`, `aws_vpc_peering_connection`, `aws_ec2_transit_gateway_vpc_attachment`, `aws_vpc_endpoint`, `aws_vpc_security_group_rules_exclusive`, `aws_vpc_security_group_vpc_association`, `aws_vpn_gateway_route_propagation`, `aws_vpc_route_server_propagation`, `aws_default_subnet`, `aws_default_vpc`, `aws_vpc_peering_connection_accepter`, `aws_vpc_peering_connection_options`, `aws_ec2_transit_gateway_vpc_attachment_accepter` |
 
-[VERIFIED AT D1: CHANGED (V12, heuristic): the lists are not shown to be complete. A keyword heuristic over the 1,678 resource types of provider 6.53.0 lists candidates the authors must decide on before the freeze, for example `aws_vpc_security_group_rules_exclusive`, `aws_vpc_security_group_vpc_association`, `aws_vpn_gateway_route_propagation`, `aws_vpc_route_server_propagation` and `aws_default_subnet`. The lists above are unchanged. [RES V12][d1-res]. See C-74 and C-78.]
+[VERIFIED AT D1: CHANGED (V12, heuristic): the lists are not shown to be complete. A keyword heuristic over the 1,678 resource types of provider 6.53.0 lists candidates the authors must decide on before the freeze, for example `aws_vpc_security_group_rules_exclusive`, `aws_vpc_security_group_vpc_association`, `aws_vpn_gateway_route_propagation`, `aws_vpc_route_server_propagation` and `aws_default_subnet`. [RES V12][d1-res].] [DECIDED 24 Oct 2026, C-74: the candidates were added as shown. The routing and VPC types join INV-FUNC-001 only; `aws_vpc_security_group_rules_exclusive` joins all three security-group lists because it removes rules the configuration does not list. The lists remain a heuristic result, not a proof of completeness. Over-approximation is intentional: UNSUPPORTED never passes.] **[PAPER]**
 
 **Tolerated type.** `aws_db_subnet_group` is tolerated, not relevant, under C-15 and §6.2. RDS placement is taken from the RDS security groups' VPC, and the subnet group's subnets are not modelled. The evidence MUST record this assumption.
 
@@ -208,9 +229,11 @@ For each security group g (configured groups and pseudo-groups):
 | Condition (evaluated in this order) | Clause result |
 |---|---|
 | Some group *g* has `violates(g)` (and *g* is not MIXED) | FAIL |
-| Some group is MIXED, some ingress rule is UNSUPPORTED (§2.5), or a relevant-unsupported type (§2.7) is present | UNSUPPORTED |
+| Some group is MIXED; some group is RETAINED-INLINE in ingress (§2.6, C-84); some ingress rule is UNSUPPORTED (§2.5); or a relevant-unsupported type (§2.7) is present | UNSUPPORTED |
 | Some group has `possible(g)` | UNKNOWN |
 | Otherwise | PASS |
+
+A RETAINED-INLINE group is not evaluated by `violates(g)`, because its rules are not known. A RETAINED-INLINE group cannot give FAIL or PASS; another group's violation still gives FAIL.
 
 Then the invariant result:
 - **FAIL** if either clause FAILs, because a single violating rule cannot be undone by other allow-only rules;
@@ -222,12 +245,13 @@ The evidence reports the IPv4 and IPv6 clauses separately (C-13).
 **Observations to record:**
 - for each FAIL: the group, the contributing rule addresses, their CIDRs and port ranges;
 - the MIXED groups;
+- the RETAINED-INLINE groups and their direction (C-84);
 - the indeterminate rules, with the reason for each;
 - the relevant-unsupported resources found;
 - the number of groups evaluated.
 
 3.5 **Footprint.**
-- `aws_security_group`: existence, and every field of each inline `ingress` block (`from_port`, `to_port`, `protocol`, `cidr_blocks`, `ipv6_cidr_blocks`, `prefix_list_ids`, `security_groups`, `self`). Also *whether any inline `egress` block exists*, because it affects MIXED status; the contents of egress blocks are not in the footprint.
+- `aws_security_group`: existence, and every field of each inline `ingress` block (`from_port`, `to_port`, `protocol`, `cidr_blocks`, `ipv6_cidr_blocks`, `prefix_list_ids`, `security_groups`, `self`). Also *whether any inline `egress` block exists*, because it affects MIXED status; the contents of egress blocks are not in the footprint. Also the form (*blocks*, *explicit empty*, *absent*) of each direction, and the parent counterpart's ingress form (C-84).
 - `aws_security_group_rule`: existence, and `type`, `from_port`, `to_port`, `protocol`, `cidr_blocks`, `ipv6_cidr_blocks`, `prefix_list_ids`, `source_security_group_id`, `self` and `security_group_id`.
 - The existence of each relevant-unsupported type in §2.7.
 - **Not in the footprint:** `vpc_id`, `name`, `name_prefix`, `description`, `tags`, egress contents, and any instance or database security-group attachment.
@@ -296,7 +320,7 @@ For example, `S = aws_instance.app` and `D = aws_db_instance.database`. Endpoint
 **[PAPER]** A PASS means the configuration-level prerequisites hold within this model (Doc 09 §9). It does not mean packets flow at runtime.
 
 6.2 **Network model** (C-15, made precise):
-- **M1, RDS network context.** `VPC(D)` is the VPC that all of `D`'s security groups (`vpc_security_group_ids`) belong to. RDS subnets are not modelled. `aws_db_subnet_group` is tolerated (§2.7). The assumption, recorded in evidence, is that AWS requires the instance's security groups and its subnet group to be in the same VPC. [OPEN AFTER D1: UNRESOLVED (X02): no AWS RDS page read states the requirement, and AWS documents a Security Group VPC Association feature under which a group can serve resources in other VPCs. M1 stays an uncited assumption. [RES X02][d1-res]. See C-77.]
+- **M1, RDS network context.** `VPC(D)` is the VPC that all of `D`'s security groups (`vpc_security_group_ids`) belong to. RDS subnets are not modelled. `aws_db_subnet_group` is tolerated (§2.7). The assumption, recorded in evidence, is that AWS requires the instance's security groups and its subnet group to be in the same VPC. [OPEN AFTER D1: UNRESOLVED (X02): no AWS RDS page read states the requirement, and AWS documents a Security Group VPC Association feature under which a group can serve resources in other VPCs. M1 stays an uncited assumption. [RES X02][d1-res]. See C-77.] [DECIDED 24 Oct 2026, C-77: M1 stays a recorded assumption. `aws_vpc_security_group_vpc_association` is in INV-FUNC-001's relevant-unsupported list (§2.7), so a configuration using that feature is UNSUPPORTED.] **[PAPER]**
 - **M2, EC2 placement.** `VPC(S)` is the `vpc_id` of the configured `aws_subnet` that `S.subnet_id` references.
 - **M3, intra-VPC routing.** Routing inside a VPC is the VPC **local route**. AWS documents that the local route cannot be deleted, but **its target can be replaced, and more-specific routes can redirect east–west traffic to a middlebox** (network interface, Gateway Load Balancer endpoint or NAT gateway). Such routing is not modelled. Therefore **any route in any `aws_route_table` of `VPC(D)` whose destination is contained in the VPC CIDR and whose target is not `local` makes the result UNSUPPORTED.** Routes whose destination is wider than the VPC CIDR (for example `0.0.0.0/0` to an internet gateway) never apply to intra-VPC traffic, because the most specific route wins. **[PAPER]**
 - **M4, network ACLs.** Network ACLs are not modelled. When no NACL-related type from §2.7 is present, every subnet is assumed to use the default network ACL, which AWS documents as allowing all inbound and outbound traffic. That assumption is recorded in evidence. If any NACL-related type is present, the result is UNSUPPORTED (§2.7).
@@ -328,7 +352,7 @@ E7  M3 and M4 hold: no intra-VPC non-local route and no NACL-related type.
 | # | Condition | Result |
 |---|---|---|
 | 1 | `S` or `D` is absent (deleted, with no move): the protected endpoint is gone | FAIL |
-| 2 | A relevant-unsupported type is present; any route of M3 exists; `S` uses name-based `security_groups`; `D` or `S` has no `vpc_security_group_ids` (default security group not modelled); `S` has no `subnet_id` (default VPC not modelled); any group in `SG(S) ∪ SG(D)` is MIXED; or an engine, port or rule value is UNSUPPORTED (§2.5) | UNSUPPORTED |
+| 2 | A relevant-unsupported type is present; any route of M3 exists; `S` uses name-based `security_groups`; `D` or `S` has no `vpc_security_group_ids` (default security group not modelled); `S` has no `subnet_id` (default VPC not modelled); any group in `SG(S) ∪ SG(D)` is MIXED; a group in `SG(D)` is RETAINED-INLINE in ingress, or a group in `SG(S)` is RETAINED-INLINE in egress (§2.6, C-84); `S` has a `network_interface` or `primary_network_interface` block (C-78); an `aws_route_table` whose `vpc_id` is `VPC(D)` sets `propagating_vgws` (written in the configuration, even as an empty list) (C-78); or an engine, port or rule value is UNSUPPORTED (§2.5) | UNSUPPORTED |
 | 3 | E2 is definitely false: `D.port` resolves to a value other than 5432, or `port` is absent and `D.engine` resolves to an engine other than `postgres` | FAIL |
 | 4 | E3 or E4 fails because a needed value is unresolved, or an endpoint is indeterminate | UNKNOWN |
 | 5 | E3 holds and `VPC(S) ≠ VPC(D)` | FAIL |
@@ -342,6 +366,7 @@ E7  M3 and M4 hold: no intra-VPC non-local route and no NACL-related type.
 **Observations to record:**
 - the evaluated path: `S`, its subnet, `VPC(S)`, `SG(S)`, the egress rule matched, `SG(D)`, the ingress rule matched, `VPC(D)` and the port;
 - for each failing row: the reason;
+- for row 2, which RETAINED-INLINE group, network interface block or `propagating_vgws` caused it (C-78, C-84);
 - the `assumptions` list (M1, M4, IPv4 only).
 
 6.5 **Worked cases** (the canonical topology, Doc 04 Appendix B):
@@ -350,13 +375,13 @@ E7  M3 and M4 hold: no intra-VPC non-local route and no NACL-related type.
 - **A route edit inside the VPC.** A candidate replaces `0.0.0.0/0 → igw` with nothing. The result is unchanged, because that route is not inside the VPC CIDR (M3).
 
 6.6 **Footprint**, given the bindings `S` and `D` (both parent and candidate values count):
-- `S`: existence, `subnet_id`, `vpc_security_group_ids`, `security_groups`, `private_ip`.
+- `S`: existence, `subnet_id`, `vpc_security_group_ids`, `security_groups`, `private_ip`, `network_interface`, `primary_network_interface` (presence and contents).
 - `D`: existence, `vpc_security_group_ids`, `port`, `engine`.
 - The `aws_subnet` that `S` references: existence, `vpc_id`, `cidr_block`.
 - The `aws_vpc` that `VPC(S)` or `VPC(D)` names: existence, `cidr_block`.
-- Each `aws_security_group` in `SG(S) ∪ SG(D)`: existence and `vpc_id`; for `SG(S)`, every field of each egress block; for `SG(D)`, every field of each ingress block; and the presence of inline blocks (MIXED status).
+- Each `aws_security_group` in `SG(S) ∪ SG(D)`: existence and `vpc_id`; for `SG(S)`, every field of each egress block; for `SG(D)`, every field of each ingress block; and the presence of inline blocks (MIXED status); the form of each direction of each group in `SG(S) ∪ SG(D)`, and the parent counterpart's egress form for `SG(S)` and ingress form for `SG(D)` (C-84).
 - Each `aws_security_group_rule` whose target is in `SG(S) ∪ SG(D)`, or is unresolved: existence and all rule fields (§3.5).
-- Each `aws_route_table` whose `vpc_id` is `VPC(D)`: every route whose destination is contained in that VPC's CIDR, plus the existence of such routes.
+- Each `aws_route_table` whose `vpc_id` is `VPC(D)`: every route whose destination is contained in that VPC's CIDR, plus the existence of such routes, and its `propagating_vgws`.
 - The existence of each relevant-unsupported type (§2.7), and `moved` blocks naming `S` or `D`.
 - **Not in the footprint:**
   - routes whose destination is wider than the VPC CIDR;
@@ -383,7 +408,7 @@ E7  M3 and M4 hold: no intra-VPC non-local route and no NACL-related type.
 
 ## 8. Conformance vectors
 
-Each vector is a minimal configuration difference from the canonical topology. Both DAIL and the oracle MUST reproduce these results. D2 turns them into fixtures.
+Each vector is a minimal configuration difference from the canonical topology. Both DAIL and the oracle MUST reproduce these results. D2 turns them into fixtures. A vector that names a parent is evaluated together with that parent (§2.1, §2.6); every other vector is a baseline with no parent.
 
 | # | Invariant | Configuration fact | Expected |
 |---|---|---|---|
@@ -420,6 +445,17 @@ Each vector is a minimal configuration difference from the canonical topology. B
 | F13 | FUNC-001 | Ingress from `10.0.1.0/25`, `S.private_ip` unset | UNKNOWN; with `S.private_ip = 10.0.1.10`: PASS |
 | F14 | FUNC-001 | `S` moved to a subnet of a second VPC | FAIL |
 | F15 | FUNC-001 | `aws_db_subnet_group` present, all else canonical | PASS, with the assumption recorded |
+| S15 | SEC-001 | Configuration contains `aws_vpc_security_group_rules_exclusive`; nothing else violates | UNSUPPORTED |
+| S16 | SEC-001 | Parent: a group has an inline `ingress` block (no public 22). Candidate: same group, `ingress` argument absent; nothing else violates | UNSUPPORTED (RETAINED-INLINE) |
+| S17 | SEC-001 | As S16, but the candidate writes `ingress = []` | PASS |
+| S18 | SEC-001 | Baseline: a group with no `ingress` argument and no `aws_security_group_rule` targeting it; nothing else violates | PASS |
+| S19 | SEC-001 | A group writes `ingress = []` and is the target of an ingress `aws_security_group_rule`; nothing else violates | UNSUPPORTED (MIXED) |
+| S20 | SEC-001 | As S16, and another group has `tcp 22` from `0.0.0.0/0` | FAIL |
+| F16 | FUNC-001 | `S` has a `network_interface` block | UNSUPPORTED |
+| F17 | FUNC-001 | An `aws_route_table` of `VPC(D)` sets `propagating_vgws` | UNSUPPORTED |
+| F18 | FUNC-001 | Configuration contains `aws_vpc_security_group_vpc_association` | UNSUPPORTED |
+| F19 | FUNC-001 | Parent: the database group admits TCP/5432 from the app group by an inline `ingress` block. Candidate: that group's `ingress` argument absent | UNSUPPORTED (RETAINED-INLINE) |
+| F20 | FUNC-001 | Configuration contains `aws_default_vpc` | UNSUPPORTED |
 
 ---
 
@@ -427,10 +463,10 @@ Each vector is a minimal configuration difference from the canonical topology. B
 
 | Invariant | Footprint (§ reference) |
 |---|---|
-| INV-SEC-001 | §3.5: SG ingress fields, SG-rule fields, inline-egress presence, relevant-unsupported presence |
+| INV-SEC-001 | §3.5: SG ingress fields, SG-rule fields, inline-egress presence, inline-rule forms (C-84), relevant-unsupported presence |
 | INV-SEC-002 | Same as SEC-001 |
 | INV-SEC-003 | §5.4: `aws_db_instance` existence and `publicly_accessible` |
-| INV-FUNC-001 | §6.6: endpoints, S's subnet, VPC, SG(S) egress, SG(D) ingress, rules targeting them, intra-VPC routes, relevant-unsupported presence, moves |
+| INV-FUNC-001 | §6.6: endpoints, S's subnet, VPC, SG(S) egress, SG(D) ingress, rules targeting them, inline-rule forms (C-84), intra-VPC routes, S network interfaces and `propagating_vgws` (C-78), relevant-unsupported presence, moves |
 
 ---
 
@@ -456,23 +492,30 @@ The oracle uses its own IDs under the `tp.oracle.` prefix. Oracle results are L2
 | C-66 | INV-FUNC-001 model under C-15: endpoint binding, with absence giving FAIL; the E1–E7 predicate; partial coverage gives UNKNOWN; non-local intra-VPC routes give UNSUPPORTED; default NACL assumed only when no NACL type is present; IPv4 only (§6). | [PAPER] |
 | C-67 | `aws_db_subnet_group` is tolerated under C-15, and the canonical topology includes it with two database subnets in two Availability Zones (Part B, A6). This resolves the plan's open item on RDS subnet placement. | |
 | C-68 | Evidence subject identity: VERIFICATION evidence carries `invariant_id` and `invariant_version`, and supersession requires equal subject and verifier (§2.10). This settles C-62's design; P5 implements it. | |
+| C-74 | Relevant-unsupported lists: nine candidate types added (`aws_vpc_security_group_rules_exclusive` to all three security-group lists, the routing and VPC types to INV-FUNC-001 only); over-approximation is intentional (§2.7). Accepted 24 Oct 2026. | [PAPER] |
+| C-76 | There is no implicit move into or out of `for_each`, or between `count` and `for_each` (§2.3); no predicate change. Accepted 24 Oct 2026. |  |
+| C-77 | M1 stays a recorded assumption, and `aws_vpc_security_group_vpc_association` joins INV-FUNC-001's relevant-unsupported list (§2.7, §6.2). Accepted 24 Oct 2026. | [PAPER] |
+| C-78 | `network_interface` and `primary_network_interface` on `S`, and `propagating_vgws` on route tables of `VPC(D)`, give UNSUPPORTED for INV-FUNC-001 and enter its footprint (§6.4 row 2, §6.6). Accepted 24 Oct 2026. |  |
+| C-84 | Inline `ingress`/`egress` are attributes-as-blocks: an absent argument keeps the parent's rules (RETAINED-INLINE, UNSUPPORTED), explicit `= []` means no rules, and explicit `= []` plus a separate rule of that direction is MIXED (§2.6, §3.4, §6.4). Accepted 24 Oct 2026. | [PAPER] |
+| C-85 | The registry is versioned by the git tag `registry-v1.0`; after the tag every change is a new file that bumps `invariant_registry_version` and each affected `invariant_version` (§1.4). Accepted 24 Oct 2026. |  |
 
 ---
 
 ## 12. Open items
 
 **Resolved at D1 (23 Oct 2026)** against Terraform 1.15.8, AWS provider 6.53.0 and Checkov 3.3.30. Evidence: [RESOLUTION.md at terrapreserve commit `ff70de82622b7d275bbf0f2490f0ce521786246e`][d1-res].
-- §2.3: implicit moves for `count` and `for_each`. CONFIRMED (V10); new fact C-76.
+- §2.3: implicit moves for `count` and `for_each`. CONFIRMED (V10); new fact C-76. Decided 24 Oct 2026.
 - §2.5: host-bit CIDRs rejected (V08, CONFIRMED); upper-case protocols accepted (V09, CONFIRMED); plan-JSON facts C-75.
 - §2.6: allow-only (V11), mixing warning (X01) and default-egress removal (V06): all CONFIRMED.
-- §2.7: relevant-unsupported lists. CHANGED (V12, heuristic): candidates for the authors, C-74 and C-78. The lists are unchanged.
+- §2.7: relevant-unsupported lists. CHANGED (V12, heuristic): candidates for the authors, C-74 and C-78. Decided 24 Oct 2026: the candidates were added to the lists (C-74).
 - §5.2: `publicly_accessible` defaults to `false`. CONFIRMED (V05).
-- §6.2 M1: RDS security groups and subnet group share a VPC. UNRESOLVED (X02); C-77.
+- §6.2 M1: RDS security groups and subnet group share a VPC. UNRESOLVED (X02); C-77. Decided 24 Oct 2026.
 - §6.3 E2: the postgres default port is 5432. CONFIRMED (V07); the plan JSON shows an unset port as unknown (C-75).
 - §3.7: Checkov `CKV_AWS_24` semantics. CHANGED (V04); C-73. §4.4: none, custom predicate only. CONFIRMED (V02). §5.6: `CKV_AWS_17`. CONFIRMED (V03).
 - §7.1–7.2: Doc 04 field-name errata. CONFIRMED (V13, V14); C-79 and C-80.
+- §6.6 and §2.6, attributes outside the footprints (C-78): DECIDED 24 Oct 2026. `network_interface`, `primary_network_interface` and `propagating_vgws` give UNSUPPORTED (§6.4 row 2); inline `ingress`/`egress` retention is C-84 (§2.6).
 - Oracle input path (D0 amendments A3.4): an offline plan works (V01, CONFIRMED); C-75 lists what is unknown in the plan JSON.
 
-**Advisor confirmation** is needed for the [PAPER] items: §1.2, §2.7, §3.3, §6.1, §6.2 M3, and §6.4 rows 7–8.
+**Advisor confirmation** is needed for the [PAPER] items: §1.2, §2.6, §2.7, §3.3, §6.1, §6.2 M1 and M3, and §6.4 rows 7–8.
 
 [d1-res]: https://github.com/Ayushxsingh100/terrapreserve/blob/ff70de82622b7d275bbf0f2490f0ce521786246e/validation/d1_to_verify/RESOLUTION.md
