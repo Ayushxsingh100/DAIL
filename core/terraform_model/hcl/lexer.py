@@ -200,6 +200,13 @@ def is_id_continue(ch: str) -> bool:
     return _in_ranges(ord(ch), _CONTINUE_LOW, _CONTINUE_HIGH)
 
 
+def is_valid_identifier(name: str) -> bool:
+    """Whether ``name`` is one whole identifier: hcl's ``hclsyntax.ValidIdentifier`` (v2.24.0,
+    hclsyntax/public.go lines 199-205), which scans ``name`` and wants exactly one identifier
+    token. Terraform uses it for the names below (see ``core.terraform_model.config``)."""
+    return name != "" and is_id_start(name[0]) and all(is_id_continue(ch) for ch in name[1:])
+
+
 # --- Frames ------------------------------------------------------------------------------------
 
 _TOP = 0  # the file body
