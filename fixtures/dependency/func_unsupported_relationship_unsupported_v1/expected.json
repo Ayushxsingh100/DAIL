@@ -1,0 +1,80 @@
+{
+  "schema": "dail-fixture-expected/1",
+  "fixture_id": "func_unsupported_relationship_unsupported_v1",
+  "doc12_fixture": "unsupported_relationship",
+  "kind": "transition",
+  "registry": {
+    "tag": "registry-v1.0",
+    "commit": "80d161ded595f26b7a339d3351ba335434d7ee32",
+    "invariant_registry_version": 1
+  },
+  "config": "fixtures/dependency/func_unsupported_relationship_unsupported_v1",
+  "parent": "fixtures/canonical_regression/patch_safe",
+  "parent_remediation_targets": [],
+  "bindings": {
+    "INV-FUNC-001": {
+      "S": "aws_instance.app",
+      "D": "aws_db_instance.database"
+    }
+  },
+  "results": {
+    "INV-SEC-001": {
+      "invariant_version": 1,
+      "result": "PASS",
+      "basis": "registry §3.4 'otherwise' row: the SSH rule is gone and app ingress is explicit empty (§2.6), so no group admits TCP/22 from 0.0.0.0/0 or ::/0",
+      "clauses": {
+        "ipv4": "PASS",
+        "ipv6": "PASS"
+      }
+    },
+    "INV-SEC-002": {
+      "invariant_version": 1,
+      "result": "PASS",
+      "basis": "registry §3.4 with p = 5432 (§4.2): the only 5432 rule has a security-group source, so no IPv4 or IPv6 range is covered",
+      "clauses": {
+        "ipv4": "PASS",
+        "ipv6": "PASS"
+      }
+    },
+    "INV-SEC-003": {
+      "invariant_version": 1,
+      "result": "PASS",
+      "basis": "registry §5.3 'otherwise' row: publicly_accessible = false"
+    },
+    "INV-FUNC-001": {
+      "invariant_version": 1,
+      "result": "UNSUPPORTED",
+      "basis": "registry §6.4 row 2: aws_network_acl is a relevant-unsupported type for INV-FUNC-001 (§2.7, M4; vector F9)"
+    }
+  },
+  "changes": {
+    "default": "UNCHANGED",
+    "resources": {
+      "aws_network_acl.extra": {
+        "identity": null,
+        "change": "CREATED"
+      }
+    }
+  },
+  "impact": {
+    "truth_changed": [
+      "INV-FUNC-001"
+    ],
+    "oracle_affected": [
+      "INV-FUNC-001"
+    ],
+    "required_affected": [
+      "INV-FUNC-001"
+    ]
+  },
+  "decision": {
+    "allowed": [
+      "ESCALATE",
+      "REJECT"
+    ],
+    "reason": "INV-FUNC-001 is UNSUPPORTED, which is never a pass, so the choice is between escalating and rejecting (Doc 09 §20, §36)."
+  },
+  "baseline": null,
+  "process": null,
+  "derivation": "Hand-derived from registry-v1.0 and Docs 07-09 by the external reviewer, 24 Oct 2026; not computed."
+}

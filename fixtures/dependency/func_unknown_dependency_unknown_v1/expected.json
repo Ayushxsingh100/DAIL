@@ -1,0 +1,84 @@
+{
+  "schema": "dail-fixture-expected/1",
+  "fixture_id": "func_unknown_dependency_unknown_v1",
+  "doc12_fixture": "unknown_dependency",
+  "kind": "transition",
+  "registry": {
+    "tag": "registry-v1.0",
+    "commit": "80d161ded595f26b7a339d3351ba335434d7ee32",
+    "invariant_registry_version": 1
+  },
+  "config": "fixtures/dependency/func_unknown_dependency_unknown_v1",
+  "parent": "fixtures/canonical_regression/patch_safe",
+  "parent_remediation_targets": [],
+  "bindings": {
+    "INV-FUNC-001": {
+      "S": "aws_instance.app",
+      "D": "aws_db_instance.database"
+    }
+  },
+  "results": {
+    "INV-SEC-001": {
+      "invariant_version": 1,
+      "result": "PASS",
+      "basis": "registry §3.4 'otherwise' row: the SSH rule is gone and app ingress is explicit empty (§2.6), so no group admits TCP/22 from 0.0.0.0/0 or ::/0",
+      "clauses": {
+        "ipv4": "PASS",
+        "ipv6": "PASS"
+      }
+    },
+    "INV-SEC-002": {
+      "invariant_version": 1,
+      "result": "PASS",
+      "basis": "registry §3.4 with p = 5432: the rule's IPv4 sources are resolved (empty), only its security-group source is unresolved, so possible4 does not apply and nothing violates",
+      "clauses": {
+        "ipv4": "PASS",
+        "ipv6": "PASS"
+      }
+    },
+    "INV-SEC-003": {
+      "invariant_version": 1,
+      "result": "PASS",
+      "basis": "registry §5.3 'otherwise' row: publicly_accessible = false"
+    },
+    "INV-FUNC-001": {
+      "invariant_version": 1,
+      "result": "UNKNOWN",
+      "basis": "registry §6.4 row 7: E6 does not hold with determinate rules, but the indeterminate rule app_to_db_5432 (unresolved source group) could satisfy it"
+    }
+  },
+  "changes": {
+    "default": "UNCHANGED",
+    "resources": {
+      "aws_security_group_rule.app_to_db_5432": {
+        "identity": "SAME",
+        "change": "MODIFIED"
+      }
+    }
+  },
+  "impact": {
+    "truth_changed": [
+      "INV-FUNC-001"
+    ],
+    "oracle_affected": [
+      "INV-FUNC-001",
+      "INV-SEC-001",
+      "INV-SEC-002"
+    ],
+    "required_affected": [
+      "INV-FUNC-001",
+      "INV-SEC-001",
+      "INV-SEC-002"
+    ]
+  },
+  "decision": {
+    "allowed": [
+      "RETRY",
+      "ESCALATE"
+    ],
+    "reason": "INV-FUNC-001 is UNKNOWN, which is never a pass, so the choice is between retrying with more input and escalating (Doc 09 §20, §35)."
+  },
+  "baseline": null,
+  "process": null,
+  "derivation": "Hand-derived from registry-v1.0 and Docs 07-09 by the external reviewer, 24 Oct 2026; not computed."
+}
