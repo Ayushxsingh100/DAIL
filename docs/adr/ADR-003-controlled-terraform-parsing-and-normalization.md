@@ -30,7 +30,7 @@ Where Terraform restricts HCL further (top-level block types, labels, meta-argum
 - UNSUPPORTED: `*.tf.json` files, override files (`override.tf`, `*_override.tf`), a byte-order mark, a legacy index with an exponent (`.1e3`), and non-UTF-8 bytes in the places where Terraform accepts them (comments; some well-formed-looking sequences in strings). Other non-UTF-8 bytes are INVALID, because Terraform rejects them (C-95).
 - Limits: file size above 2 MiB, nesting depth above 64, more than 10,000 blocks per configuration. Exceeding a limit is UNSUPPORTED.
 - A byte-order mark is UNSUPPORTED: the pinned spec says "UTF-8 encoded Unicode byte order marks are not permitted", but Terraform 1.15.8 accepts one.
-- Only `*.tf` files directly in the given directory are read, in byte-wise sorted filename order.
+- Only the files that Terraform v1.15.8's directory loader reads are read (hidden files, `~` backups and `#…#` files are skipped; C-98), in byte-wise sorted filename order.
 
 **Consequences.**
 

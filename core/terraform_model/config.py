@@ -300,14 +300,48 @@ _K = TypeVar("_K", str, tuple[str, str])
 _D = TypeVar("_D", ResourceDecl, Declaration)
 
 
+# The directory loader of Terraform v1.15.8 (C-98). Sources, at tag v1.15.8 (commit
+# b9e178decf87d274d25ed36bc5a4dbc857e00420), repository hashicorp/terraform:
+#   internal/configs/parser_file_matcher.go
+#     lines 103-105  `if info.IsDir() || IsIgnoredFile(info.Name()) { continue }`: directories and
+#                    ignored files are skipped before any extension is looked at;
+#     line 63        the default matcher is `moduleFiles` only (test and query files need options);
+#     lines 152-159  `moduleFiles.Matches`: the extension is `.tf` or `.tf.json`;
+#     lines 161-170  `isOverride`: the name without its extension is `override` or ends in
+#                    `_override`.
+#   internal/configs/parser_config_dir.go
+#     lines 245-249  `IsIgnoredFile`: the name starts with ".", or ends with "~", or starts and
+#                    ends with "#";
+#     lines 225-241  `fileExt`: `.tf` and `.tf.json` are recognised by suffix.
+# `p.fs.ReadDir` lists entries with lstat, so a symbolic link to a directory is not a directory
+# there (it counts as a file and fails when read), and DAIL's `is_dir(follow_symlinks=False)`
+# does the same.
+
+
+def is_ignored_file(name: str) -> bool:
+    """Terraform's `IsIgnoredFile` (parser_config_dir.go lines 245-249): hidden files, vim
+    backups and emacs auto-save files."""
+    return (
+        name.startswith(".") or name.endswith("~") or (name.startswith("#") and name.endswith("#"))
+    )
+
+
+def _config_extension(name: str) -> str:
+    """Terraform's `fileExt` for the extensions that the module loader matches."""
+    if name.endswith(".tf"):
+        return ".tf"
+    if name.endswith(".tf.json"):
+        return ".tf.json"
+    return ""
+
+
 def _is_override_file(name: str) -> bool:
-    """files/override.mdx: a file whose name ends in ``_override.tf`` or ``_override.tf.json``,
-    or is literally ``override.tf`` or ``override.tf.json``."""
-    for suffix in (".tf", ".tf.json"):
-        stem = name[: -len(suffix)] if name.endswith(suffix) else None
-        if stem is not None and (stem == "override" or stem.endswith("_override")):
-            return True
-    return False
+    """Terraform's `isOverride` (parser_file_matcher.go lines 161-170; files/override.mdx)."""
+    extension = _config_extension(name)
+    if not extension:
+        return False
+    base = name[: -len(extension)]
+    return base == "override" or base.endswith("_override")
 
 
 class _Loader:
@@ -358,27 +392,33 @@ class _Loader:
         configuration = self._validate()
         return _make_outcome(self.diagnostics, None if self._failed() else configuration)
 
+    @staticmethod
+    def _is_directory(entry: os.DirEntry[str]) -> bool:
+        try:
+            return entry.is_dir(follow_symlinks=False)
+        except OSError:
+            return False
+
     def _list_names(self) -> list[str] | None:
         try:
-            entries = os.listdir(self.directory)
+            with os.scandir(self.directory) as scan:
+                entries = [(entry.name, self._is_directory(entry)) for entry in scan]
         except OSError as exc:
             self.invalid("input.directory_unreadable", f"cannot list the directory: {exc.strerror}")
             return None
-        # C-93: files in byte-wise sorted name order; only files directly in the directory.
-        entries.sort(key=os.fsencode)
+        # Byte-wise sorted names (C-93), the files that Terraform's loader reads (C-98).
+        entries.sort(key=lambda entry: os.fsencode(entry[0]))
         names: list[str] = []
-        for name in entries:
-            path = self.directory / name
-            if name.endswith(".tf.json"):
-                if path.is_dir():
-                    continue
+        for name, is_directory in entries:
+            if is_directory or is_ignored_file(name):
+                continue  # parser_file_matcher.go lines 103-105
+            extension = _config_extension(name)
+            if extension == ".tf.json":
                 code = "input.override_file" if _is_override_file(name) else "input.tf_json"
                 self.unsupported(
                     code, f"{name}: JSON configuration files are not supported (C-93)", name
                 )
-            elif name.endswith(".tf"):
-                if path.is_dir():
-                    continue  # Terraform reads files only; a directory named x.tf is skipped
+            elif extension == ".tf":
                 if _is_override_file(name):
                     self.unsupported(
                         "input.override_file",

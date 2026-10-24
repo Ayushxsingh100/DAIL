@@ -30,6 +30,7 @@ from core.terraform_model.config import (
     ParseOutcome,
     ParseStatus,
     ResourceDecl,
+    is_ignored_file,
     load_configuration,
 )
 from core.terraform_model.hcl.ast import (
@@ -476,6 +477,193 @@ class TestInputSubset(DirectoryCase):
     def test_non_ascii_text_is_read_as_utf8(self) -> None:
         config = self.config(self.load({"main.tf": 'variable "é" {}\n# €\n'.encode()}))
         self.assertIn("é", config.variables)
+
+
+class TestTerraformDirectoryLoader(DirectoryCase):
+    """C-98: the files read are the files that Terraform v1.15.8's directory loader reads.
+
+    The expectations are transcribed from `internal/configs/parser_file_matcher.go` and
+    `parser_config_dir.go` at tag v1.15.8 (see the comment above `is_ignored_file`).
+    """
+
+    # IsIgnoredFile: HasPrefix(".") || HasSuffix("~") || HasPrefix("#") && HasSuffix("#")
+    IGNORED = (
+        ".hidden.tf",
+        ".tf",
+        ".",
+        ".x.tf.json",
+        ".override.tf",
+        ".terraform.lock.hcl",
+        "main.tf~",
+        "x_override.tf~",
+        "~",
+        "a~",
+        "#main.tf#",
+        "#",
+        "##",
+        "#x#",
+    )
+    NOT_IGNORED = (
+        "main.tf",
+        "a.tf",
+        "#a.tf",
+        "a#.tf",
+        "#a",
+        "a#",
+        "tilde~.tf",
+        "~a.tf",
+        "x.tf.json",
+    )
+
+    def test_is_ignored_file_follows_the_go_function(self) -> None:
+        for name in self.IGNORED:
+            with self.subTest(name=name):
+                self.assertTrue(is_ignored_file(name))
+        for name in self.NOT_IGNORED:
+            with self.subTest(name=name):
+                self.assertFalse(is_ignored_file(name))
+
+    def test_a_resource_in_an_ignored_file_is_never_loaded(self) -> None:
+        for name in (".hidden.tf", "main.tf~", "#main.tf#", ".x.tf", "~", "#"):
+            with self.subTest(name=name):
+                with tempfile.TemporaryDirectory() as directory:
+                    Path(directory, "main.tf").write_text(MAIN, encoding="utf-8")
+                    Path(directory, name).write_text(
+                        'resource "aws_vpc" "ghost" {}\nresource "aws_vpc" "main" {}\n',
+                        encoding="utf-8",
+                    )
+                    outcome = load_configuration(Path(directory))
+                config = self.config(outcome)
+                self.assertEqual(list(config.files), ["main.tf"])
+                self.assertEqual(list(config.resources), [("aws_vpc", "main")])
+                self.assertEqual(outcome.diagnostics, ())
+
+    def test_an_ignored_file_is_not_even_read(self) -> None:
+        # No syntax error, no invalid encoding and no size limit comes from a file Terraform skips.
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "main.tf").write_text(MAIN, encoding="utf-8")
+            Path(directory, ".broken.tf").write_bytes(b"x = (\n\xff")
+            Path(directory, "huge.tf~").write_bytes(b"#" * (MAX_FILE_BYTES + 1))
+            Path(directory, "#bad#").write_bytes(b"\xef\xbb\xbf!!")
+            outcome = load_configuration(Path(directory))
+        self.assertEqual(outcome.status, OK, outcome.diagnostics)
+
+    def test_ignored_json_and_override_files_are_neither_read_nor_flagged(self) -> None:
+        # Terraform checks IsIgnoredFile before the extension, so these are not "unsupported".
+        files = {
+            "main.tf": MAIN,
+            ".main.tf.json": "{}",
+            ".override.tf": MAIN,
+            "x_override.tf~": MAIN,
+            "#override.tf#": MAIN,
+        }
+        outcome = self.load(files)
+        self.assertEqual(outcome.status, OK, outcome.diagnostics)
+        self.assertEqual(list(self.config(outcome).files), ["main.tf"])
+
+    def test_a_directory_with_only_ignored_files_is_the_empty_case(self) -> None:
+        outcome = self.load({".main.tf": MAIN, "main.tf~": MAIN})
+        self.assertEqual(outcome.status, UNSUPPORTED)
+        self.assertEqual(self.codes(outcome), ["input.no_configuration_files"])
+
+    def test_names_that_only_look_like_ignored_files_are_loaded(self) -> None:
+        names = ("a#.tf", "#a.tf", "tilde~.tf", "~a.tf", "x#y.tf")
+        outcome = self.load({name: f'variable "v{i}" {{}}\n' for i, name in enumerate(names)})
+        config = self.config(outcome)
+        self.assertEqual(sorted(config.files), sorted(names))
+        self.assertEqual(len(config.variables), len(names))
+
+    def test_a_normal_tf_file_is_loaded(self) -> None:
+        config = self.config(self.load({"main.tf": MAIN}))
+        self.assertEqual(list(config.resources), [("aws_vpc", "main")])
+
+    def test_directories_are_skipped_whatever_their_name(self) -> None:
+        outcome = self.load(
+            {
+                "main.tf": MAIN,
+                "dir.tf/inner.tf": "x = (\n",
+                "dir.tf.json/inner.tf": "x = (\n",
+                "sub_override.tf/inner.tf": "x = (\n",
+            }
+        )
+        self.assertEqual(outcome.status, OK, outcome.diagnostics)
+        self.assertEqual(list(self.config(outcome).files), ["main.tf"])
+
+    def test_test_and_query_files_are_not_part_of_the_module(self) -> None:
+        # The default loader has the moduleFiles matcher only (parser_file_matcher.go line 63).
+        outcome = self.load(
+            {
+                "main.tf": MAIN,
+                "main.tftest.hcl": "run {\n",
+                "main.tftest.json": "{",
+                "q.tfquery.hcl": "list {\n",
+                "main.tfvars": "a = (\n",
+                "other.TF": "x = (\n",
+                "main.tf.bak": "x = (\n",
+            }
+        )
+        self.assertEqual(outcome.status, OK, outcome.diagnostics)
+        self.assertEqual(list(self.config(outcome).files), ["main.tf"])
+
+    def test_json_and_override_files_that_are_not_ignored_stay_unsupported(self) -> None:
+        for name in ("main.tf.json", "override.tf", "x_override.tf", "override.tf.json"):
+            with self.subTest(name=name):
+                with tempfile.TemporaryDirectory() as directory:
+                    Path(directory, "main.tf").write_text(MAIN, encoding="utf-8")
+                    Path(directory, name).write_text(MAIN, encoding="utf-8")
+                    outcome = load_configuration(Path(directory))
+                self.assertEqual(outcome.status, UNSUPPORTED)
+                self.assertEqual(outcome.diagnostics[0].file, name)
+
+    def test_the_listing_does_not_follow_symbolic_links(self) -> None:
+        # Terraform lists with lstat; DAIL asks for is_dir(follow_symlinks=False). Checked with
+        # fake entries because creating links needs a privilege on some systems.
+        asked: list[bool] = []
+
+        class Entry:
+            def __init__(self, name: str, directory: bool) -> None:
+                self.name = name
+                self._directory = directory
+
+            def is_dir(self, *, follow_symlinks: bool = True) -> bool:
+                asked.append(follow_symlinks)
+                return self._directory
+
+        class Scan:
+            def __enter__(self) -> list[Entry]:
+                return [Entry("real.tf", False), Entry("dir.tf", True)]
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+        self.write({"real.tf": MAIN})
+        with mock.patch.object(cfg.os, "scandir", return_value=Scan()):
+            outcome = load_configuration(self.root)
+        self.assertEqual(outcome.status, OK, outcome.diagnostics)
+        self.assertEqual(asked, [False, False])
+        self.assertEqual(list(self.config(outcome).files), ["real.tf"])
+
+    def test_a_symbolic_link_is_read_as_a_file_like_terraform_does(self) -> None:
+        # Terraform lists with lstat: a link to a directory is not a directory, so it is read as
+        # a file and fails; a link to a file is read.
+        elsewhere = tempfile.TemporaryDirectory()
+        self.addCleanup(elsewhere.cleanup)
+        target = Path(elsewhere.name, "target.tf")
+        target.write_text('variable "linked" {}\n', encoding="utf-8")
+        self.write({"real.tf": MAIN})
+        try:
+            (self.root / "link.tf").symlink_to(target)
+            (self.root / "dirlink.tf").symlink_to(Path(elsewhere.name), target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("this system does not allow creating symbolic links")
+        outcome = load_configuration(self.root)
+        self.assertEqual(outcome.status, INVALID)
+        self.assertEqual(self.codes(outcome), ["input.file_unreadable"])
+        self.assertEqual(outcome.diagnostics[0].file, "dirlink.tf")
+        (self.root / "dirlink.tf").unlink()
+        config = self.config(load_configuration(self.root))
+        self.assertEqual(sorted(config.files), ["link.tf", "real.tf"])
+        self.assertIn("linked", config.variables)
 
 
 class TestLimits(DirectoryCase):
