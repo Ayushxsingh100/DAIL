@@ -40,6 +40,8 @@ The input is one Terraform root-module configuration directory together with the
 
 An implementation MAY read HCL directly, or the JSON plan representation (`terraform show -json`). Both MUST yield the resolved values defined in §2.2. The oracle uses a different input path from DAIL (ADR-010). Neither path's convenience may change a result defined here.
 
+**Parent.** A candidate is evaluated together with its parent: the configuration of the Trusted State it was generated from (ADR-012). A baseline has no parent. The parent is read only by the inline-rule retention rule (§2.6, C-84); every other result definition (§3 to §6) reads the evaluated configuration alone.
+
 ### 2.2 Resolved values
 
 An attribute is **resolved** when its value can be determined from the configuration and variable values alone, without provider or AWS knowledge. That covers:
@@ -126,7 +128,22 @@ AWS security groups contain **allow rules only**; there are no deny rules. [VERI
 
 **Unresolved targets.** An `aws_security_group_rule` whose `security_group_id` is external or unresolved belongs to a pseudo-group keyed by that value: the literal ID, or `UNRESOLVED:<rule address>`.
 
-**MIXED groups.** A group *g* is **MIXED** when it has at least one inline rule block (ingress or egress) and is also the target of at least one `aws_security_group_rule`. The provider documents that combining the two forms on one group causes conflicting rule management, so the applied rule set is not determined by the configuration. [VERIFIED AT D1: CONFIRMED (X01): provider documentation v6.53.0 (`security_group`, `security_group_rule`): combining inline rules with `aws_security_group_rule` "may cause rule conflicts, perpetual differences, and result in rules being overwritten". [RES X01][d1-res].]
+**MIXED groups.** A group *g* is **MIXED** when it has at least one inline rule block (form *blocks*; ingress or egress) and is also the target of at least one `aws_security_group_rule`. The provider documents that combining the two forms on one group causes conflicting rule management, so the applied rule set is not determined by the configuration. [VERIFIED AT D1: CONFIRMED (X01): provider documentation v6.53.0 (`security_group`, `security_group_rule`): combining inline rules with `aws_security_group_rule` "may cause rule conflicts, perpetual differences, and result in rules being overwritten". [RES X01][d1-res].]
+
+**Inline-rule forms (C-84).** For each direction (ingress, egress), a configured group *g* uses one of three forms in the configuration:
+- *blocks*: one or more inline `ingress` (or `egress`) blocks;
+- *explicit empty*: `ingress = []` (or `egress = []`);
+- *absent*: the argument is not written.
+
+The provider processes these arguments in attributes-as-blocks mode. An absent argument leaves the existing rules in place; an explicit empty list removes them (Terraform 1.15.x language documentation, "Attributes as Blocks", <https://developer.hashicorp.com/terraform/language/v1.15.x/attr-as-blocks>; provider 6.53.0 `security_group` documentation, <https://github.com/hashicorp/terraform-provider-aws/blob/v6.53.0/website/docs/r/security_group.html.markdown#L111>; evidence record [RES V12][d1-res]; corroborated by the open provider issue <https://github.com/hashicorp/terraform-provider-aws/issues/20046>). So:
+- *explicit empty*: *g* has no inline rules in that direction;
+- *absent*, and *g* has no parent counterpart (a baseline, or a group the candidate creates): no inline rules, because the group is deployed fresh;
+- *absent*, and *g*'s parent counterpart (after following moves, §2.3) used *explicit empty* or was *absent*: no inline rules;
+- *absent*, and *g*'s parent counterpart used *blocks*: *g* is **RETAINED-INLINE** in that direction. Its applied rules are the parent's rules, which the configuration no longer shows. §3.4 and §6.4 make results that read that direction UNSUPPORTED.
+
+A parent is a Trusted State, so it cannot itself be RETAINED-INLINE for a required invariant (that result would have blocked its promotion). Rules created outside the configuration are not modelled. **[PAPER]**
+
+**MIXED, explicit empty (C-84).** A group is also MIXED when it uses *explicit empty* in a direction and is the target of at least one `aws_security_group_rule` of that direction. The explicit empty list tells the group resource to remove rules that the separate resource adds, so the applied rule set is not determined by the configuration (provider 6.53.0 documentation, mixing warning, X01; documentary evidence only, not observed with `apply`). **[PAPER]**
 
 **Default egress.** When Terraform creates a security group inside a VPC, it removes AWS's default allow-all egress rule. `Out(g)` is therefore exactly what the configuration declares, and may be empty. This comes from the provider's `aws_security_group` documentation (note on egress rules). [VERIFIED AT D1: CONFIRMED (V06): the note is in the v6.53.0 documentation and the create function revokes the default IPv4 and IPv6 egress rules. Documentary evidence only; this cannot be observed without `apply`. [RES V06][d1-res].]
 
@@ -209,9 +226,11 @@ For each security group g (configured groups and pseudo-groups):
 | Condition (evaluated in this order) | Clause result |
 |---|---|
 | Some group *g* has `violates(g)` (and *g* is not MIXED) | FAIL |
-| Some group is MIXED, some ingress rule is UNSUPPORTED (§2.5), or a relevant-unsupported type (§2.7) is present | UNSUPPORTED |
+| Some group is MIXED; some group is RETAINED-INLINE in ingress (§2.6, C-84); some ingress rule is UNSUPPORTED (§2.5); or a relevant-unsupported type (§2.7) is present | UNSUPPORTED |
 | Some group has `possible(g)` | UNKNOWN |
 | Otherwise | PASS |
+
+A RETAINED-INLINE group is not evaluated by `violates(g)`, because its rules are not known. A RETAINED-INLINE group cannot give FAIL or PASS; another group's violation still gives FAIL.
 
 Then the invariant result:
 - **FAIL** if either clause FAILs, because a single violating rule cannot be undone by other allow-only rules;
@@ -228,7 +247,7 @@ The evidence reports the IPv4 and IPv6 clauses separately (C-13).
 - the number of groups evaluated.
 
 3.5 **Footprint.**
-- `aws_security_group`: existence, and every field of each inline `ingress` block (`from_port`, `to_port`, `protocol`, `cidr_blocks`, `ipv6_cidr_blocks`, `prefix_list_ids`, `security_groups`, `self`). Also *whether any inline `egress` block exists*, because it affects MIXED status; the contents of egress blocks are not in the footprint.
+- `aws_security_group`: existence, and every field of each inline `ingress` block (`from_port`, `to_port`, `protocol`, `cidr_blocks`, `ipv6_cidr_blocks`, `prefix_list_ids`, `security_groups`, `self`). Also *whether any inline `egress` block exists*, because it affects MIXED status; the contents of egress blocks are not in the footprint. Also the form (*blocks*, *explicit empty*, *absent*) of each direction, and the parent counterpart's ingress form (C-84).
 - `aws_security_group_rule`: existence, and `type`, `from_port`, `to_port`, `protocol`, `cidr_blocks`, `ipv6_cidr_blocks`, `prefix_list_ids`, `source_security_group_id`, `self` and `security_group_id`.
 - The existence of each relevant-unsupported type in §2.7.
 - **Not in the footprint:** `vpc_id`, `name`, `name_prefix`, `description`, `tags`, egress contents, and any instance or database security-group attachment.
@@ -329,7 +348,7 @@ E7  M3 and M4 hold: no intra-VPC non-local route and no NACL-related type.
 | # | Condition | Result |
 |---|---|---|
 | 1 | `S` or `D` is absent (deleted, with no move): the protected endpoint is gone | FAIL |
-| 2 | A relevant-unsupported type is present; any route of M3 exists; `S` uses name-based `security_groups`; `D` or `S` has no `vpc_security_group_ids` (default security group not modelled); `S` has no `subnet_id` (default VPC not modelled); any group in `SG(S) ∪ SG(D)` is MIXED; or an engine, port or rule value is UNSUPPORTED (§2.5) | UNSUPPORTED |
+| 2 | A relevant-unsupported type is present; any route of M3 exists; `S` uses name-based `security_groups`; `D` or `S` has no `vpc_security_group_ids` (default security group not modelled); `S` has no `subnet_id` (default VPC not modelled); any group in `SG(S) ∪ SG(D)` is MIXED; a group in `SG(D)` is RETAINED-INLINE in ingress, or a group in `SG(S)` is RETAINED-INLINE in egress (§2.6, C-84); `S` has a `network_interface` or `primary_network_interface` block (C-78); an `aws_route_table` whose `vpc_id` is `VPC(D)` sets `propagating_vgws` (written in the configuration, even as an empty list) (C-78); or an engine, port or rule value is UNSUPPORTED (§2.5) | UNSUPPORTED |
 | 3 | E2 is definitely false: `D.port` resolves to a value other than 5432, or `port` is absent and `D.engine` resolves to an engine other than `postgres` | FAIL |
 | 4 | E3 or E4 fails because a needed value is unresolved, or an endpoint is indeterminate | UNKNOWN |
 | 5 | E3 holds and `VPC(S) ≠ VPC(D)` | FAIL |
@@ -351,13 +370,13 @@ E7  M3 and M4 hold: no intra-VPC non-local route and no NACL-related type.
 - **A route edit inside the VPC.** A candidate replaces `0.0.0.0/0 → igw` with nothing. The result is unchanged, because that route is not inside the VPC CIDR (M3).
 
 6.6 **Footprint**, given the bindings `S` and `D` (both parent and candidate values count):
-- `S`: existence, `subnet_id`, `vpc_security_group_ids`, `security_groups`, `private_ip`.
+- `S`: existence, `subnet_id`, `vpc_security_group_ids`, `security_groups`, `private_ip`, `network_interface`, `primary_network_interface` (presence and contents).
 - `D`: existence, `vpc_security_group_ids`, `port`, `engine`.
 - The `aws_subnet` that `S` references: existence, `vpc_id`, `cidr_block`.
 - The `aws_vpc` that `VPC(S)` or `VPC(D)` names: existence, `cidr_block`.
-- Each `aws_security_group` in `SG(S) ∪ SG(D)`: existence and `vpc_id`; for `SG(S)`, every field of each egress block; for `SG(D)`, every field of each ingress block; and the presence of inline blocks (MIXED status).
+- Each `aws_security_group` in `SG(S) ∪ SG(D)`: existence and `vpc_id`; for `SG(S)`, every field of each egress block; for `SG(D)`, every field of each ingress block; and the presence of inline blocks (MIXED status); the form of each direction of each group in `SG(S) ∪ SG(D)`, and the parent counterpart's egress form for `SG(S)` and ingress form for `SG(D)` (C-84).
 - Each `aws_security_group_rule` whose target is in `SG(S) ∪ SG(D)`, or is unresolved: existence and all rule fields (§3.5).
-- Each `aws_route_table` whose `vpc_id` is `VPC(D)`: every route whose destination is contained in that VPC's CIDR, plus the existence of such routes.
+- Each `aws_route_table` whose `vpc_id` is `VPC(D)`: every route whose destination is contained in that VPC's CIDR, plus the existence of such routes, and its `propagating_vgws`.
 - The existence of each relevant-unsupported type (§2.7), and `moved` blocks naming `S` or `D`.
 - **Not in the footprint:**
   - routes whose destination is wider than the VPC CIDR;
@@ -421,6 +440,17 @@ Each vector is a minimal configuration difference from the canonical topology. B
 | F13 | FUNC-001 | Ingress from `10.0.1.0/25`, `S.private_ip` unset | UNKNOWN; with `S.private_ip = 10.0.1.10`: PASS |
 | F14 | FUNC-001 | `S` moved to a subnet of a second VPC | FAIL |
 | F15 | FUNC-001 | `aws_db_subnet_group` present, all else canonical | PASS, with the assumption recorded |
+| S15 | SEC-001 | Configuration contains `aws_vpc_security_group_rules_exclusive`; nothing else violates | UNSUPPORTED |
+| S16 | SEC-001 | Parent: a group has an inline `ingress` block (no public 22). Candidate: same group, `ingress` argument absent; nothing else violates | UNSUPPORTED (RETAINED-INLINE) |
+| S17 | SEC-001 | As S16, but the candidate writes `ingress = []` | PASS |
+| S18 | SEC-001 | Baseline: a group with no `ingress` argument and no `aws_security_group_rule` targeting it; nothing else violates | PASS |
+| S19 | SEC-001 | A group writes `ingress = []` and is the target of an ingress `aws_security_group_rule`; nothing else violates | UNSUPPORTED (MIXED) |
+| S20 | SEC-001 | As S16, and another group has `tcp 22` from `0.0.0.0/0` | FAIL |
+| F16 | FUNC-001 | `S` has a `network_interface` block | UNSUPPORTED |
+| F17 | FUNC-001 | An `aws_route_table` of `VPC(D)` sets `propagating_vgws` | UNSUPPORTED |
+| F18 | FUNC-001 | Configuration contains `aws_vpc_security_group_vpc_association` | UNSUPPORTED |
+| F19 | FUNC-001 | Parent: the database group admits TCP/5432 from the app group by an inline `ingress` block. Candidate: that group's `ingress` argument absent | UNSUPPORTED (RETAINED-INLINE) |
+| F20 | FUNC-001 | Configuration contains `aws_default_vpc` | UNSUPPORTED |
 
 ---
 
@@ -428,10 +458,10 @@ Each vector is a minimal configuration difference from the canonical topology. B
 
 | Invariant | Footprint (§ reference) |
 |---|---|
-| INV-SEC-001 | §3.5: SG ingress fields, SG-rule fields, inline-egress presence, relevant-unsupported presence |
+| INV-SEC-001 | §3.5: SG ingress fields, SG-rule fields, inline-egress presence, inline-rule forms (C-84), relevant-unsupported presence |
 | INV-SEC-002 | Same as SEC-001 |
 | INV-SEC-003 | §5.4: `aws_db_instance` existence and `publicly_accessible` |
-| INV-FUNC-001 | §6.6: endpoints, S's subnet, VPC, SG(S) egress, SG(D) ingress, rules targeting them, intra-VPC routes, relevant-unsupported presence, moves |
+| INV-FUNC-001 | §6.6: endpoints, S's subnet, VPC, SG(S) egress, SG(D) ingress, rules targeting them, inline-rule forms (C-84), intra-VPC routes, S network interfaces and `propagating_vgws` (C-78), relevant-unsupported presence, moves |
 
 ---
 
@@ -472,8 +502,9 @@ The oracle uses its own IDs under the `tp.oracle.` prefix. Oracle results are L2
 - §6.3 E2: the postgres default port is 5432. CONFIRMED (V07); the plan JSON shows an unset port as unknown (C-75).
 - §3.7: Checkov `CKV_AWS_24` semantics. CHANGED (V04); C-73. §4.4: none, custom predicate only. CONFIRMED (V02). §5.6: `CKV_AWS_17`. CONFIRMED (V03).
 - §7.1–7.2: Doc 04 field-name errata. CONFIRMED (V13, V14); C-79 and C-80.
+- §6.6 and §2.6, attributes outside the footprints (C-78): DECIDED 24 Oct 2026. `network_interface`, `primary_network_interface` and `propagating_vgws` give UNSUPPORTED (§6.4 row 2); inline `ingress`/`egress` retention is C-84 (§2.6).
 - Oracle input path (D0 amendments A3.4): an offline plan works (V01, CONFIRMED); C-75 lists what is unknown in the plan JSON.
 
-**Advisor confirmation** is needed for the [PAPER] items: §1.2, §2.7, §3.3, §6.1, §6.2 M3, and §6.4 rows 7–8.
+**Advisor confirmation** is needed for the [PAPER] items: §1.2, §2.6, §2.7, §3.3, §6.1, §6.2 M1 and M3, and §6.4 rows 7–8.
 
 [d1-res]: https://github.com/Ayushxsingh100/terrapreserve/blob/ff70de82622b7d275bbf0f2490f0ce521786246e/validation/d1_to_verify/RESOLUTION.md
