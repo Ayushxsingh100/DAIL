@@ -5,7 +5,7 @@
 | **Status** | DRAFT for review (step 4 of 29), 4 Oct 2026 |
 | **Amends** | `D0_Dataset_Specification_TerraPreserve_v1.md` (v1.0). Anything not amended here stands. |
 | **Companion** | `docs/specs/INVARIANT_REGISTRY_v1.md`, cited below as "the registry". |
-| **Register** | N-03, N-04 and N-08 move to a new status; new rows C-69 to C-72 (C-64 to C-68 come from the registry; A6 is recorded as C-67). |
+| **Register** | N-03, N-04 and N-08 move to a new status; new rows C-69 to C-72 (C-64 to C-68 come from the registry; A6 is recorded as C-67); C-84 (A10, with the registry's inline-rule rules) and C-85 (registry versioning by tag) are added at D2 step 6. |
 
 Each amendment gives a decision and its reason, in D0's style.
 - **[PAPER]** marks a change the paper must reflect; show these to the advisor.
@@ -163,6 +163,31 @@ For change-request families (F1, F5, F7) there is no target. The "final target" 
 **Reason.** The registry returns UNKNOWN and UNSUPPORTED by design. A scenario with such labels has no safe/unsafe ground truth, so it cannot count toward the 20/20 balance.
 
 **New D6 gate 11.** Per family, report the number of indeterminate scenarios generated and replaced.
+
+---
+
+## A10 — Inline security-group rules in generated and fixture configurations (C-84) **[PAPER]**
+
+**Decision.** In every configuration the generator (D4) writes, and in every D2 fixture, each security group writes each direction (ingress, egress) as follows:
+- *blocks*, when the group has inline rules in that direction;
+- otherwise *absent*, when at least one `aws_security_group_rule` of that direction targets the group (an explicit `= []` there would make the group MIXED, registry §2.6);
+- otherwise *explicit empty*: `ingress = []` or `egress = []`.
+
+When a step removes all of a group's inline rules in a direction and no separate rule of that direction targets the group, the generator writes `= []`, never an absent argument. It never produces a RETAINED-INLINE group; such a step would be indeterminate (A7) anyway. LLM candidates (v1.1, P10) are not constrained by this rule; the registry evaluates whatever they write.
+
+**Reason.** The provider treats an absent `ingress`/`egress` argument as "keep existing rules" (registry §2.6, C-84), so dropping the argument does not remove rules. A configuration that means "no rules" must say so explicitly, except where separate rule resources own that direction.
+
+---
+
+## A11 — Decision 2: TerraProbe citation verified
+
+D0 Decision 2 compares the 320 scenarios with TerraProbe's 96 modules. The citation is verified:
+
+Manar Alsaid, Chimdumebi Nebolisa, Faris Abbas. "TerraProbe: A Layered-Oracle Framework for Detecting Deceptive Fixes in LLM-Assisted Terraform Security Repair." arXiv:2606.26590v1 [cs.LG; also cs.CR], 25 June 2026. **Preprint; no venue confirmed.**
+
+- The 96 modules are 68 TerraDS (real-world) modules and 28 controlled modules, each controlled module with one injected AWS security defect.
+- The arXiv listing title, as aggregators show it, begins "Empirical Software Engineering" and ends at "Terraform"; the PDF title above is cited.
+- Verified 24 Oct 2026 against the arXiv PDF.
 
 ---
 
