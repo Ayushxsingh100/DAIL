@@ -28,7 +28,7 @@
 
 1.4 **Versioning rule.**
 - Any change to an invariant's predicate, scope, footprint (§2.9) or result conditions creates a new invariant version and increments `invariant_registry_version`.
-- A change of wording only, with identical results on every input, creates neither.
+- A change of wording only, with identical results on every input, creates no new invariant version. After the tag it still needs a new registry file and increments `invariant_registry_version` (C-85).
 - The registry is frozen by the tag `registry-v1.0` (C-85). The D0 amendments are frozen separately, before D4 starts.
 - **Tagging (C-85).** This version is identified by the git tag `registry-v1.0`. After the tag this file is never edited. Any change is a new file (`INVARIANT_REGISTRY_v1.1.md`, and so on) that increments `invariant_registry_version`, and increments `invariant_version` for each invariant whose predicate, scope, footprint or result conditions change (Doc 06 §4.2). A wording-only change still needs a new file but bumps no `invariant_version`. Fixtures, the oracle and evidence cite the tag.
 - **Edits before the tag.** C-74, C-76, C-77, C-78 and C-84 changed result conditions before the tag, and every invariant stays at version 1. This is allowed because nothing had consumed version 1 yet: no fixture, oracle label or verification evidence cited its semantics.
@@ -43,7 +43,7 @@ The input is one Terraform root-module configuration directory together with the
 
 An implementation MAY read HCL directly, or the JSON plan representation (`terraform show -json`). Both MUST yield the resolved values defined in §2.2. The oracle uses a different input path from DAIL (ADR-010). Neither path's convenience may change a result defined here.
 
-**Parent.** A candidate is evaluated together with its parent: the configuration of the Trusted State it was generated from (ADR-012). A baseline has no parent. The parent is read only by the inline-rule retention rule (§2.6, C-84); every other result definition (§3 to §6) reads the evaluated configuration alone.
+**Parent.** A candidate is evaluated together with its parent: the configuration of the Trusted State it was generated from (ADR-012). A baseline has no parent. The parent is read only by the inline-rule retention rule (§2.6, C-84); every other result definition (§3 to §6) reads the evaluated configuration alone. When TerraPreserve labels a trajectory, the parent of step k is step k − 1, which need not be a Trusted State.
 
 ### 2.2 Resolved values
 
@@ -144,7 +144,7 @@ The provider processes these arguments in attributes-as-blocks mode. An absent a
 - *absent*, and *g*'s parent counterpart (after following moves, §2.3) used *explicit empty* or was *absent*: no inline rules;
 - *absent*, and *g*'s parent counterpart used *blocks*: *g* is **RETAINED-INLINE** in that direction. Its applied rules are the parent's rules, which the configuration no longer shows. §3.4 and §6.4 make results that read that direction UNSUPPORTED.
 
-A parent is a Trusted State, so it cannot itself be RETAINED-INLINE for a required invariant (that result would have blocked its promotion). Rules created outside the configuration are not modelled. **[PAPER]**
+When the parent is a Trusted State, it cannot itself be RETAINED-INLINE for a required invariant, because that result would have blocked its promotion. In TerraPreserve trajectories, no generated step is RETAINED-INLINE (D0 amendments A10). In both cases one parent is enough. Rules created outside the configuration are not modelled. **[PAPER]**
 
 **MIXED, explicit empty (C-84).** A group is also MIXED when it uses *explicit empty* in a direction and is the target of at least one `aws_security_group_rule` of that direction. The explicit empty list tells the group resource to remove rules that the separate resource adds, so the applied rule set is not determined by the configuration (provider 6.53.0 documentation, mixing warning, X01; documentary evidence only, not observed with `apply`). **[PAPER]**
 

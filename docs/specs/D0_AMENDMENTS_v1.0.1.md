@@ -175,6 +175,8 @@ For change-request families (F1, F5, F7) there is no target. The "final target" 
 
 When a step removes all of a group's inline rules in a direction and no separate rule of that direction targets the group, the generator writes `= []`, never an absent argument. It never produces a RETAINED-INLINE group; such a step would be indeterminate (A7) anyway. LLM candidates (v1.1, P10) are not constrained by this rule; the registry evaluates whatever they write.
 
+**Consequence for D4:** converting a group's inline rules into separate `aws_security_group_rule` resources within one trajectory makes that step RETAINED-INLINE (UNSUPPORTED, indeterminate under A7). The inline-versus-separate variation of D0 Decision 3 is therefore made between scenarios, never within a trajectory.
+
 **Reason.** The provider treats an absent `ingress`/`egress` argument as "keep existing rules" (registry §2.6, C-84), so dropping the argument does not remove rules. A configuration that means "no rules" must say so explicitly, except where separate rule resources own that direction.
 
 ---
