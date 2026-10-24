@@ -518,7 +518,7 @@ def directory_cases() -> list[Case]:
         Case(
             "unrelated files only",
             {"README.md": b"x", "terraform.tfvars": b"a = 1\n"},
-            ONLY_INVALID,
+            ONLY_UNSUPPORTED,
         ),
     ]
 

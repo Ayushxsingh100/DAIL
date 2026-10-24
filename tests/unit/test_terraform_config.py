@@ -150,15 +150,29 @@ class TestOutcomeModel(DirectoryCase):
         outcome = load_configuration(self.root / "main.tf")
         self.assertEqual(outcome.status, INVALID)
 
-    def test_an_empty_directory_is_invalid(self) -> None:
+    def test_an_empty_directory_is_unsupported(self) -> None:
+        # Terraform 1.15.8: `terraform validate` in an empty directory succeeds with no
+        # diagnostics (parser_config_dir.go, v1.15.8, lines 41-42: not an error). Valid Terraform
+        # that DAIL does not accept is UNSUPPORTED (C-92), and never OK or a configuration.
         outcome = load_configuration(self.root)
-        self.assertEqual(outcome.status, INVALID)
+        self.assertEqual(outcome.status, UNSUPPORTED)
+        self.assertIsNone(outcome.configuration)
         self.assertEqual(self.codes(outcome), ["input.no_configuration_files"])
 
-    def test_a_directory_with_no_tf_files_is_invalid(self) -> None:
-        outcome = self.load({"README.md": "x", "sub/main.tf": MAIN})
-        self.assertEqual(outcome.status, INVALID)
+    def test_a_directory_with_no_tf_files_is_unsupported(self) -> None:
+        outcome = self.load({"README.md": "x", "sub/main.tf": MAIN, "terraform.tfvars": "a = 1\n"})
+        self.assertEqual(outcome.status, UNSUPPORTED)
+        self.assertIsNone(outcome.configuration)
         self.assertEqual(self.codes(outcome), ["input.no_configuration_files"])
+
+    def test_an_empty_tf_file_is_ok_and_an_empty_directory_is_not(self) -> None:
+        self.assertEqual(self.load({"empty.tf": ""}).status, OK)
+        self.assertEqual(self.load({"only-comments.tf": "# nothing\n"}).status, OK)
+
+    def test_a_missing_directory_is_still_invalid(self) -> None:
+        # Terraform: "Failed to read module directory" (parser_file_matcher.go, v1.15.8,
+        # lines 93-101) is an error.
+        self.assertEqual(load_configuration(self.root / "missing").status, INVALID)
 
     def test_an_unreadable_file_is_invalid(self) -> None:
         self.write({"main.tf": MAIN})

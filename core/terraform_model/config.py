@@ -388,9 +388,15 @@ class _Loader:
                     continue
                 names.append(name)
         if not names and not self.diagnostics:
-            self.invalid(
+            # Terraform 1.15.8 accepts a directory without configuration files: `terraform
+            # validate` succeeds with no diagnostics, and internal/configs/parser_config_dir.go
+            # (tag v1.15.8, lines 41-42) says "This file does not consider a directory with no
+            # files to be an error, and will simply return an empty module in that case". By the
+            # C-92 rule it is valid Terraform that DAIL does not accept: UNSUPPORTED (C-96). It
+            # stays fail-closed, because a wrong path must not look like an empty candidate.
+            self.unsupported(
                 "input.no_configuration_files",
-                "the directory has no *.tf files (C-96: an empty configuration is not a build)",
+                "the directory has no configuration files (valid Terraform, not accepted by DAIL)",
             )
         return names
 
