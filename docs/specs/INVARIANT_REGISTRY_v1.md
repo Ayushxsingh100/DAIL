@@ -405,7 +405,7 @@ E7  M3 and M4 hold: no intra-VPC non-local route and no NACL-related type.
 
 ## 8. Conformance vectors
 
-Each vector is a minimal configuration difference from the canonical topology. Both DAIL and the oracle MUST reproduce these results. D2 turns them into fixtures.
+Each vector is a minimal configuration difference from the canonical topology. Both DAIL and the oracle MUST reproduce these results. D2 turns them into fixtures. A vector that names a parent is evaluated together with that parent (§2.1, §2.6); every other vector is a baseline with no parent.
 
 | # | Invariant | Configuration fact | Expected |
 |---|---|---|---|
