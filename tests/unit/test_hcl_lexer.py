@@ -605,12 +605,10 @@ class TestRuleRegistry(unittest.TestCase):
         package = Path(__file__).resolve().parents[2] / "core" / "terraform_model" / "hcl"
         used: set[str] = set()
         for name in ("lexer.py", "parser.py"):
-            path = package / name
-            if path.exists():
-                used |= set(
-                    re.findall(r'"((?:lex|parse|limit)\.[a-z0-9_]+)"', path.read_text("utf-8"))
-                )
+            text = (package / name).read_text("utf-8")
+            used |= set(re.findall(r'"((?:lex|parse|limit)\.[a-z0-9_]+)"', text))
         self.assertLessEqual(used, set(RULES), "a rule code is raised but not registered")
+        self.assertEqual(set(RULES) - used, set(), "a registered rule code is never raised")
         lexer_codes = {code for code in RULES if code.startswith("lex.")}
         lexer_used = set(
             re.findall(r'"(lex\.[a-z0-9_]+)"', (package / "lexer.py").read_text("utf-8"))

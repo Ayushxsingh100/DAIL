@@ -48,6 +48,7 @@ RULES: dict[str, str] = {
     "parse.unbalanced_directive": "A template directive without its partner.",
     # Limits and tables (the loader reports UNSUPPORTED)
     "limit.nesting_depth": "Nesting deeper than the limit of C-93.",
+    "limit.number_range": "A number literal whose exponent is outside the range of Decimal.",
     "limit.unicode_table": "A code point that Unicode 15.0 (the tables of Python 3.12) lacks.",
 }
 
