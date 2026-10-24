@@ -553,16 +553,135 @@ class TestErrorsOutsideTemplates(unittest.TestCase):
         self.assertEqual(error_code('"\udfff"'), "lex.invalid_utf8")
         self.assertEqual(error_code("# \ud800\n"), "lex.invalid_utf8")
 
-    def test_unassigned_code_point_is_unsupported_not_invalid(self) -> None:
-        # R2: U+0378 is unassigned in Unicode 15.0; a newer Unicode version might make it a
-        # letter, so the lexer cannot decide and the outcome is UNSUPPORTED (a limit error).
-        with self.assertRaises(HclLimitError) as caught:
-            tokenize("a ͸ b", F)
-        self.assertEqual(caught.exception.code, "limit.unicode_table")
+    def test_unassigned_code_point_is_invalid(self) -> None:
+        # U+0378 is unassigned in Unicode 15.0. Terraform 1.15.8 uses Unicode 9.0 tables for
+        # identifiers (U+1E900, assigned in 9.0, is accepted; U+11A00, assigned in 10.0, is not),
+        # so it rejects every code point that 15.0 leaves unassigned: INVALID (C-92 rule).
+        for text in ("a ͸ b", "a͸ = 1", "͸a = 1", "a = 1 \U0002ebf0"):
+            with self.subTest(text=text):
+                self.assertEqual(error_code(text), "lex.invalid_character")
 
     def test_unassigned_code_points_inside_strings_and_comments_are_text(self) -> None:
         self.assertEqual(tokenize('"͸"', F)[1].value, "͸")
         self.assertEqual(kinds("# ͸\n"), [T.NEWLINE, T.EOF])
+
+
+def raw(data: bytes) -> str:
+    """Decode as the loader does for a file that is not valid UTF-8."""
+    return data.decode("utf-8", "surrogateescape")
+
+
+class TestUndecodableBytes(unittest.TestCase):
+    """C-92 rule: INVALID only when Terraform 1.15.8 rejects the input.
+
+    Terraform accepts non-UTF-8 bytes inside comments, and inside strings and heredocs when they
+    form a lead byte C0..F7 plus the right number of continuation bytes 80..BF (even overlong,
+    above U+10FFFF or a surrogate). It rejects every other stray byte and any byte in code.
+    """
+
+    # Valid for Terraform 1.15.8 inside a string, undecodable for Python.
+    SHAPES = {
+        "overlong two-byte": b"\xc0\xaf",
+        "overlong C1": b"\xc1\xbf",
+        "overlong three-byte": b"\xe0\x80\x80",
+        "overlong four-byte": b"\xf0\x80\x80\x80",
+        "above U+10FFFF": b"\xf4\x90\x80\x80",
+        "lead F5": b"\xf5\x80\x80\x80",
+        "surrogate D800": b"\xed\xa0\x80",
+        "surrogate DFFF": b"\xed\xbf\xbf",
+        "surrogate pair": b"\xed\xa0\x80\xed\xb0\x80",
+    }
+    # Rejected by Terraform 1.15.8 everywhere outside a comment.
+    MALFORMED = {
+        "lone continuation": b"\x80",
+        "lone continuation BF": b"\xbf",
+        "truncated two-byte": b"\xc2",
+        "truncated three-byte": b"\xe2\x82",
+        "five-byte lead": b"\xf8\x88\x80\x80\x80",
+        "FE": b"\xfe",
+        "FF": b"\xff",
+        "lead then ASCII": b"\xe2a\x82",
+    }
+
+    def test_everything_is_text_inside_a_comment(self) -> None:
+        for name, data in {**self.SHAPES, **self.MALFORMED}.items():
+            for comment in (b"# %s\n", b"// %s\n", b"/* %s */\n"):
+                with self.subTest(case=name, comment=comment[:2]):
+                    tokenize(raw(comment % data), F)
+
+    def test_well_formed_shapes_are_text_inside_strings_and_heredocs(self) -> None:
+        for name, data in self.SHAPES.items():
+            with self.subTest(case=name):
+                tokenize(raw(b'"a%sb"' % data), F)
+                tokenize(raw(b"<<EOT\na%sb\nEOT\n" % data), F)
+                tokenize(raw(b"<<-EOT\n  a%sb\n  EOT\n" % data), F)
+
+    def test_malformed_bytes_in_strings_and_heredocs_are_invalid(self) -> None:
+        for name, data in self.MALFORMED.items():
+            for template in (b'"a%sb"', b"<<EOT\na%sb\nEOT\n", b"<<-EOT\n  a%sb\n  EOT\n"):
+                with self.subTest(case=name, template=template[:3]):
+                    self.assertEqual(error_code(raw(template % data)), "lex.invalid_utf8")
+
+    def test_every_byte_in_code_is_invalid(self) -> None:
+        for name, data in {**self.SHAPES, **self.MALFORMED}.items():
+            for template in (b"a = 1 %s\n", b"%s\n", b"a = [1, %s]\n", b"a = (%s)\n"):
+                with self.subTest(case=name, template=template[:5]):
+                    self.assertEqual(error_code(raw(template % data)), "lex.invalid_utf8")
+
+    def test_a_stray_byte_beside_an_identifier_is_invalid_unless_terraform_tolerates_it(
+        self,
+    ) -> None:
+        # Terraform 1.15.8 tolerates some stray lead bytes next to identifier characters (found by
+        # trying every byte); DAIL cannot reproduce the rule exactly, so those are UNSUPPORTED.
+        tolerated = (b"\xc4", b"\xcb", b"\xd6", b"\xdb", b"\xe4", b"\xed")
+        rejected = (
+            b"\xc0",
+            b"\xc2",
+            b"\xc3",
+            b"\xcc",
+            b"\xd7",
+            b"\xe0",
+            b"\xe3",
+            b"\xee",
+            b"\xf0",
+            b"\xff",
+            b"\x80",
+        )
+        for template in (b"locals {\n  a%ss = 1\n}\n", b"locals {\n  %sa = 1\n}\n"):
+            for data in tolerated:
+                with self.subTest(template=template[:14], byte=data):
+                    with self.assertRaises(HclLimitError) as caught:
+                        tokenize(raw(template % data), F)
+                    self.assertEqual(caught.exception.code, "limit.undecodable_in_identifier")
+            for data in rejected:
+                with self.subTest(template=template[:14], byte=data):
+                    self.assertEqual(error_code(raw(template % data)), "lex.invalid_utf8")
+
+    def test_a_tolerated_lead_byte_away_from_identifiers_is_invalid(self) -> None:
+        for data in (b"\xc4", b"\xcb", b"\xe4", b"\xed"):
+            for template in (b"locals { a = 1 %s }\n", b"locals {\n  a = 1\n  %s\n}\n"):
+                with self.subTest(template=template[:12], byte=data):
+                    self.assertEqual(error_code(raw(template % data)), "lex.invalid_utf8")
+
+    def test_a_shape_cut_off_at_the_end_of_the_string_is_invalid(self) -> None:
+        self.assertEqual(error_code(raw(b'"a\xe2\x82"')), "lex.invalid_utf8")
+        self.assertEqual(error_code(raw(b'"a\xe2\x82$${"')), "lex.invalid_utf8")
+
+    def test_a_valid_character_beside_a_shape_is_unaffected(self) -> None:
+        tokens = tokenize(raw('"é'.encode() + b"\xc0\xaf" + '€"'.encode()), F)
+        self.assertEqual(tokens[1].kind, T.TPL_LITERAL)
+
+    def test_other_lone_surrogates_are_still_rejected(self) -> None:
+        for text in ("a = \ud800\n", '"\udbff"', "# \udc7f\n", "# \udd00\n"):
+            with self.subTest(text=text):
+                self.assertEqual(error_code(text), "lex.invalid_utf8")
+
+    def test_an_undecodable_byte_counts_as_one_byte_in_ranges(self) -> None:
+        smap = SourceMap(raw(b"# \xff\xff\n\xc3\xa9 = \xe2\x82\xac"), F)
+        # "# " + 2 bytes + newline = 5 bytes; "é" is 2 bytes
+        self.assertEqual(smap.range(0, 4).end_byte, 4)
+        self.assertEqual(smap.range(5, 6).start_byte, 5)
+        self.assertEqual(smap.range(5, 6).end_byte, 7)
 
 
 class TestSourceRanges(unittest.TestCase):

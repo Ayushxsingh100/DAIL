@@ -279,7 +279,7 @@ UNICODE_CHARS: list[tuple[str, str, frozenset[ParseStatus], frozenset[ParseStatu
     ("‮", "bidi override", ONLY_INVALID, ONLY_INVALID),
     ("‍", "zero width joiner", ONLY_INVALID, ONLY_INVALID),
     ("\U0001f600", "emoji", ONLY_INVALID, ONLY_INVALID),
-    ("͸", "unassigned", ONLY_UNSUPPORTED, ONLY_UNSUPPORTED),
+    ("͸", "unassigned", ONLY_INVALID, ONLY_INVALID),
     ("﻿", "byte order mark", ONLY_INVALID, ONLY_INVALID),
     ("￿", "noncharacter", ONLY_INVALID, ONLY_INVALID),
     (" ", "no-break space", ONLY_INVALID, ONLY_INVALID),
@@ -363,7 +363,7 @@ def unicode_cases() -> list[Case]:
         Case(
             "BOM before a valid file",
             with_versions(b"\xef\xbb\xbf" + MAINS[FOLDERS[0]]),
-            ONLY_INVALID,
+            ONLY_UNSUPPORTED,
         )
     )
     return cases
@@ -393,19 +393,38 @@ def embedded_unicode_cases(seed: int, count: int = 40) -> list[Case]:
 INVALID_BYTES = [*range(0x80, 0xC2), *range(0xF5, 0x100)]  # no valid lead byte among them
 
 
+def _in_comment(data: bytes, offset: int) -> bool:
+    """Whether a byte inserted at ``offset`` lands inside a comment of a fixture.
+
+    The fixtures have only whole-line comments that start in column 0.
+    """
+    line_start = data.rfind(b"\n", 0, offset) + 1
+    return data[line_start : line_start + 1] == b"#" and offset > line_start
+
+
 def invalid_utf8_cases(seed: int, count: int = 40) -> list[Case]:
+    """Stray non-UTF-8 bytes. By the C-92 rule the class depends on where they land: Terraform
+    1.15.8 accepts them in comments (UNSUPPORTED for DAIL) and rejects them elsewhere (INVALID).
+    Single stray bytes only, and never two next to each other, so that they cannot form a
+    sequence that Terraform accepts."""
     rng = random.Random(seed)
     cases = []
     for i in range(count):
         folder = rng.choice(FOLDERS)
-        data = bytearray(MAINS[folder])
-        for _ in range(rng.randint(1, 3)):
-            data.insert(rng.randrange(len(data) + 1), rng.choice(INVALID_BYTES))
+        original = MAINS[folder]
+        positions: list[int] = []
+        for offset in sorted(rng.sample(range(len(original) + 1), rng.randint(1, 3))):
+            if not positions or offset - positions[-1] >= 2:
+                positions.append(offset)
+        data = bytearray(original)
+        for offset in reversed(positions):
+            data.insert(offset, rng.choice(INVALID_BYTES))
+        outside = any(not _in_comment(original, offset) for offset in positions)
         cases.append(
             Case(
-                f"seed{seed}#{i} invalid-utf8 {folder}",
+                f"seed{seed}#{i} invalid-utf8 {folder}@{positions}",
                 with_versions(bytes(data)),
-                ONLY_UNSUPPORTED,
+                ONLY_INVALID if outside else ONLY_UNSUPPORTED,
             )
         )
     return cases

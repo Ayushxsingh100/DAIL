@@ -338,7 +338,8 @@ class TestFilesHashesAndOrder(DirectoryCase):
 
 
 class TestInputSubset(DirectoryCase):
-    """C-93: *.tf.json, override files and files that are not valid UTF-8 are UNSUPPORTED."""
+    """C-93 and the C-92 rule: valid Terraform that DAIL does not accept is UNSUPPORTED, and
+    INVALID is only for input that Terraform 1.15.8 itself rejects."""
 
     def test_tf_json_files_are_unsupported_and_named(self) -> None:
         outcome = self.load({"main.tf": MAIN, "extra.tf.json": "{}"})
@@ -383,29 +384,75 @@ class TestInputSubset(DirectoryCase):
         )
         self.assertEqual(outcome.status, OK)
 
-    def test_a_byte_order_mark_is_invalid(self) -> None:
-        # The pinned spec: "UTF-8 encoded Unicode byte order marks are not permitted" (C-93).
+    def test_a_byte_order_mark_is_unsupported(self) -> None:
+        # The pinned spec forbids a byte order mark but Terraform 1.15.8 accepts one, so by the
+        # C-92 rule (INVALID only when Terraform rejects) it is UNSUPPORTED.
         outcome = self.load({"main.tf": b"\xef\xbb\xbf" + MAIN.encode()})
-        self.assertEqual(outcome.status, INVALID)
+        self.assertEqual(outcome.status, UNSUPPORTED)
+        self.assertIsNone(outcome.configuration)
         (diagnostic,) = outcome.diagnostics
-        self.assertEqual((diagnostic.code, diagnostic.file), ("input.byte_order_mark", "main.tf"))
+        self.assertEqual((diagnostic.code, diagnostic.file), ("limit.byte_order_mark", "main.tf"))
         self.assertEqual((diagnostic.line, diagnostic.column), (1, 1))
 
-    def test_invalid_utf8_is_unsupported_with_its_position(self) -> None:
+    def test_a_byte_order_mark_beside_a_file_with_a_syntax_error_is_invalid(self) -> None:
+        outcome = self.load({"a.tf": b"\xef\xbb\xbf" + MAIN.encode(), "b.tf": b"x = (\n"})
+        self.assertEqual(outcome.status, INVALID)
+        self.assertEqual(sorted(self.codes(outcome))[0], "limit.byte_order_mark")
+
+    def test_invalid_utf8_in_code_is_invalid_with_its_position(self) -> None:
+        # Terraform 1.15.8: "Invalid character encoding: All input files must be UTF-8 encoded".
         outcome = self.load({"main.tf": b'# ok\nlocals {\n  a = "\xff"\n}\n'})
+        self.assertEqual(outcome.status, INVALID)
+        (diagnostic,) = outcome.diagnostics
+        self.assertEqual(diagnostic.code, "lex.invalid_utf8")
+        self.assertEqual((diagnostic.file, diagnostic.line, diagnostic.column), ("main.tf", 3, 8))
+
+    def test_invalid_utf8_in_a_comment_is_unsupported_with_its_position(self) -> None:
+        # Terraform 1.15.8 accepts any bytes in a comment, so the file is valid Terraform that
+        # DAIL cannot decode: UNSUPPORTED.
+        outcome = self.load({"main.tf": b"# ok\nlocals {\n  # caf\xe9\n}\n"})
         self.assertEqual(outcome.status, UNSUPPORTED)
+        self.assertIsNone(outcome.configuration)
         (diagnostic,) = outcome.diagnostics
         self.assertEqual(diagnostic.code, "input.invalid_utf8")
         self.assertEqual((diagnostic.file, diagnostic.line, diagnostic.column), ("main.tf", 3, 8))
 
-    def test_other_invalid_encodings_are_unsupported(self) -> None:
-        for raw in (b"\xc0\xaf", b"\xed\xa0\x80", b"\xf4\x90\x80\x80", b"\xe2\x82", b"\x80"):
-            with self.subTest(raw=raw):
-                with tempfile.TemporaryDirectory() as directory:
-                    Path(directory, "main.tf").write_bytes(b"# " + raw + b"\n")
-                    outcome = load_configuration(Path(directory))
-                self.assertEqual(outcome.status, UNSUPPORTED)
-                self.assertEqual(self.codes(outcome), ["input.invalid_utf8"])
+    def test_each_kind_of_undecodable_bytes_by_position(self) -> None:
+        shapes = (b"\xc0\xaf", b"\xed\xa0\x80", b"\xf4\x90\x80\x80", b"\xe0\x80\x80")
+        malformed = (b"\xe2\x82", b"\x80", b"\xff", b"\xf8\x88\x80\x80\x80")
+        cases = (
+            (b"# %s\n", shapes + malformed, UNSUPPORTED, "input.invalid_utf8"),
+            (b"/* %s */\n", shapes + malformed, UNSUPPORTED, "input.invalid_utf8"),
+            (b'locals { a = "%s" }\n', shapes, UNSUPPORTED, "input.invalid_utf8"),
+            (b"locals {\n a = <<EOT\n%s\nEOT\n}\n", shapes, UNSUPPORTED, "input.invalid_utf8"),
+            (b'locals { a = "%s" }\n', malformed, INVALID, "lex.invalid_utf8"),
+            (b"locals {\n a = <<EOT\n%s\nEOT\n}\n", malformed, INVALID, "lex.invalid_utf8"),
+            (b'variable "a%s" {}\n', malformed, INVALID, "lex.invalid_utf8"),
+            (b"locals { %s a = 1 }\n", shapes + malformed, INVALID, "lex.invalid_utf8"),
+            (b"locals { a = 1 %s }\n", shapes + malformed, INVALID, "lex.invalid_utf8"),
+        )
+        for template, payloads, status, code in cases:
+            for payload in payloads:
+                with self.subTest(template=template[:12], payload=payload):
+                    with tempfile.TemporaryDirectory() as directory:
+                        Path(directory, "main.tf").write_bytes(template % payload)
+                        outcome = load_configuration(Path(directory))
+                    self.assertEqual(outcome.status, status, outcome.diagnostics)
+                    self.assertIsNone(outcome.configuration)
+                    self.assertEqual(self.codes(outcome), [code])
+
+    def test_undecodable_bytes_in_a_comment_do_not_hide_a_structural_error(self) -> None:
+        text = b'# caf\xe9\nvariable "v" {}\nvariable "v" {}\n'
+        outcome = self.load({"main.tf": text})
+        self.assertEqual(outcome.status, INVALID)
+        self.assertEqual(
+            sorted(self.codes(outcome)), ["input.invalid_utf8", "struct.duplicate_address"]
+        )
+
+    def test_undecodable_bytes_in_a_comment_do_not_hide_a_syntax_error(self) -> None:
+        outcome = self.load({"main.tf": b"# caf\xe9\nx = (\n"})
+        self.assertEqual(outcome.status, INVALID)
+        self.assertEqual(self.codes(outcome), ["parse.expected_expression"])
 
     def test_utf16_text_is_not_accepted(self) -> None:
         outcome = self.load({"main.tf": MAIN.encode("utf-16")})

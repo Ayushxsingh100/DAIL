@@ -15,7 +15,7 @@ from core.terraform_model.hcl.ast import SourceRange
 RULES: dict[str, str] = {
     # Lexical rules
     "lex.invalid_character": "A character that is not part of the HCL native syntax.",
-    "lex.invalid_utf8": "The text is not valid Unicode (a lone surrogate code point).",
+    "lex.invalid_utf8": "A byte that is not valid UTF-8 outside a comment, or a lone surrogate.",
     "lex.unterminated_comment": "A /* comment is not closed by */.",
     "lex.unterminated_string": "A quoted template is not closed before the end of the file.",
     "lex.newline_in_string": "A quoted template contains a line break.",
@@ -48,8 +48,10 @@ RULES: dict[str, str] = {
     "parse.unbalanced_directive": "A template directive without its partner.",
     # Limits and tables (the loader reports UNSUPPORTED)
     "limit.nesting_depth": "Nesting deeper than the limit of C-93.",
+    "limit.byte_order_mark": "A UTF-8 byte order mark (the spec forbids it, Terraform accepts it).",
+    "limit.legacy_index_form": "A legacy index written as a number with an exponent (.1e3).",
     "limit.number_range": "A number literal whose exponent is outside the range of Decimal.",
-    "limit.unicode_table": "A code point that Unicode 15.0 (the tables of Python 3.12) lacks.",
+    "limit.undecodable_in_identifier": "A stray byte beside an identifier, tolerated by Terraform.",
 }
 
 

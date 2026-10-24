@@ -23,13 +23,13 @@
 
 Where Terraform restricts HCL further (top-level block types, labels, meta-arguments), the rule comes from the Terraform 1.15.x language documentation, `hashicorp/web-unified-docs` at commit `fefc7502dba86c70716f0109c324c85829229b2f`, directory `content/terraform/v1.15.x/docs/language/`. Each rule in the code names its page.
 
-**Outcome model (C-92).** `OK`, `INVALID` (not valid HCL, or a Terraform structural rule from C-94 is broken) and `UNSUPPORTED` (valid, but outside the input subset or limits of C-93). `INVALID` takes precedence when both occur. Both fail closed: no configuration is returned unless the status is `OK`. Diagnostics carry file, line, column and a rule code. Registry §2.8: every invariant becomes UNSUPPORTED when the outcome is not `OK` (enforced in P5).
+**Outcome model (C-92).** `OK`, `INVALID` (Terraform 1.15.8 itself rejects the input: not valid HCL, or a Terraform structural rule from C-94 is broken) and `UNSUPPORTED` (valid Terraform that DAIL does not accept: outside the input subset or limits of C-93). The rule is: INVALID only when Terraform rejects. `INVALID` takes precedence when both occur. Both fail closed: no configuration is returned unless the status is `OK`. Diagnostics carry file, line, column and a rule code. Registry §2.8: every invariant becomes UNSUPPORTED when the outcome is not `OK` (enforced in P5).
 
 **Input subset and limits (C-93).**
 
-- UNSUPPORTED: `*.tf.json` files, override files (`override.tf`, `*_override.tf`), files that are not valid UTF-8 (tension with the spec recorded in C-95).
+- UNSUPPORTED: `*.tf.json` files, override files (`override.tf`, `*_override.tf`), a byte-order mark, a legacy index with an exponent (`.1e3`), and non-UTF-8 bytes in the places where Terraform accepts them (comments; some well-formed-looking sequences in strings). Other non-UTF-8 bytes are INVALID, because Terraform rejects them (C-95).
 - Limits: file size above 2 MiB, nesting depth above 64, more than 10,000 blocks per configuration. Exceeding a limit is UNSUPPORTED.
-- A byte-order mark is INVALID, because the pinned spec says "UTF-8 encoded Unicode byte order marks are not permitted".
+- A byte-order mark is UNSUPPORTED: the pinned spec says "UTF-8 encoded Unicode byte order marks are not permitted", but Terraform 1.15.8 accepts one.
 - Only `*.tf` files directly in the given directory are read, in byte-wise sorted filename order.
 
 **Consequences.**

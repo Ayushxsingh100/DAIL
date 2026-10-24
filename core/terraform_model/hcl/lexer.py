@@ -22,7 +22,7 @@ from __future__ import annotations
 import enum
 import unicodedata
 from array import array
-from bisect import bisect_right
+from bisect import bisect_left, bisect_right
 from collections import deque
 
 from core.terraform_model.hcl.ast import SourceRange
@@ -120,7 +120,10 @@ class SourceMap:
             for ch in text:
                 offsets.append(acc)
                 cp = ord(ch)
-                acc += 1 if cp < 0x80 else 2 if cp < 0x800 else 3 if cp < 0x10000 else 4
+                if cp < 0x80 or _UNDECODABLE_FIRST <= cp <= _UNDECODABLE_LAST:
+                    acc += 1  # ASCII, or one undecodable byte that surrogateescape kept
+                else:
+                    acc += 2 if cp < 0x800 else 3 if cp < 0x10000 else 4
             offsets.append(acc)
             self._bytes = offsets
 
@@ -148,8 +151,10 @@ class SourceMap:
 # the categories L* and Nl plus Other_ID_Start; ID_Continue adds Mn, Mc, Nd, Pc and
 # Other_ID_Continue. Terraform 1.15.8 also accepts a leading '_' (C-95), and the Terraform
 # documentation ("Identifiers") only forbids a leading digit, so '_' starts an identifier here.
-# A code point that Unicode 15.0 does not assign cannot be classified exactly (R2); it gives
-# UNSUPPORTED (limit.unicode_table), never a silent acceptance.
+# Terraform 1.15.8 uses older tables (U+1E900, assigned in Unicode 9.0, is an identifier
+# character there; U+11A00, assigned in 10.0, is not), so a code point that Unicode 15.0 does not
+# assign is also rejected by Terraform and is INVALID. The reverse does not hold: a letter added
+# in Unicode 10.0 to 15.0 is accepted here and rejected by Terraform (C-95).
 
 _ID_START_CATEGORIES = frozenset({"Lu", "Ll", "Lt", "Lm", "Lo", "Nl"})
 _ID_CONTINUE_CATEGORIES = frozenset({"Mn", "Mc", "Nd", "Pc"})
@@ -161,7 +166,19 @@ _ASCII_ID_START = _ASCII_LETTERS | {"_"}
 _ASCII_ID_CONTINUE = _ASCII_LETTERS | _DIGITS | {"_", "-"}
 _HEX = frozenset("0123456789abcdefABCDEF")
 
-UNICODE_VERSION = unicodedata.unidata_version
+# Lead bytes that Terraform 1.15.8's scanner tolerates, as a stray byte, next to identifier
+# characters (found by trying every byte 0x80..0xFF; the scanner consumes them with whatever
+# follows, so the exact behaviour depends on the next character). DAIL cannot reproduce that, so
+# such a byte is UNSUPPORTED (limit.undecodable_in_identifier) instead of INVALID.
+_TOLERATED_LEADS = frozenset(
+    {0xC4, 0xC5, 0xC6, 0xC8, 0xC9, 0xCA, 0xCB, 0xCD, 0xCF}
+    | set(range(0xD0, 0xD7))
+    | {0xDA, 0xDB, 0xDD, 0xDE, 0xE4, 0xE5, 0xE6, 0xE7, 0xE8, 0xE9, 0xEB, 0xEC, 0xED}
+)
+
+# U+DC80..U+DCFF: the code points that errors="surrogateescape" gives to bytes 0x80..0xFF.
+_UNDECODABLE_FIRST = 0xDC80
+_UNDECODABLE_LAST = 0xDCFF
 
 
 def is_id_start(ch: str) -> bool:
@@ -179,10 +196,6 @@ def is_id_continue(ch: str) -> bool:
         or cp in _OTHER_ID_START
         or cp in _OTHER_ID_CONTINUE
     )
-
-
-def _is_noncharacter(cp: int) -> bool:
-    return 0xFDD0 <= cp <= 0xFDEF or (cp & 0xFFFE) == 0xFFFE
 
 
 # --- Frames ------------------------------------------------------------------------------------
@@ -237,12 +250,21 @@ class Lexer:
         self._queue: deque[Token] = deque()
         self._buffers: list[list[Token]] = []
         self._done = False
+        # Undecodable bytes: the loader decodes a file with errors="surrogateescape", so each such
+        # byte arrives as one of U+DC80..U+DCFF. Any other lone surrogate is not text we produce.
+        self._undecodable: list[int] = []
         try:
             text.encode("utf-8")
-        except UnicodeEncodeError as exc:
-            raise self._error(
-                "lex.invalid_utf8", exc.start, exc.start + 1, "lone surrogate code point"
-            ) from None
+        except UnicodeEncodeError:
+            try:
+                text.encode("utf-8", "surrogateescape")
+            except UnicodeEncodeError as exc:
+                raise self._error(
+                    "lex.invalid_utf8", exc.start, exc.start + 1, "lone surrogate code point"
+                ) from None
+            self._undecodable = [
+                i for i, ch in enumerate(text) if _UNDECODABLE_FIRST <= ord(ch) <= _UNDECODABLE_LAST
+            ]
 
     # -- plumbing ----------------------------------------------------------------------------
 
@@ -446,14 +468,32 @@ class Lexer:
 
     def _invalid_character(self, c: str, i: int) -> int:
         cp = ord(c)
-        if unicodedata.category(c) == "Cn" and not _is_noncharacter(cp):
+        if _UNDECODABLE_FIRST <= cp <= _UNDECODABLE_LAST:
+            byte = cp - 0xDC00
+            if byte in _TOLERATED_LEADS and self._beside_identifier(i):
+                raise HclLimitError(
+                    "limit.undecodable_in_identifier",
+                    self.smap.range(i, i + 1),
+                    f"byte 0x{byte:02X} next to identifier characters: Terraform's scanner "
+                    "tolerates some such bytes in a way DAIL cannot reproduce (C-95)",
+                )
+            raise self._error(
+                "lex.invalid_utf8", i, i + 1, f"byte 0x{byte:02X} is not valid UTF-8 here"
+            )
+        if cp == 0xFEFF and i == 0:
             raise HclLimitError(
-                "limit.unicode_table",
+                "limit.byte_order_mark",
                 self.smap.range(i, i + 1),
-                f"U+{cp:04X} is unassigned in Unicode {UNICODE_VERSION}, so it cannot be "
-                "classified exactly",
+                "a UTF-8 byte order mark is forbidden by the HCL specification but accepted by "
+                "Terraform, so DAIL does not support it (C-92)",
             )
         raise self._error("lex.invalid_character", i, i + 1, f"invalid character U+{cp:04X}")
+
+    def _beside_identifier(self, i: int) -> bool:
+        text = self._text
+        before = text[i - 1] if i > 0 else ""
+        after = text[i + 1] if i + 1 < self._n else ""
+        return any(ch != "" and is_id_continue(ch) for ch in (before, after))
 
     # -- heredoc introduction ----------------------------------------------------------------
 
@@ -507,6 +547,8 @@ class Lexer:
             while j < n and text[j] not in _QUOTED_SPECIAL:
                 j += 1
             if j > i:
+                if self._undecodable:
+                    self._check_undecodable(i, j)
                 pieces.append(text[i:j])
                 i = j
             if i >= n:
@@ -538,6 +580,42 @@ class Lexer:
                 raise self._error(
                     "lex.newline_in_string", i, i + 1, "quoted templates cannot span lines"
                 )
+
+    def _check_undecodable(self, start: int, end: int) -> None:
+        """Undecodable bytes inside template text (a string, a label or a heredoc).
+
+        Terraform 1.15.8 accepts a lead byte C0..F7 followed by the right number of continuation
+        bytes 80..BF even when the value is overlong, above U+10FFFF or a surrogate, and rejects
+        any other stray byte (C-95). The first kind is valid Terraform that Python cannot decode,
+        so the file is UNSUPPORTED (the loader reports it); the second kind is INVALID.
+        """
+        text = self._text
+        covered = -1
+        first = bisect_left(self._undecodable, start)
+        for k in range(first, bisect_left(self._undecodable, end)):
+            p = self._undecodable[k]
+            if p < covered:
+                continue
+            lead = ord(text[p]) - 0xDC00
+            need = 0
+            if 0xC0 <= lead <= 0xDF:
+                need = 1
+            elif 0xE0 <= lead <= 0xEF:
+                need = 2
+            elif 0xF0 <= lead <= 0xF7:
+                need = 3
+            tail = text[p + 1 : p + 1 + need]
+            well_formed = (
+                need > 0
+                and p + need < end
+                and len(tail) == need
+                and all(0xDC80 <= ord(ch) <= 0xDCBF for ch in tail)
+            )
+            if not well_formed:
+                raise self._error(
+                    "lex.invalid_utf8", p, p + 1, f"byte 0x{lead:02X} is not valid UTF-8 here"
+                )
+            covered = p + need + 1
 
     def _escape(self, i: int) -> tuple[str, int]:
         """Escape sequences of a quoted template (spec, "Template Expressions")."""
@@ -640,6 +718,8 @@ class Lexer:
             while j < n and text[j] not in _HEREDOC_SPECIAL:
                 j += 1
             if j > i:
+                if self._undecodable:
+                    self._check_undecodable(i, j)
                 pieces.append(text[i:j])
                 i = j
             if i >= n:

@@ -624,15 +624,28 @@ class _Parser:
         return Index(expr, step.key, False, rng)
 
     def _legacy_step(self, number: Token) -> LegacyIndexStep:
-        """LegacyIndex = '.' digit+ (lines 547-561); ``foo.0.0`` lexes as a number literal."""
-        if not (number.value.isascii() and number.value.isdigit()):
-            raise self._error(
-                "parse.invalid_legacy_index",
-                number,
-                f"the legacy index syntax needs a plain integer, found {number.value}; "
-                "chaining two legacy indexes is not permitted",
+        """LegacyIndex = '.' digit+ (lines 547-561); ``foo.0.0`` lexes as a number literal.
+
+        ``.1e3`` (a number with an exponent and no dot) is valid Terraform 1.15.8 but not the
+        specification's ``digit+``, so it is UNSUPPORTED; a number with a dot (``0.0``, ``1.5``)
+        is the chained form that Terraform rejects (C-92, C-95).
+        """
+        value = number.value
+        if not (value.isascii() and value.isdigit()):
+            if "." in value:
+                raise self._error(
+                    "parse.invalid_legacy_index",
+                    number,
+                    f"the legacy index syntax needs a plain integer, found {_clip(value)}; "
+                    "chaining two legacy indexes is not permitted",
+                )
+            raise HclLimitError(
+                "limit.legacy_index_form",
+                self._smap.range(number.start, number.end),
+                f"the legacy index {_clip(value)} is a number with an exponent, which Terraform "
+                "accepts but the specification's digit+ form does not",
             )
-        return LegacyIndexStep(int(number.value), self._smap.range(number.start, number.end))
+        return LegacyIndexStep(int(value), self._smap.range(number.start, number.end))
 
     def _parse_index_step(self) -> IndexStep:
         """Index = "[" Expression "]" (lines 518-520)."""

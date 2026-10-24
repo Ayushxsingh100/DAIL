@@ -53,7 +53,6 @@ MAX_FILE_BYTES: Final = 2 * 1024 * 1024
 MAX_BLOCKS: Final = 10_000
 # The third C-93 limit, the nesting depth of 64, is enforced by the parser (MAX_NESTING_DEPTH).
 
-_BOM: Final = b"\xef\xbb\xbf"
 _LOADER_TOKEN: Final = object()
 
 
@@ -410,28 +409,17 @@ class _Loader:
                 name,
             )
             return
-        # Spec, "Source Code Representation": "UTF-8 encoded Unicode byte order marks are not
-        # permitted" (C-93: a BOM is a parse error, INVALID).
-        if data.startswith(_BOM):
-            self.invalid(
-                "input.byte_order_mark",
-                f"{name} starts with a UTF-8 byte order mark, which the HCL specification forbids",
-                name,
-                SourceRange(name, 1, 1, 1, 1, 0, 0),
-            )
-            return
+        # Undecodable bytes (C-92, C-95): Terraform 1.15.8 rejects them outside comments (the lexer
+        # then reports INVALID) but accepts them in comments and in some well-formed-looking
+        # sequences, so a file that parses and still holds such bytes is valid Terraform that
+        # DAIL does not support: UNSUPPORTED. A byte order mark is handled by the lexer the same
+        # way (limit.byte_order_mark): Terraform accepts it, the HCL specification forbids it.
+        undecodable: UnicodeDecodeError | None = None
         try:
             text = data.decode("utf-8")
         except UnicodeDecodeError as exc:
-            line = data.count(b"\n", 0, exc.start) + 1
-            column = exc.start - (data.rfind(b"\n", 0, exc.start) + 1) + 1
-            self.unsupported(
-                "input.invalid_utf8",
-                f"{name} is not valid UTF-8 (byte {exc.start}; C-93, C-95)",
-                name,
-                SourceRange(name, line, column, line, column, exc.start, exc.start),
-            )
-            return
+            undecodable = exc
+            text = data.decode("utf-8", "surrogateescape")
         try:
             body = parse_file(text, name)
         except HclSyntaxError as exc:
@@ -448,6 +436,18 @@ class _Loader:
             return
         self.bodies[name] = body
         self.hashes[name] = sha256_bytes(data)
+        if undecodable is not None:
+            start = undecodable.start
+            line = data.count(b"\n", 0, start) + 1
+            column = start - (data.rfind(b"\n", 0, start) + 1) + 1
+            self.unsupported(
+                "input.invalid_utf8",
+                f"{name} holds bytes that are not valid UTF-8 (first at byte {start}) where "
+                "Terraform still accepts them (a comment or a well-formed-looking sequence); "
+                "DAIL does not support them (C-92, C-95)",
+                name,
+                SourceRange(name, line, column, line, column, start, start),
+            )
 
     # -- limits and structure ----------------------------------------------------------------
 

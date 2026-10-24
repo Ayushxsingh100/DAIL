@@ -382,6 +382,7 @@ VALID_EXPRESSIONS: list[tuple[str, str, Expression]] = [
     ("legacy index", "a.0", var("a", lg(0))),
     ("legacy index then attribute", "a.0.b", var("a", lg(0), at("b"))),
     ("legacy index then bracket", "a.1[2]", var("a", lg(1), ix(num(2)))),
+    ("legacy index with leading zeros", "a.00", var("a", lg(0))),
     ("non-constant index", "a[b]", Index(var("a"), var("b"), False, R)),
     ("index with expression", "a[1 + 1]", Index(var("a"), binop(Op.ADD, num(1), num(1)), False, R)),
     ("negative index is not constant", "a[-1]", Index(var("a"), neg(num(1)), False, R)),
@@ -1003,7 +1004,8 @@ INVALID: list[tuple[str, str, str]] = [
     ("two dots", "a = b..c\n", "parse.invalid_attribute_name"),
     ("attribute on the next line", "a = b\n  .c\n", "parse.expected_argument_or_block"),
     ("chained legacy indexes", "a = b.0.0\n", "parse.invalid_legacy_index"),
-    ("legacy index with an exponent", "a = b.1e3\n", "parse.invalid_legacy_index"),
+    ("legacy index with a dot and an exponent", "a = b.1.5e3\n", "parse.invalid_legacy_index"),
+    ("legacy index with a fraction", "a = b.1.5\n", "parse.invalid_legacy_index"),
     ("splat inside an attribute-only splat", "a = b.*.c.*.d\n", "parse.nested_splat"),
     ("conditional without a false branch", "a = b ? c\n", "parse.missing_conditional_colon"),
     ("colon on the next line", "a = b ? c\n  : d\n", "parse.missing_conditional_colon"),
@@ -1047,9 +1049,51 @@ INVALID: list[tuple[str, str, str]] = [
     ("unterminated heredoc", "a = <<EOT\nhi\n", "lex.unterminated_heredoc"),
     ("bad heredoc introduction", "a = << EOT\nhi\nEOT\n", "lex.invalid_heredoc_intro"),
     ("bitwise operator", "a = b & c\n", "lex.invalid_character"),
-    ("byte order mark", "\ufeffa = 1\n", "lex.invalid_character"),
+    ("byte order mark in the middle", "a = 1\n\ufeffb = 2\n", "lex.invalid_character"),
     ("lone surrogate", "a = \ud800\n", "lex.invalid_utf8"),
+    ("unassigned code point", "a = 1 ͸\n", "lex.invalid_character"),
+    ("undecodable byte in code", "a = 1 \udcff\n", "lex.invalid_utf8"),
+    ("undecodable byte in a string", 'a = "\udcff"\n', "lex.invalid_utf8"),
 ]
+
+# Valid Terraform 1.15.8 that DAIL does not accept: UNSUPPORTED, not INVALID (C-92, C-95).
+UNSUPPORTED_CASES: list[tuple[str, str, str]] = [
+    ("legacy index with an exponent", "a = b.1e3\n", "limit.legacy_index_form"),
+    ("legacy index with a signed exponent", "a = b.1E+3\n", "limit.legacy_index_form"),
+    ("legacy index with a negative exponent", "a = b.1e-3\n", "limit.legacy_index_form"),
+    (
+        "legacy index with an exponent, then an attribute",
+        "a = b.1e3.c\n",
+        "limit.legacy_index_form",
+    ),
+    ("byte order mark", "\ufeffa = 1\n", "limit.byte_order_mark"),
+    ("byte order mark before a comment", "\ufeff# c\n", "limit.byte_order_mark"),
+    ("nesting too deep", "a = " + "[" * 65 + "1" + "]" * 65 + "\n", "limit.nesting_depth"),
+    ("exponent beyond Decimal", "a = 1e999999999999999999999\n", "limit.number_range"),
+]
+
+
+class TestUnsupportedInputs(unittest.TestCase):
+    """Terraform accepts these; the specification forbids them or DAIL cannot evaluate them."""
+
+    def test_every_case_raises_a_limit_error_with_its_code(self) -> None:
+        for name, source, code in UNSUPPORTED_CASES:
+            with self.subTest(case=name):
+                with self.assertRaises(HclLimitError) as caught:
+                    parse_file(source, "t.tf")
+                self.assertEqual(caught.exception.code, code)
+                self.assertIn(code, RULES)
+                self.assertEqual(caught.exception.range.file, "t.tf")
+
+    def test_the_valid_neighbours_of_these_cases_are_accepted(self) -> None:
+        for source in ("a = b.1\n", "a = b.00\n", "a = b.1.c\n", "a = 1e3\n", "a = 1 # \u0378\n"):
+            with self.subTest(source=source):
+                parse_file(source, "t.tf")
+
+    def test_a_byte_order_mark_is_only_special_at_the_start(self) -> None:
+        self.assertEqual(code_of("a = 1\n\ufeff"), "lex.invalid_character")
+        parse_file('a = "\ufeff"\n', "t.tf")  # inside a string it is text
+        parse_file("# \ufeff\n", "t.tf")  # and inside a comment
 
 
 class TestInvalidInputs(unittest.TestCase):
