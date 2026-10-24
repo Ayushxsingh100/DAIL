@@ -126,7 +126,7 @@ Before finishing any package, run `dev.py test`, `dev.py lint` and `pytest`. If 
   - commit directly to `main`.
 - **Terraform and AWS.**
   - Never run `terraform apply` or `terraform destroy`, and never use AWS credentials, unless the current prompt (P9 onward) says so and the user confirms.
-  - No provider blocks or resources before P9.
+  - No provider blocks anywhere before P9. Resources only under `fixtures/`, as test data: `terraform init -backend=false` and `terraform validate` only; never plan, apply or use credentials there.
   - Terraform and AWS provider pins must match the TerraPreserve repository.
 - **Secrets.**
   - Never commit or print secrets. Secrets are referenced only as `env:NAME`.

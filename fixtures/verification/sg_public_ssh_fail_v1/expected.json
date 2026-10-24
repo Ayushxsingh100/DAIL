@@ -1,0 +1,87 @@
+{
+  "schema": "dail-fixture-expected/1",
+  "fixture_id": "sg_public_ssh_fail_v1",
+  "doc12_fixture": "public_ssh_violation",
+  "kind": "transition",
+  "registry": {
+    "tag": "registry-v1.0",
+    "commit": "80d161ded595f26b7a339d3351ba335434d7ee32",
+    "invariant_registry_version": 1
+  },
+  "config": "fixtures/canonical_regression/baseline",
+  "parent": "fixtures/canonical_regression/patch_safe",
+  "parent_remediation_targets": [],
+  "bindings": {
+    "INV-FUNC-001": {
+      "S": "aws_instance.app",
+      "D": "aws_db_instance.database"
+    }
+  },
+  "results": {
+    "INV-SEC-001": {
+      "invariant_version": 1,
+      "result": "FAIL",
+      "basis": "registry §3.4 row 1: the re-added app_ssh_public admits TCP/22 from 0.0.0.0/0; the parent's app ingress was explicit empty, the candidate's is absent, which means no inline rules (§2.6, C-84)",
+      "clauses": {
+        "ipv4": "FAIL",
+        "ipv6": "PASS"
+      }
+    },
+    "INV-SEC-002": {
+      "invariant_version": 1,
+      "result": "PASS",
+      "basis": "registry §3.4 with p = 5432 (§4.2): the only 5432 rule has a security-group source, so no IPv4 or IPv6 range is covered",
+      "clauses": {
+        "ipv4": "PASS",
+        "ipv6": "PASS"
+      }
+    },
+    "INV-SEC-003": {
+      "invariant_version": 1,
+      "result": "PASS",
+      "basis": "registry §5.3 'otherwise' row: publicly_accessible = false"
+    },
+    "INV-FUNC-001": {
+      "invariant_version": 1,
+      "result": "PASS",
+      "basis": "registry §6.4 row 6: E5 holds by app_egress_all (-1 to 0.0.0.0/0), E6 by app_to_db_5432 from the app group (§6.5)"
+    }
+  },
+  "changes": {
+    "default": "UNCHANGED",
+    "resources": {
+      "aws_security_group.app": {
+        "identity": "SAME",
+        "change": "MODIFIED"
+      },
+      "aws_security_group_rule.app_ssh_public": {
+        "identity": null,
+        "change": "CREATED"
+      }
+    }
+  },
+  "impact": {
+    "truth_changed": [
+      "INV-SEC-001"
+    ],
+    "oracle_affected": [
+      "INV-FUNC-001",
+      "INV-SEC-001",
+      "INV-SEC-002"
+    ],
+    "required_affected": [
+      "INV-FUNC-001",
+      "INV-SEC-001",
+      "INV-SEC-002"
+    ]
+  },
+  "decision": {
+    "allowed": [
+      "REJECT"
+    ],
+    "reason": "INV-SEC-001 regresses from PASS to FAIL (Doc 09 §20)."
+  },
+  "baseline": null,
+  "process": null,
+  "derivation": "Hand-derived from registry-v1.0 and Docs 07-09 by the external reviewer, 24 Oct 2026; not computed."
+}

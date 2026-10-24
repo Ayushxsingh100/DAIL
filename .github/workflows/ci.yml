@@ -74,3 +74,14 @@ jobs:
       - run: terraform fmt -check -recursive infrastructure/terraform
       - run: terraform -chdir=infrastructure/terraform init -backend=false -input=false -lockfile=readonly
       - run: terraform -chdir=infrastructure/terraform validate
+      - name: Fixtures (C-86) - fmt, init -backend=false, validate; never plan or apply
+        env:
+          TF_PLUGIN_CACHE_DIR: ${{ runner.temp }}/tf-plugin-cache
+        run: |
+          mkdir -p "$TF_PLUGIN_CACHE_DIR"
+          terraform fmt -check -recursive fixtures
+          for dir in $(find fixtures -name '*.tf' -printf '%h\n' | sort -u); do
+            echo "== $dir"
+            terraform -chdir="$dir" init -backend=false -input=false -lockfile=readonly
+            terraform -chdir="$dir" validate
+          done

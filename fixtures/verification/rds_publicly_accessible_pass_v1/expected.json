@@ -1,0 +1,82 @@
+{
+  "schema": "dail-fixture-expected/1",
+  "fixture_id": "rds_publicly_accessible_pass_v1",
+  "doc12_fixture": null,
+  "kind": "transition",
+  "registry": {
+    "tag": "registry-v1.0",
+    "commit": "80d161ded595f26b7a339d3351ba335434d7ee32",
+    "invariant_registry_version": 1
+  },
+  "config": "fixtures/canonical_regression/patch_safe",
+  "parent": "fixtures/verification/rds_publicly_accessible_fail_v1",
+  "parent_remediation_targets": [
+    "INV-SEC-003"
+  ],
+  "bindings": {
+    "INV-FUNC-001": {
+      "S": "aws_instance.app",
+      "D": "aws_db_instance.database"
+    }
+  },
+  "results": {
+    "INV-SEC-001": {
+      "invariant_version": 1,
+      "result": "PASS",
+      "basis": "registry §3.4 'otherwise' row: the SSH rule is gone and app ingress is explicit empty (§2.6), so no group admits TCP/22 from 0.0.0.0/0 or ::/0",
+      "clauses": {
+        "ipv4": "PASS",
+        "ipv6": "PASS"
+      }
+    },
+    "INV-SEC-002": {
+      "invariant_version": 1,
+      "result": "PASS",
+      "basis": "registry §3.4 with p = 5432 (§4.2): the only 5432 rule has a security-group source, so no IPv4 or IPv6 range is covered",
+      "clauses": {
+        "ipv4": "PASS",
+        "ipv6": "PASS"
+      }
+    },
+    "INV-SEC-003": {
+      "invariant_version": 1,
+      "result": "PASS",
+      "basis": "registry §5.3 'otherwise' row: publicly_accessible = false"
+    },
+    "INV-FUNC-001": {
+      "invariant_version": 1,
+      "result": "PASS",
+      "basis": "registry §6.4 row 6: E5 holds by app_egress_all (-1 to 0.0.0.0/0), E6 by app_to_db_5432 from the app group (§6.5)"
+    }
+  },
+  "changes": {
+    "default": "UNCHANGED",
+    "resources": {
+      "aws_db_instance.database": {
+        "identity": "SAME",
+        "change": "MODIFIED"
+      }
+    }
+  },
+  "impact": {
+    "truth_changed": [
+      "INV-SEC-003"
+    ],
+    "oracle_affected": [
+      "INV-SEC-003"
+    ],
+    "required_affected": [
+      "INV-FUNC-001",
+      "INV-SEC-003"
+    ]
+  },
+  "decision": {
+    "allowed": [
+      "PROMOTE"
+    ],
+    "reason": "All invariants PASS and the declared INV-SEC-003 target is met (Doc 09 §20, §33)."
+  },
+  "baseline": null,
+  "process": null,
+  "derivation": "Hand-derived from registry-v1.0 and Docs 07-09 by the external reviewer, 24 Oct 2026; not computed."
+}

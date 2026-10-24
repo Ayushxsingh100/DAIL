@@ -1,0 +1,98 @@
+{
+  "schema": "dail-fixture-expected/1",
+  "fixture_id": "canonical_security_repair_breaks_function_reject_v1",
+  "doc12_fixture": "security_repair_breaks_function",
+  "kind": "transition",
+  "registry": {
+    "tag": "registry-v1.0",
+    "commit": "80d161ded595f26b7a339d3351ba335434d7ee32",
+    "invariant_registry_version": 1
+  },
+  "config": "fixtures/canonical_regression/patch_regression",
+  "parent": "fixtures/canonical_regression/baseline",
+  "parent_remediation_targets": [
+    "INV-SEC-001"
+  ],
+  "bindings": {
+    "INV-FUNC-001": {
+      "S": "aws_instance.app",
+      "D": "aws_db_instance.database"
+    }
+  },
+  "results": {
+    "INV-SEC-001": {
+      "invariant_version": 1,
+      "result": "PASS",
+      "basis": "registry §3.4 'otherwise' row: the SSH rule is gone and app ingress is explicit empty (§2.6), so no group admits TCP/22 from 0.0.0.0/0 or ::/0",
+      "clauses": {
+        "ipv4": "PASS",
+        "ipv6": "PASS"
+      }
+    },
+    "INV-SEC-002": {
+      "invariant_version": 1,
+      "result": "PASS",
+      "basis": "registry §3.4 with p = 5432: no ingress rule remains, so no range is covered",
+      "clauses": {
+        "ipv4": "PASS",
+        "ipv6": "PASS"
+      }
+    },
+    "INV-SEC-003": {
+      "invariant_version": 1,
+      "result": "PASS",
+      "basis": "registry §5.3 'otherwise' row: publicly_accessible = false"
+    },
+    "INV-FUNC-001": {
+      "invariant_version": 1,
+      "result": "FAIL",
+      "basis": "registry §6.4 row 9: E5 holds but E6 does not (no ingress rule admits the app), no indeterminate or partial rule; vector F2, §6.5"
+    }
+  },
+  "changes": {
+    "default": "UNCHANGED",
+    "resources": {
+      "aws_security_group.app": {
+        "identity": "SAME",
+        "change": "MODIFIED"
+      },
+      "aws_security_group.db": {
+        "identity": "SAME",
+        "change": "MODIFIED"
+      },
+      "aws_security_group_rule.app_ssh_public": {
+        "identity": null,
+        "change": "DELETED"
+      },
+      "aws_security_group_rule.app_to_db_5432": {
+        "identity": null,
+        "change": "DELETED"
+      }
+    }
+  },
+  "impact": {
+    "truth_changed": [
+      "INV-FUNC-001",
+      "INV-SEC-001"
+    ],
+    "oracle_affected": [
+      "INV-FUNC-001",
+      "INV-SEC-001",
+      "INV-SEC-002"
+    ],
+    "required_affected": [
+      "INV-FUNC-001",
+      "INV-SEC-001",
+      "INV-SEC-002"
+    ]
+  },
+  "decision": {
+    "allowed": [
+      "REJECT"
+    ],
+    "reason": "The repair fixes INV-SEC-001 but INV-FUNC-001 regresses from PASS to FAIL, so the candidate is rejected (Doc 09 §34)."
+  },
+  "baseline": null,
+  "process": null,
+  "derivation": "Hand-derived from registry-v1.0 and Docs 07-09 by the external reviewer, 24 Oct 2026; not computed."
+}
