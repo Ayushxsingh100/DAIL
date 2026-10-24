@@ -67,6 +67,7 @@ An attribute is **resolved** when its value can be determined from the configura
 **Moves.**
 - Explicit `moved` blocks MUST be followed when comparing two configurations.
 - Terraform's implicit move when `count` is added to or removed from a single-instance resource MUST be followed too. [VERIFIED AT D1: CONFIRMED (V10): Terraform 1.15.8 moves `x` to `x[0]` when `count` is added and `x[0]` back to `x` when `count` is removed. It does not move implicitly into or out of `for_each`, or between `count` and `for_each`; those need `moved` blocks. [RES V10][d1-res]. New fact recorded as C-76.]
+- There is no implicit move into or out of `for_each`, or between `count` and `for_each`. Such a change is a delete and a create unless a `moved` block says otherwise. [DECIDED 24 Oct 2026: C-76. No predicate changes.]
 
 ### 2.4 Result values and combination
 
@@ -135,11 +136,11 @@ A resource type outside §1.3 changes a result only if it appears in the invaria
 
 | Invariant | Relevant-unsupported types (presence anywhere in the configuration) |
 |---|---|
-| INV-SEC-001, INV-SEC-002 | `aws_vpc_security_group_ingress_rule`, `aws_default_security_group` |
+| INV-SEC-001, INV-SEC-002 | `aws_vpc_security_group_ingress_rule`, `aws_default_security_group`, `aws_vpc_security_group_rules_exclusive` |
 | INV-SEC-003 | none |
-| INV-FUNC-001 | `aws_vpc_security_group_ingress_rule`, `aws_vpc_security_group_egress_rule`, `aws_default_security_group`, `aws_network_interface`, `aws_network_interface_attachment`, `aws_network_interface_sg_attachment`, `aws_network_acl`, `aws_network_acl_rule`, `aws_network_acl_association`, `aws_default_network_acl`, `aws_route`, `aws_default_route_table`, `aws_main_route_table_association`, `aws_vpc_ipv4_cidr_block_association`, `aws_vpc_peering_connection`, `aws_ec2_transit_gateway_vpc_attachment`, `aws_vpc_endpoint` |
+| INV-FUNC-001 | `aws_vpc_security_group_ingress_rule`, `aws_vpc_security_group_egress_rule`, `aws_default_security_group`, `aws_network_interface`, `aws_network_interface_attachment`, `aws_network_interface_sg_attachment`, `aws_network_acl`, `aws_network_acl_rule`, `aws_network_acl_association`, `aws_default_network_acl`, `aws_route`, `aws_default_route_table`, `aws_main_route_table_association`, `aws_vpc_ipv4_cidr_block_association`, `aws_vpc_peering_connection`, `aws_ec2_transit_gateway_vpc_attachment`, `aws_vpc_endpoint`, `aws_vpc_security_group_rules_exclusive`, `aws_vpc_security_group_vpc_association`, `aws_vpn_gateway_route_propagation`, `aws_vpc_route_server_propagation`, `aws_default_subnet`, `aws_default_vpc`, `aws_vpc_peering_connection_accepter`, `aws_vpc_peering_connection_options`, `aws_ec2_transit_gateway_vpc_attachment_accepter` |
 
-[VERIFIED AT D1: CHANGED (V12, heuristic): the lists are not shown to be complete. A keyword heuristic over the 1,678 resource types of provider 6.53.0 lists candidates the authors must decide on before the freeze, for example `aws_vpc_security_group_rules_exclusive`, `aws_vpc_security_group_vpc_association`, `aws_vpn_gateway_route_propagation`, `aws_vpc_route_server_propagation` and `aws_default_subnet`. The lists above are unchanged. [RES V12][d1-res]. See C-74 and C-78.]
+[VERIFIED AT D1: CHANGED (V12, heuristic): the lists are not shown to be complete. A keyword heuristic over the 1,678 resource types of provider 6.53.0 lists candidates the authors must decide on before the freeze, for example `aws_vpc_security_group_rules_exclusive`, `aws_vpc_security_group_vpc_association`, `aws_vpn_gateway_route_propagation`, `aws_vpc_route_server_propagation` and `aws_default_subnet`. [RES V12][d1-res].] [DECIDED 24 Oct 2026, C-74: the candidates were added as shown. The routing and VPC types join INV-FUNC-001 only; `aws_vpc_security_group_rules_exclusive` joins all three security-group lists because it removes rules the configuration does not list. The lists remain a heuristic result, not a proof of completeness. Over-approximation is intentional: UNSUPPORTED never passes.] **[PAPER]**
 
 **Tolerated type.** `aws_db_subnet_group` is tolerated, not relevant, under C-15 and §6.2. RDS placement is taken from the RDS security groups' VPC, and the subnet group's subnets are not modelled. The evidence MUST record this assumption.
 
@@ -296,7 +297,7 @@ For example, `S = aws_instance.app` and `D = aws_db_instance.database`. Endpoint
 **[PAPER]** A PASS means the configuration-level prerequisites hold within this model (Doc 09 §9). It does not mean packets flow at runtime.
 
 6.2 **Network model** (C-15, made precise):
-- **M1, RDS network context.** `VPC(D)` is the VPC that all of `D`'s security groups (`vpc_security_group_ids`) belong to. RDS subnets are not modelled. `aws_db_subnet_group` is tolerated (§2.7). The assumption, recorded in evidence, is that AWS requires the instance's security groups and its subnet group to be in the same VPC. [OPEN AFTER D1: UNRESOLVED (X02): no AWS RDS page read states the requirement, and AWS documents a Security Group VPC Association feature under which a group can serve resources in other VPCs. M1 stays an uncited assumption. [RES X02][d1-res]. See C-77.]
+- **M1, RDS network context.** `VPC(D)` is the VPC that all of `D`'s security groups (`vpc_security_group_ids`) belong to. RDS subnets are not modelled. `aws_db_subnet_group` is tolerated (§2.7). The assumption, recorded in evidence, is that AWS requires the instance's security groups and its subnet group to be in the same VPC. [OPEN AFTER D1: UNRESOLVED (X02): no AWS RDS page read states the requirement, and AWS documents a Security Group VPC Association feature under which a group can serve resources in other VPCs. M1 stays an uncited assumption. [RES X02][d1-res]. See C-77.] [DECIDED 24 Oct 2026, C-77: M1 stays a recorded assumption. `aws_vpc_security_group_vpc_association` is in INV-FUNC-001's relevant-unsupported list (§2.7), so a configuration using that feature is UNSUPPORTED.] **[PAPER]**
 - **M2, EC2 placement.** `VPC(S)` is the `vpc_id` of the configured `aws_subnet` that `S.subnet_id` references.
 - **M3, intra-VPC routing.** Routing inside a VPC is the VPC **local route**. AWS documents that the local route cannot be deleted, but **its target can be replaced, and more-specific routes can redirect east–west traffic to a middlebox** (network interface, Gateway Load Balancer endpoint or NAT gateway). Such routing is not modelled. Therefore **any route in any `aws_route_table` of `VPC(D)` whose destination is contained in the VPC CIDR and whose target is not `local` makes the result UNSUPPORTED.** Routes whose destination is wider than the VPC CIDR (for example `0.0.0.0/0` to an internet gateway) never apply to intra-VPC traffic, because the most specific route wins. **[PAPER]**
 - **M4, network ACLs.** Network ACLs are not modelled. When no NACL-related type from §2.7 is present, every subnet is assumed to use the default network ACL, which AWS documents as allowing all inbound and outbound traffic. That assumption is recorded in evidence. If any NACL-related type is present, the result is UNSUPPORTED (§2.7).
@@ -462,12 +463,12 @@ The oracle uses its own IDs under the `tp.oracle.` prefix. Oracle results are L2
 ## 12. Open items
 
 **Resolved at D1 (23 Oct 2026)** against Terraform 1.15.8, AWS provider 6.53.0 and Checkov 3.3.30. Evidence: [RESOLUTION.md at terrapreserve commit `ff70de82622b7d275bbf0f2490f0ce521786246e`][d1-res].
-- §2.3: implicit moves for `count` and `for_each`. CONFIRMED (V10); new fact C-76.
+- §2.3: implicit moves for `count` and `for_each`. CONFIRMED (V10); new fact C-76. Decided 24 Oct 2026.
 - §2.5: host-bit CIDRs rejected (V08, CONFIRMED); upper-case protocols accepted (V09, CONFIRMED); plan-JSON facts C-75.
 - §2.6: allow-only (V11), mixing warning (X01) and default-egress removal (V06): all CONFIRMED.
-- §2.7: relevant-unsupported lists. CHANGED (V12, heuristic): candidates for the authors, C-74 and C-78. The lists are unchanged.
+- §2.7: relevant-unsupported lists. CHANGED (V12, heuristic): candidates for the authors, C-74 and C-78. Decided 24 Oct 2026: the candidates were added to the lists (C-74).
 - §5.2: `publicly_accessible` defaults to `false`. CONFIRMED (V05).
-- §6.2 M1: RDS security groups and subnet group share a VPC. UNRESOLVED (X02); C-77.
+- §6.2 M1: RDS security groups and subnet group share a VPC. UNRESOLVED (X02); C-77. Decided 24 Oct 2026.
 - §6.3 E2: the postgres default port is 5432. CONFIRMED (V07); the plan JSON shows an unset port as unknown (C-75).
 - §3.7: Checkov `CKV_AWS_24` semantics. CHANGED (V04); C-73. §4.4: none, custom predicate only. CONFIRMED (V02). §5.6: `CKV_AWS_17`. CONFIRMED (V03).
 - §7.1–7.2: Doc 04 field-name errata. CONFIRMED (V13, V14); C-79 and C-80.
