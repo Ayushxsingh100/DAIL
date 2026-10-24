@@ -60,7 +60,7 @@ Carried forward:
 - The Doc 11 §40 queries that need dependency, impact, verification or LLM data are deferred to P3c–P7.
 - The REDACTED transition and the Doc 11 §18 hash chain are not implemented.
 
-M1 (Doc 15 §21): not declared — 'Basic fixture loading works' is pending (D2/P3a).
+M1 (Doc 15 §21): COMPLETE (external review, 24 Oct 2026). Basic fixture loading works: D2 PR #13 (20 fixtures, tests/fixture_catalog.py, CI validates every fixture root).
 
 ## P3–P10 — NOT STARTED
 
