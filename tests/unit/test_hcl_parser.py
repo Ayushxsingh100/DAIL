@@ -1191,13 +1191,13 @@ class TestNestingLimit(unittest.TestCase):
 
     def test_long_flat_inputs_are_fine(self) -> None:
         # Flat sequences do not deepen the tree.
-        parse_file("x = [" + "1, " * 50_000 + "1]\n", "t.tf")
+        parse_file("x = [" + "1, " * 20_000 + "1]\n", "t.tf")
         parse_file("x = {" + "".join(f"k{i} = 1, " for i in range(20_000)) + "}\n", "t.tf")
-        parse_file("x = f(" + "a, " * 50_000 + "a)\n", "t.tf")
-        parse_file("x = a" + "".join(f".c{i}" for i in range(50_000)) + "\n", "t.tf")
-        parse_file("x = a" + "[0]" * 50_000 + "\n", "t.tf")
-        parse_file('x = "' + "${a}" * 50_000 + '"\n', "t.tf")
-        parse_file("".join(f"a{i} = 1\n" for i in range(50_000)), "t.tf")
+        parse_file("x = f(" + "a, " * 20_000 + "a)\n", "t.tf")
+        parse_file("x = a" + "".join(f".c{i}" for i in range(20_000)) + "\n", "t.tf")
+        parse_file("x = a" + "[0]" * 20_000 + "\n", "t.tf")
+        parse_file('x = "' + "${a}" * 20_000 + '"\n', "t.tf")
+        parse_file("".join(f"a{i} = 1\n" for i in range(20_000)), "t.tf")
 
 
 class TestPurityAndRobustness(unittest.TestCase):

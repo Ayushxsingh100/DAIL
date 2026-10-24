@@ -1,6 +1,7 @@
+import hashlib
 import unittest
 
-from core.domain.hashing import canonical_json, content_hash, verify_content_hash
+from core.domain.hashing import canonical_json, content_hash, sha256_bytes, verify_content_hash
 
 
 class TestCanonicalHashStability(unittest.TestCase):
@@ -45,6 +46,21 @@ class TestCanonicalHashStability(unittest.TestCase):
     def test_canonical_json_has_no_whitespace(self) -> None:
         s = canonical_json({"a": 1, "b": [1, 2]})
         self.assertNotIn(" ", s)
+
+
+class TestSha256Bytes(unittest.TestCase):
+    def test_is_the_sha256_of_the_exact_bytes(self) -> None:
+        data = b'resource "aws_vpc" "main" {}\r\n\x00\xff'
+        self.assertEqual(sha256_bytes(data), hashlib.sha256(data).hexdigest())
+
+    def test_line_endings_are_not_normalized(self) -> None:
+        self.assertNotEqual(sha256_bytes(b"a\r\nb\r\n"), sha256_bytes(b"a\nb\n"))
+
+    def test_known_vector(self) -> None:
+        self.assertEqual(
+            sha256_bytes(b"abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        )
 
 
 if __name__ == "__main__":

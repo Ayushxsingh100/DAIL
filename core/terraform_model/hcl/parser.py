@@ -224,6 +224,10 @@ class _Parser:
     def _peek(self, k: int = 0) -> Token:
         """The k-th upcoming token, skipping newlines where they are not significant."""
         ignore = self._ignore_newlines[-1]
+        if k == 0 and self._buffer:  # fast path: the next token is already buffered
+            first = self._buffer[0]
+            if not (ignore and first.kind is T.NEWLINE):
+                return first
         index = 0
         seen = 0
         while True:
