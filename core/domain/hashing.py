@@ -58,6 +58,15 @@ def sha256_text(text: str) -> str:
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
+def sha256_bytes(data: bytes) -> str:
+    """SHA-256 hex digest of ``data`` exactly as given (no normalization).
+
+    Used for the raw bytes of an input file (P3a-1, C-97), where a CRLF file and its LF copy
+    are different files and must hash differently.
+    """
+    return hashlib.sha256(data).hexdigest()
+
+
 def verify_content_hash(payload: Any, expected_hash: str) -> bool:
     """Whether `payload` actually hashes to `expected_hash`.
 

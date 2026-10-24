@@ -12,7 +12,8 @@ The build is split into 18 work packages (N-06 in `DECISIONS_REGISTER.md`). Ever
 | 4 | Oct 9–10 | Invariant Registry Specification + D0 amendments (research track) |
 | 5 | Oct 11–12 | D1 acquire sources |
 | 6 | Oct 13–15 | D2 15 canonical fixtures |
-| 7 | Oct 16–19 | P3a Terraform model |
+| 7a | Oct 16–19 | P3a-1 HCL parser and structural model (`core/terraform_model/hcl`, loader, C-91 to C-94) |
+| 7b | Oct 16–19 | P3a-2 expression evaluation, supported-resource filtering, references, normalization, fingerprints (after P3a-1 review) |
 | 8 | Oct 20–21 | P3b identity |
 | 9 | Oct 22–23 | P3c dependency → P3 gate |
 | 10 | Oct 24–27 | P4 impact → P4 gate |

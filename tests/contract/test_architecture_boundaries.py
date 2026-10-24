@@ -359,6 +359,32 @@ class TestCheckerSelfTest(unittest.TestCase):
             with self.subTest(source=source.strip().splitlines()[0]):
                 self.assertNotIn("R6", self.rules_for(module, source))
 
+    def test_r6_and_r7_cover_the_hcl_subpackage_and_the_loader(self) -> None:
+        # P3a-1: core.terraform_model.hcl.* and core.terraform_model.config are inside the
+        # rule; imports within core.terraform_model stay allowed.
+        for module in (
+            "core.terraform_model.hcl.lexer",
+            "core.terraform_model.hcl.parser",
+            "core.terraform_model.config",
+        ):
+            for source, rule in (
+                ("import sqlite3\n", "R6"),
+                ("from core.persistence import sqlite\n", "R6"),
+                ("from core.identity import engine\n", "R6"),
+                ("import evidence.store\n", "R6"),
+                ("import hcl2\n", "R7"),
+                ("import networkx\n", "R7"),
+            ):
+                with self.subTest(module=module, source=source.strip()):
+                    self.assertIn(rule, self.rules_for(module, source))
+            with self.subTest(module=module, allowed=True):
+                allowed = (
+                    "import dataclasses\nimport unicodedata\nfrom decimal import Decimal\n"
+                    "from core.domain.hashing import content_hash\n"
+                    "from core.terraform_model.hcl.ast import Body\n"
+                )
+                self.assertEqual(self.rules_for(module, allowed), set())
+
     def test_r1_keeps_the_domain_from_importing_the_persistence_adapter(self) -> None:
         for source in (
             "from core.persistence import sqlite\n",
