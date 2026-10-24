@@ -119,7 +119,7 @@ class TestTokens(unittest.TestCase):
                 self.assertEqual(pairs(name), [(T.IDENT, name)])
 
     def test_characters_outside_id_continue_end_or_break_an_identifier(self) -> None:
-        # ZERO WIDTH JOINER is not in ID_Continue of Unicode 15.0; an emoji is neither.
+        # ZERO WIDTH JOINER is not in ID_Continue of Unicode 9.0 (C-101); an emoji is neither.
         self.assertEqual(error_code("a‍b"), "lex.invalid_character")
         self.assertEqual(error_code("\U0001f600"), "lex.invalid_character")
         self.assertFalse(is_id_start("1"))
@@ -554,9 +554,9 @@ class TestErrorsOutsideTemplates(unittest.TestCase):
         self.assertEqual(error_code("# \ud800\n"), "lex.invalid_utf8")
 
     def test_unassigned_code_point_is_invalid(self) -> None:
-        # U+0378 is unassigned in Unicode 15.0. Terraform 1.15.8 uses Unicode 9.0 tables for
+        # U+0378 is unassigned in every Unicode version. Terraform 1.15.8 uses Unicode 9.0 for
         # identifiers (U+1E900, assigned in 9.0, is accepted; U+11A00, assigned in 10.0, is not),
-        # so it rejects every code point that 15.0 leaves unassigned: INVALID (C-92 rule).
+        # so it rejects every code point that 9.0 leaves unassigned: INVALID (C-92 rule).
         for text in ("a ͸ b", "a͸ = 1", "͸a = 1", "a = 1 \U0002ebf0"):
             with self.subTest(text=text):
                 self.assertEqual(error_code(text), "lex.invalid_character")
@@ -682,6 +682,24 @@ class TestUndecodableBytes(unittest.TestCase):
         self.assertEqual(smap.range(0, 4).end_byte, 4)
         self.assertEqual(smap.range(5, 6).start_byte, 5)
         self.assertEqual(smap.range(5, 6).end_byte, 7)
+
+
+class TestNulByte(unittest.TestCase):
+    """A NUL byte, checked against Terraform 1.15.8 (`terraform validate`, scratch directory):
+    accepted inside a quoted string, a heredoc and a comment; rejected in code ("Invalid
+    character"); in a block label the label is not a valid name (see the loader tests)."""
+
+    def test_nul_is_text_in_strings_heredocs_and_comments(self) -> None:
+        self.assertEqual(tokenize('"x\x00y"', F)[1].value, "x\x00y")
+        values = [t.value for t in tokenize("<<EOT\nx\x00y\nEOT\n", F) if t.kind is T.TPL_LITERAL]
+        self.assertEqual(values, ["x\x00y\n"])
+        self.assertEqual(kinds("# x\x00y\n"), [T.NEWLINE, T.EOF])
+        self.assertEqual(kinds("/* x\x00y */"), [T.EOF])
+
+    def test_nul_in_code_is_invalid(self) -> None:
+        for text in ("a = 1 \x00\n", "a\x00 = 1\n", "\x00", "a = [1,\x00]\n"):
+            with self.subTest(text=text):
+                self.assertEqual(error_code(text), "lex.invalid_character")
 
 
 class TestSourceRanges(unittest.TestCase):

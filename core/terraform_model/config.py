@@ -46,7 +46,7 @@ from core.terraform_model.hcl.errors import HclLimitError, HclSyntaxError
 from core.terraform_model.hcl.parser import parse_file
 
 # Doc 04 §22 (versioning) and Doc 05 §6 (Provenance.parser_version).
-PARSER_VERSION: Final = "dail-hcl-parser-1"
+PARSER_VERSION: Final = "dail-hcl-parser-2"
 
 # C-93 limits. Exceeding one is UNSUPPORTED, never a crash or a partial result.
 MAX_FILE_BYTES: Final = 2 * 1024 * 1024
