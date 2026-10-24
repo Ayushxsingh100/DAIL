@@ -1,1 +1,3 @@
 8251b57c2d0bb4036db43b838b2863feead84850:tests/unit/test_structured_log_and_ids.py:generic-api-key:76
+dc9ab1cf3138811756bb1bfd286bd36c58c6d4ec:fixtures/verification/rds_publicly_accessible_fail_v1/expected.json:generic-api-key:3
+dc9ab1cf3138811756bb1bfd286bd36c58c6d4ec:fixtures/verification/rds_publicly_accessible_pass_v1/expected.json:generic-api-key:3
