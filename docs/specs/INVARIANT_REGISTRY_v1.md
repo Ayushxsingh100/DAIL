@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Status** | Normative. Frozen as git tag `registry-v1.0` on the commit that merges this version (C-85). Changes after the tag go in a new file (§1.4). |
-| **Register** | Implements C-17. Decisions proposed here are listed in §11 (C-64 onward). |
+| **Register** | Implements C-17. Decisions proposed here are listed in §11 (C-64 onward). Decisions recorded on 24 Oct 2026 (D2 step 6): C-74, C-76, C-77, C-78, C-84, C-85. |
 | **Registry version** | `invariant_registry_version = 1`. Every invariant below is `version = 1`. |
 | **Readers** | DAIL verifiers (P5), DAIL impact analysis (P4), the TerraPreserve generator (D4), the independent oracle (D5, ADR-010), the paper. |
 
@@ -11,6 +11,7 @@
 
 **Markers.**
 - **[PAPER]** marks a semantic choice the paper must state; show these to the advisor.
+- **[DECIDED date, C-NN]** marks an authors' decision on a D1 finding, recorded in the register row named.
 - **[TO VERIFY AT D1]** marked a Terraform or AWS behaviour not yet confirmed against the pinned Terraform and AWS provider versions. D1 Prompt C resolved every such marker (23 Oct 2026). Each is now **[VERIFIED AT D1: CONFIRMED or CHANGED (item)]**, or **[OPEN AFTER D1: UNRESOLVED (item)]** when it could not be settled, with a link to the evidence in `RESOLUTION.md` at a pinned TerraPreserve commit (§12).
 
 **Normative words.** MUST, MUST NOT and MAY are used in the RFC 2119 sense.
@@ -28,7 +29,7 @@
 1.4 **Versioning rule.**
 - Any change to an invariant's predicate, scope, footprint (§2.9) or result conditions creates a new invariant version and increments `invariant_registry_version`.
 - A change of wording only, with identical results on every input, creates neither.
-- The registry is frozen together with D0, before D4 starts.
+- The registry is frozen by the tag `registry-v1.0` (C-85). The D0 amendments are frozen separately, before D4 starts.
 - **Tagging (C-85).** This version is identified by the git tag `registry-v1.0`. After the tag this file is never edited. Any change is a new file (`INVARIANT_REGISTRY_v1.1.md`, and so on) that increments `invariant_registry_version`, and increments `invariant_version` for each invariant whose predicate, scope, footprint or result conditions change (Doc 06 §4.2). A wording-only change still needs a new file but bumps no `invariant_version`. Fixtures, the oracle and evidence cite the tag.
 - **Edits before the tag.** C-74, C-76, C-77, C-78 and C-84 changed result conditions before the tag, and every invariant stays at version 1. This is allowed because nothing had consumed version 1 yet: no fixture, oracle label or verification evidence cited its semantics.
 
@@ -244,6 +245,7 @@ The evidence reports the IPv4 and IPv6 clauses separately (C-13).
 **Observations to record:**
 - for each FAIL: the group, the contributing rule addresses, their CIDRs and port ranges;
 - the MIXED groups;
+- the RETAINED-INLINE groups and their direction (C-84);
 - the indeterminate rules, with the reason for each;
 - the relevant-unsupported resources found;
 - the number of groups evaluated.
@@ -364,6 +366,7 @@ E7  M3 and M4 hold: no intra-VPC non-local route and no NACL-related type.
 **Observations to record:**
 - the evaluated path: `S`, its subnet, `VPC(S)`, `SG(S)`, the egress rule matched, `SG(D)`, the ingress rule matched, `VPC(D)` and the port;
 - for each failing row: the reason;
+- for row 2, which RETAINED-INLINE group, network interface block or `propagating_vgws` caused it (C-78, C-84);
 - the `assumptions` list (M1, M4, IPv4 only).
 
 6.5 **Worked cases** (the canonical topology, Doc 04 Appendix B):
@@ -489,6 +492,12 @@ The oracle uses its own IDs under the `tp.oracle.` prefix. Oracle results are L2
 | C-66 | INV-FUNC-001 model under C-15: endpoint binding, with absence giving FAIL; the E1–E7 predicate; partial coverage gives UNKNOWN; non-local intra-VPC routes give UNSUPPORTED; default NACL assumed only when no NACL type is present; IPv4 only (§6). | [PAPER] |
 | C-67 | `aws_db_subnet_group` is tolerated under C-15, and the canonical topology includes it with two database subnets in two Availability Zones (Part B, A6). This resolves the plan's open item on RDS subnet placement. | |
 | C-68 | Evidence subject identity: VERIFICATION evidence carries `invariant_id` and `invariant_version`, and supersession requires equal subject and verifier (§2.10). This settles C-62's design; P5 implements it. | |
+| C-74 | Relevant-unsupported lists: nine candidate types added (`aws_vpc_security_group_rules_exclusive` to all three security-group lists, the routing and VPC types to INV-FUNC-001 only); over-approximation is intentional (§2.7). Accepted 24 Oct 2026. | [PAPER] |
+| C-76 | There is no implicit move into or out of `for_each`, or between `count` and `for_each` (§2.3); no predicate change. Accepted 24 Oct 2026. |  |
+| C-77 | M1 stays a recorded assumption, and `aws_vpc_security_group_vpc_association` joins INV-FUNC-001's relevant-unsupported list (§2.7, §6.2). Accepted 24 Oct 2026. | [PAPER] |
+| C-78 | `network_interface` and `primary_network_interface` on `S`, and `propagating_vgws` on route tables of `VPC(D)`, give UNSUPPORTED for INV-FUNC-001 and enter its footprint (§6.4 row 2, §6.6). Accepted 24 Oct 2026. |  |
+| C-84 | Inline `ingress`/`egress` are attributes-as-blocks: an absent argument keeps the parent's rules (RETAINED-INLINE, UNSUPPORTED), explicit `= []` means no rules, and explicit `= []` plus a separate rule of that direction is MIXED (§2.6, §3.4, §6.4). Accepted 24 Oct 2026. | [PAPER] |
+| C-85 | The registry is versioned by the git tag `registry-v1.0`; after the tag every change is a new file that bumps `invariant_registry_version` and each affected `invariant_version` (§1.4). Accepted 24 Oct 2026. |  |
 
 ---
 
