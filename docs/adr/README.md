@@ -9,7 +9,7 @@ project decisions (see `docs/DECISIONS_REGISTER.md`).
 |---|---|---|
 | [001](ADR-001-modular-monolith.md) | Modular layered monolith | Accepted (Doc 02) |
 | [002](ADR-002-python-3.12-and-dependency-management.md) | Python 3.12 and dependency management | Accepted |
-| 003 | Terraform CLI plus controlled normalization layer | Pending — written in P3a |
+| [003](ADR-003-controlled-terraform-parsing-and-normalization.md) | Terraform CLI plus controlled normalization layer (own stdlib parser inside the core; CLI only outside it) | Parsing half accepted (C-91 to C-94, 24 Oct 2026, P3a-1); normalization half added in P3a-2 |
 | [004](ADR-004-sqlite-through-persistence-abstraction.md) | SQLite through a persistence abstraction | Accepted (C-10) |
 | 005 | NetworkX for the dependency graph | Pending — written in P3c |
 | 006 | Provider-agnostic LLM boundary | Pending — written in P7a |
