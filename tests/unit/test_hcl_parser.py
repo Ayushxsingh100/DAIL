@@ -1082,6 +1082,12 @@ class TestInvalidInputs(unittest.TestCase):
         rng = caught.exception.range
         self.assertEqual((rng.start_line, rng.start_column), (2, 7))
 
+    def test_messages_stay_short_for_very_long_tokens(self) -> None:
+        for text in ("a " + "1" * 1_000_000 + "\n", "a = 1 " + "x" * 1_000_000 + "\n"):
+            with self.assertRaises(HclSyntaxError) as caught:
+                parse_file(text, "t.tf")
+            self.assertLess(len(caught.exception.message), 400)
+
     def test_a_tab_is_one_column(self) -> None:
         with self.assertRaises(HclSyntaxError) as caught:
             parse_file("\ta = 1 b\n", "e.tf")
@@ -1172,6 +1178,30 @@ class TestNestingLimit(unittest.TestCase):
         parse_file(f"x = [{inner}, {inner}]\ny = {deep}\n", "t.tf")
         chain = "1" + " + 1" * (MAX_NESTING_DEPTH - 1)
         parse_file(f"x = {chain}\ny = {chain}\nz = [{chain}, {chain}]\n", "t.tf")
+
+    def test_trees_at_the_limit_can_be_compared_hashed_and_printed(self) -> None:
+        # The nesting limit exists so that every consumer of a tree can recurse over it safely.
+        n = MAX_NESTING_DEPTH
+        shapes = {
+            "tuples": "x = " + "[" * n + "1" + "]" * n + "\n",
+            "parentheses": "x = " + "(" * n + "1" + ")" * n + "\n",
+            "calls": "x = " + "f(" * n + "1" + ")" * n + "\n",
+            "objects": "x = " + "{k = " * n + "1" + "}" * n + "\n",
+            "operators": "x = 1" + " + 1" * n + "\n",
+            "postfix": "x = f(a)" + ".b" * n + "\n",
+            "unary": "x = " + "!" * n + "a\n",
+            "conditionals": "x = " + "a ? b : " * n + "c\n",
+            "for expressions": "x = " + "[for v in " * n + "a" + " : v]" * n + "\n",
+            "interpolations": 'x = "' + '${"' * (n - 1) + "${1}" + '"}' * (n - 1) + '"\n',
+            "blocks": "a {\n" * n + "x = 1\n" + "}\n" * n,
+        }
+        for name, text in shapes.items():
+            with self.subTest(shape=name):
+                first = parse_file(text, "t.tf")
+                second = parse_file(text, "t.tf")
+                self.assertEqual(first, second)
+                self.assertEqual(hash(first), hash(second))
+                self.assertGreater(len(repr(first)), len(text))
 
     def test_very_deep_input_is_a_limit_error_not_a_recursion_error(self) -> None:
         for build in (

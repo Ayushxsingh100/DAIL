@@ -119,6 +119,10 @@ def _rstrip(text: str) -> str:
     return text[:j]
 
 
+def _clip(text: str, limit: int = 40) -> str:
+    return text if len(text) <= limit else text[: limit - 3] + "..."
+
+
 def number_value(text: str) -> int | Decimal | None:
     """Exact value of a numeric literal: ``int`` when integral and small, else ``Decimal``.
 
@@ -267,15 +271,16 @@ class _Parser:
         return HclSyntaxError(code, self._smap.range(token.start, token.end), message)
 
     def _describe(self, token: Token) -> str:
+        """A short description of a token for messages (long tokens are cut)."""
         if token.kind is T.EOF:
             return "the end of the file"
         if token.kind is T.NEWLINE:
             return "a line break"
         if token.kind is T.IDENT:
-            return f"identifier {token.value!r}"
+            return f"identifier {_clip(token.value)!r}"
         if token.kind is T.NUMBER:
-            return f"number {token.value}"
-        return self._text[token.start : token.end] or token.kind.name
+            return f"number {_clip(token.value)}"
+        return _clip(self._text[token.start : token.end]) or token.kind.name
 
     def _enter(self, token: Token) -> None:
         self._depth += 1
