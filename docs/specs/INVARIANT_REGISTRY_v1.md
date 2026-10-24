@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | DRAFT for review (step 4 of 29), 4 Oct 2026. Becomes normative when merged under `docs/specs/`. |
+| **Status** | Normative. Frozen as git tag `registry-v1.0` on the commit that merges this version (C-85). Changes after the tag go in a new file (§1.4). |
 | **Register** | Implements C-17. Decisions proposed here are listed in §11 (C-64 onward). |
 | **Registry version** | `invariant_registry_version = 1`. Every invariant below is `version = 1`. |
 | **Readers** | DAIL verifiers (P5), DAIL impact analysis (P4), the TerraPreserve generator (D4), the independent oracle (D5, ADR-010), the paper. |
@@ -29,6 +29,8 @@
 - Any change to an invariant's predicate, scope, footprint (§2.9) or result conditions creates a new invariant version and increments `invariant_registry_version`.
 - A change of wording only, with identical results on every input, creates neither.
 - The registry is frozen together with D0, before D4 starts.
+- **Tagging (C-85).** This version is identified by the git tag `registry-v1.0`. After the tag this file is never edited. Any change is a new file (`INVARIANT_REGISTRY_v1.1.md`, and so on) that increments `invariant_registry_version`, and increments `invariant_version` for each invariant whose predicate, scope, footprint or result conditions change (Doc 06 §4.2). A wording-only change still needs a new file but bumps no `invariant_version`. Fixtures, the oracle and evidence cite the tag.
+- **Edits before the tag.** C-74, C-76, C-77, C-78 and C-84 changed result conditions before the tag, and every invariant stays at version 1. This is allowed because nothing had consumed version 1 yet: no fixture, oracle label or verification evidence cited its semantics.
 
 ---
 
