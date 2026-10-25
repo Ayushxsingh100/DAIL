@@ -38,25 +38,16 @@ from core.terraform_model.canonical import (
     encode_argument,
     json_depth,
     policy_for,
-    sorted_by_text,
 )
 from core.terraform_model.config import PARSER_VERSION
 from core.terraform_model.evaluation import EVALUATOR_VERSION
 from core.terraform_model.hcl.ast import SourceRange
 from core.terraform_model.instances import (
-    ArgumentForm,
-    EvaluatedArgument,
     EvaluatedInstance,
     EvaluatedResource,
     MetaArguments,
 )
-from core.terraform_model.values import (
-    Known,
-    SetValue,
-    Unknown,
-    Unsupported,
-    first_problem_value,
-)
+from core.terraform_model.security_rules import inline_rules, resource_rule
 
 NORMALIZATION_VERSION: Final = "dail-tf-norm-1"
 TOOL_NAME: Final = "dail-terraform-model"
@@ -176,58 +167,17 @@ def meta_view(meta: MetaArguments, kind: str) -> dict[str, JSON]:
     return view
 
 
-def direction_form(
-    instance: EvaluatedInstance, name: str
-) -> tuple[str, list[Unknown | Unsupported]]:
-    """The form of one direction of a security group (C-84) and the reasons it is unresolved:
-    ``blocks``, ``explicit_empty``, ``absent``, ``dynamic``, ``mixed`` (``unresolved`` when an
-    attribute-form value cannot be fixed)."""
-    argument = instance.arguments.get(name)
-    if argument is None:
-        return "absent", []
-    if argument.form is ArgumentForm.BLOCKS:
-        return "blocks", list(argument.indeterminate)
-    if argument.form is ArgumentForm.DYNAMIC:
-        return "dynamic", list(argument.indeterminate)
-    if argument.form is ArgumentForm.MIXED:
-        return "mixed", list(argument.indeterminate)
-    return _attribute_form(argument)
-
-
-def _attribute_form(argument: EvaluatedArgument) -> tuple[str, list[Unknown | Unsupported]]:
-    value = argument.value
-    assert value is not None
-    if isinstance(value, Unknown | Unsupported):
-        return "unresolved", [value]
-    if isinstance(value, Known):
-        payload = value.value
-        if payload is None:
-            return "absent", []  # an explicit null is the provider's "not set"
-        if isinstance(payload, tuple) and not payload:
-            return "explicit_empty", []
-        if isinstance(payload, tuple | SetValue):
-            problem = first_problem_value(value)
-            return "blocks", [] if problem is None else [problem]
-    return "unresolved", [Unsupported("normalize.inline_form")]
-
-
-def security_group_security_view(instance: EvaluatedInstance) -> dict[str, JSON]:
-    forms: dict[str, JSON] = {}
-    indeterminate: list[JSON] = []
-    for direction in ("ingress", "egress"):
-        form, reasons = direction_form(instance, direction)
-        forms[direction] = form
-        indeterminate.extend(encode(reason) for reason in reasons)
-    return {
-        "forms": forms,
-        "inline_indeterminate": sorted_by_text(indeterminate),
-    }
-
-
 def security_view(instance: EvaluatedInstance, attributes: Mapping[str, JSON]) -> dict[str, JSON]:
     view: dict[str, JSON] = copy_fields(attributes, SECURITY_FIELDS.get(instance.type, ()))
     if instance.type == "aws_security_group":
-        view.update(security_group_security_view(instance))
+        inline = inline_rules(instance)
+        view["inline_rules"] = [rule.view_json() for rule in inline.rules]
+        view["forms"] = dict(inline.forms)
+        view["inline_indeterminate"] = list(inline.indeterminate)
+    elif instance.type == "aws_security_group_rule":
+        rule = resource_rule(instance)
+        view["rule"] = rule.view_json()
+        view["target"] = rule.target_security_group
     return view
 
 
