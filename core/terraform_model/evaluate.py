@@ -253,6 +253,7 @@ class Scope:
         *,
         each: tuple[Value, Value] | None = None,
         count_index: Value | None = None,
+        bindings: Mapping[str, Value] | None = None,
         _shared: _Shared | None = None,
     ) -> None:
         if _shared is None:
@@ -261,22 +262,40 @@ class Scope:
         self._shared = _shared
         self.each = each
         self.count_index = count_index
+        self.bindings: Mapping[str, Value] = bindings or {}
 
     def with_instance(
         self, *, each: tuple[Value, Value] | None = None, count_index: Value | None = None
     ) -> Scope:
         """The scope of one instance of a resource: ``each.key``/``each.value`` or
         ``count.index``. Shares variables, locals, resources and diagnostics with this scope."""
-        return Scope(each=each, count_index=count_index, _shared=self._shared)
+        return Scope(
+            each=each, count_index=count_index, bindings=self.bindings, _shared=self._shared
+        )
+
+    def with_binding(self, name: str, value: Value) -> Scope:
+        """This scope plus one more name, for the iterator of a ``dynamic`` block."""
+        return Scope(
+            each=self.each,
+            count_index=self.count_index,
+            bindings={**self.bindings, name: value},
+            _shared=self._shared,
+        )
 
     @property
     def diagnostics(self) -> tuple[Diagnostic, ...]:
         return tuple(self._shared.diagnostics)
 
-    def report(self, code: str, message: str, where: SourceRange) -> None:
+    def report(
+        self,
+        code: str,
+        message: str,
+        where: SourceRange,
+        severity: DiagnosticSeverity = DiagnosticSeverity.INVALID,
+    ) -> None:
         self._shared.diagnostics.append(
             Diagnostic(
-                DiagnosticSeverity.INVALID,
+                severity,
                 code,
                 message,
                 where.file,
@@ -453,7 +472,7 @@ class _Evaluator:
         for frame in reversed(self.frames):
             if name in frame:
                 return frame[name]
-        return None
+        return self.scope.bindings.get(name)
 
     def _traversal(self, expr: ScopeTraversal) -> Raw:
         bound = self._frame_binding(expr.root)
