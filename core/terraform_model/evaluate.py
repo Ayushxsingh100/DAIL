@@ -286,6 +286,14 @@ class Scope:
     def diagnostics(self) -> tuple[Diagnostic, ...]:
         return tuple(self._shared.diagnostics)
 
+    def local_value(self, name: str) -> Value:
+        """The value of the declared local value ``name`` (evaluated once; a cycle is reported)."""
+        where = self._shared.locals[name].range
+        try:
+            return _Evaluator(self)._local(name, where)
+        except Fail as failure:
+            return Unsupported(failure.reason)
+
     def report(
         self,
         code: str,
@@ -494,10 +502,8 @@ class _Evaluator:
             raise Fail("reference.shape", f"{expr.root} must be followed by {what}")
         return expr.steps[0].name
 
-    def _undeclared(self, expr: ScopeTraversal, what: str) -> Fail:
-        self.scope.report(
-            "eval.undeclared_reference", f"Reference to undeclared {what}", expr.range
-        )
+    def _undeclared(self, where: SourceRange, what: str) -> Fail:
+        self.scope.report("eval.undeclared_reference", f"Reference to undeclared {what}", where)
         return Fail("reference.undeclared", what)
 
     def _root(self, expr: ScopeTraversal) -> tuple[Raw, Sequence[TraversalStep]] | Value:
@@ -505,11 +511,11 @@ class _Evaluator:
         if root == "var":
             name = self._name_step(expr, "a variable name")
             if name not in self.shared.variables:
-                raise self._undeclared(expr, f"input variable var.{name}")
+                raise self._undeclared(expr.range, f"input variable var.{name}")
             return self.shared.variables[name], expr.steps[1:]
         if root == "local":
             name = self._name_step(expr, "a local value name")
-            return self._local(name, expr), expr.steps[1:]
+            return self._local(name, expr.range), expr.steps[1:]
         if root == "each":
             attribute = self._name_step(expr, "key or value")
             if self.scope.each is None:
@@ -534,14 +540,14 @@ class _Evaluator:
             return self._data(expr)
         return self._resource(expr)
 
-    def _local(self, name: str, expr: ScopeTraversal) -> Value:
+    def _local(self, name: str, where: SourceRange) -> Value:
         shared = self.shared
         if name in shared.local_values:
             return shared.local_values[name]
         if name not in shared.locals:
-            raise self._undeclared(expr, f"local value local.{name}")
+            raise self._undeclared(where, f"local value local.{name}")
         if name in shared.resolving:
-            self.scope.report("eval.cycle", f"Cycle: local.{name}", expr.range)
+            self.scope.report("eval.cycle", f"Cycle: local.{name}", where)
             raise Fail("local.cycle", f"local.{name} depends on itself")
         shared.resolving.append(name)
         try:
@@ -559,7 +565,7 @@ class _Evaluator:
         name = expr.steps[1].name  # type: ignore[union-attr]
         resources = self.shared.resources
         if resources is None or resources.resource("data", type_, name) is None:
-            raise self._undeclared(expr, f"data source data.{type_}.{name}")
+            raise self._undeclared(expr.range, f"data source data.{type_}.{name}")
         return Unknown("data_source")
 
     def _resource(self, expr: ScopeTraversal) -> tuple[Raw, Sequence[TraversalStep]] | Value:
@@ -568,7 +574,7 @@ class _Evaluator:
         resources = self.shared.resources
         view = None if resources is None else resources.resource("resource", type_, name)
         if view is None:
-            raise self._undeclared(expr, f"resource {type_}.{name}")
+            raise self._undeclared(expr.range, f"resource {type_}.{name}")
         instances = view.instances()
         if isinstance(instances, Unknown | Unsupported):
             return instances
