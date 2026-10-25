@@ -46,8 +46,9 @@ UNKNOWN_WRAPPERS = (
     "{{k = ({e}), j = var.u}}",
     "merge({{a = ({e})}}, var.u)",
     "length(var.u)",
-    "({e}) && var.u",
-    "var.u || ({e})",
+    # a decided operand makes && and || known (C-108): these operands cannot decide
+    '(("${{({e})}}" != "odd-marker-zz") && var.u)',
+    '(var.u || ("${{({e})}}" == "odd-marker-zz"))',
     "coalesce(var.u, ({e}))",
     "concat([({e})], var.u)",
     "upper(var.u)",

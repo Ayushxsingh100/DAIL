@@ -781,6 +781,14 @@ class _Evaluator:
     def _operate(self, op: BinaryOperator, left: Value, right: Value) -> Value:
         if op in (BinaryOperator.EQ, BinaryOperator.NE):
             return self._equality(op, left, right)
+        if op in (BinaryOperator.AND, BinaryOperator.OR):
+            # Measured on Terraform 1.15.8 (plan, unknown = terraform_data.a.id == "x"): `false &&
+            # unknown`, `unknown && false` are false and `true || unknown`, `unknown || true` are
+            # true, while `true && unknown` and `false || unknown` are unknown (C-108).
+            for decided, other in ((left, right), (right, left)):
+                decision = self._decides(op, decided) if isinstance(other, Unknown) else None
+                if decision is not None:
+                    return decision
         problem = scalar_problem(left, right)
         if problem is not None:
             return problem

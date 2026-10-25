@@ -309,11 +309,37 @@ class TestShortCircuit(unittest.TestCase):
         self.assertIsInstance(ev("true && [1][5]"), Unsupported)
         self.assertIsInstance(ev("false || [1][5]"), Unsupported)
 
-    def test_an_unknown_or_unsupported_right_operand_is_not_replaced_by_the_decision(self) -> None:
+    def test_an_unknown_operand_follows_the_terraform_measurement(self) -> None:
+        # Measured on 1.15.8 (plan; unknown = terraform_data.a.id == "x"): false && unknown,
+        # unknown && false, true || unknown and unknown || true are known; true && unknown and
+        # false || unknown are unknown (C-108).
         scope = {"variables": {"u": Unknown("variable.no_value")}}
-        self.assertEqual(ev("false && var.u", **scope), Unknown("variable.no_value"))
-        self.assertEqual(ev("true || var.u", **scope), Unknown("variable.no_value"))
+        cases = [
+            ("false && var.u", FALSE),
+            ("var.u && false", FALSE),
+            ("true || var.u", TRUE),
+            ("var.u || true", TRUE),
+            ("true && var.u", Unknown("variable.no_value")),
+            ("var.u && true", Unknown("variable.no_value")),
+            ("false || var.u", Unknown("variable.no_value")),
+            ("var.u || false", Unknown("variable.no_value")),
+            ("var.u && var.u", Unknown("variable.no_value")),
+            ('"false" && var.u', FALSE),
+        ]
+        for text, expected in cases:
+            with self.subTest(text=text):
+                self.assertEqual(ev(text, **scope), expected)
+
+    def test_an_unsupported_operand_is_never_replaced_by_the_decision(self) -> None:
         self.assertEqual(ev("false && abs(1)"), Unsupported("function.not_implemented:abs"))
+        self.assertEqual(ev("abs(1) && false"), Unsupported("function.not_implemented:abs"))
+        self.assertEqual(ev("true || abs(1)"), Unsupported("function.not_implemented:abs"))
+
+    def test_a_reference_is_not_a_decided_operand(self) -> None:
+        resolver = FakeResolver({("resource", "aws_x", "y"): single("aws_x.y")})
+        self.assertEqual(
+            ev("false && aws_x.y.id", resources=resolver), Unknown("ref.derived:aws_x.y.id")
+        )
 
     def test_the_left_operand_is_always_evaluated(self) -> None:
         self.assertIsInstance(ev("[1][5] && false"), Unsupported)
