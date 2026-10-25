@@ -1,6 +1,6 @@
 # ADR-003: Controlled Terraform parsing and normalization
 
-**Status:** Accepted for the parsing half (C-91 to C-94, 24 Oct 2026, P3a-1). The evaluation half is added by P3a-2 (below, 25 Oct 2026; C-99 to C-111). Normalization into `core.domain` objects is P3a-3.
+**Status:** Accepted for the parsing half (C-91 to C-94, 24 Oct 2026, P3a-1). The evaluation half is added by P3a-2 (below, 25 Oct 2026; C-99 to C-111). The normalization half is added by P3a-3 (below; C-112 to C-118).
 
 **Context.** Doc 02 §26 names this ADR "Terraform CLI plus controlled normalization layer", and Doc 04 §4 says the Terraform CLI "may be used as an authoritative structural tool where appropriate" while "DAIL's normalized semantic model remains the internal representation used by the research core". Every later engine (identity, dependency, impact, verification) consumes what `core/terraform_model` produces, so this layer is the base of the safety argument.
 
@@ -48,5 +48,13 @@ Where Terraform restricts HCL further (top-level block types, labels, meta-argum
 5. **Evidence for Terraform behaviour.** Every behaviour that the documentation does not state was measured on Terraform 1.15.8 in a scratch directory outside the repository (`terraform console`, `validate`, `plan` of the builtin `terraform_data` resource; no credentials, no network). The core and its tests never run Terraform.
 
 What `OK` means after P3a-2: the configuration parsed (P3a-1) and evaluated without an INVALID finding and without a whole-configuration UNSUPPORTED finding. Individual values may still be unknown or unsupported; P5 turns those into UNKNOWN or UNSUPPORTED results. `OK` still does not mean that Terraform accepts the configuration (C-99: the pinned `terraform validate` runs outside the core).
+
+**Normalization (P3a-3; C-112 to C-118).** The last stage of the Doc 04 §4 pipeline turns an `EvaluationOutcome` into `core.domain.resource.Resource` objects, standard library only. `core.terraform_model` imports `core.domain.*` to build them (rule R6) and uses their constructors unchanged.
+
+1. **Pipeline.** supported-resource filtering (C-114) → reference extraction (C-115) → canonical normalization (C-112, C-113) → `Resource[]` with the C-33 fingerprint. The security-group rules are canonicalised once, in `security_rules.py` (C-116), so that an inline block and a separate `aws_security_group_rule` give the same rule.
+2. **Complete and stable.** `attributes` encodes every configured argument, so nothing is dropped; unknown and unsupported values stay in the content with their reason. Order that is not semantic (set-typed arguments, set-like blocks, CIDR lists) is sorted; everything else keeps its order (C-112). An unsupported resource type is kept as `UNSUPPORTED`, never normalized as known-safe semantics.
+3. **Unresolved values and the fingerprint (C-117).** Two unknowns with the same reason encode identically, so a fingerprint can stay equal while a value is unresolved on both sides. Registry §2.9 treats such an element as changed; P4 must read the views, not fingerprint equality alone.
+4. **Versions.** `NORMALIZATION_VERSION = "dail-tf-norm-1"` (C-118) is in every `Provenance`; `parser_version` and `evaluator_version` are too. The **Terraform CLI version is not** in the provenance: the core never runs the CLI. It is pinned in `versions.tf` and CI (C-86) and recorded by the harness (Doc 04 §22).
+5. **Time.** The package has no clock. The caller passes `now` and it becomes `Provenance.observed_at`.
 
 **Revisit when.** The pinned HCL or Terraform version changes; a Terraform-accepted configuration is rejected in practice; or the oracle's input path (C-75) is decided in a way that makes a shared reader acceptable.
