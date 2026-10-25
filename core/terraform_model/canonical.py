@@ -170,6 +170,19 @@ def _argument(argument: EvaluatedArgument, policy: SetPolicy, top: bool, depth: 
     return {"form": argument.form.value, "blocks": blocks, "indeterminate": reasons}
 
 
+def ordered_blocks(
+    argument: EvaluatedArgument, policy: SetPolicy = NO_POLICY, *, top: bool = True
+) -> list[EvaluatedBlock]:
+    """The blocks of an argument in the order ``encode_argument`` writes them (sorted by their
+    encoding for set-like names, source order otherwise); a block's index in this list is the index
+    used in reference paths such as ``ingress[0].security_groups``."""
+    sets = (top and argument.name in policy.arguments) or argument.name in policy.nested
+    keyed = [(text_of(_block(block, policy, 1)), block) for block in argument.blocks]
+    if sets:
+        keyed.sort(key=lambda pair: pair[0])
+    return [block for _, block in keyed]
+
+
 def _block(block: EvaluatedBlock, policy: SetPolicy, depth: int) -> JSON:
     return {
         "type": block.type,
