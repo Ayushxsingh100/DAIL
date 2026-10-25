@@ -92,7 +92,10 @@ class FakeInstance:
             return Ref(self.address, "id")
         if name in self._arguments:
             return self._arguments[name]
-        return Unknown(f"computed_attribute:{self.address}.{name}")
+        return Unknown(f"resource.computed:{name}")
+
+    def attributes(self) -> Mapping[str, Value]:
+        return {"id": Ref(self.address, "id"), **self._arguments}
 
 
 class FakeResource:
@@ -169,18 +172,20 @@ class TestTemplates(unittest.TestCase):
         self.assertIsInstance(ev('"a${[1]}"'), Unsupported)
         self.assertIsInstance(ev('"a${{b=1}}"'), Unsupported)
 
-    def test_directives(self) -> None:
-        self.assertEqual(ev('"%{ if true }a%{ else }b%{ endif }"'), Known("a"))  # probe
-        self.assertEqual(ev('"%{ if false }a%{ else }b%{ endif }"'), Known("b"))
-        self.assertEqual(ev('"%{ if false }a%{ endif }"'), Known(""))
-        self.assertEqual(ev('"%{ for x in [1,2] }<${x}>%{ endfor }"'), Known("<1><2>"))  # probe
-        self.assertEqual(ev('"%{ for k, v in {b=1,a=2} }${k}=${v};%{ endfor }"'), Known("a=2;b=1;"))
-
-    def test_directive_with_unknown_condition_is_unknown(self) -> None:
-        self.assertEqual(
-            ev('"%{ if var.c }a%{ endif }"', variables={"c": Unknown("variable.no_value")}),
-            Unknown("variable.no_value"),
-        )
+    def test_directives_are_unsupported_in_v1(self) -> None:
+        # the work package, Step 3: %{if} and %{for} are unsupported (reason template.directive)
+        for text in (
+            '"%{ if true }a%{ else }b%{ endif }"',
+            '"%{ for x in [1,2] }<${x}>%{ endfor }"',
+            '"a${1}%{ if var.c }a%{ endif }"',
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(
+                    ev(text, variables={"c": Unknown("variable.no_value")}),
+                    Unsupported("template.directive"),
+                )
+        heredoc = "<<EOT" + chr(10) + "%{ if true }a%{ endif }" + chr(10) + "EOT" + chr(10)
+        self.assertEqual(ev(heredoc), Unsupported("template.directive"))
 
     def test_heredoc(self) -> None:
         text = "<<EOT\nhello ${1 + 1}\nEOT\n"
@@ -287,6 +292,31 @@ class TestOperators(unittest.TestCase):
     def test_a_long_chain_does_not_recurse(self) -> None:
         # the parser limits operator nesting to 64 (C-93); the evaluator folds the chain in a loop
         self.assertEqual(ev(" + ".join(["1"] * 60)), Known(60))
+
+
+class TestShortCircuit(unittest.TestCase):
+    """probe, Terraform 1.15.8: `false && [1][5]` is false and `true || [1][5]` is true (the right
+    operand is not evaluated when the left one decides), so an error there is not an error."""
+
+    def test_an_error_in_the_right_operand_is_ignored_when_the_left_decides(self) -> None:
+        self.assertEqual(ev("false && [1][5]"), FALSE)
+        self.assertEqual(ev("true || [1][5]"), TRUE)
+        self.assertEqual(ev('false && tobool("x")'), FALSE)
+        self.assertEqual(ev('"false" && null.a'), FALSE)
+        self.assertEqual(ev("var.x != null && var.x.a == 1", variables={"x": NULL}), FALSE)
+
+    def test_an_error_in_the_right_operand_counts_when_the_left_does_not_decide(self) -> None:
+        self.assertIsInstance(ev("true && [1][5]"), Unsupported)
+        self.assertIsInstance(ev("false || [1][5]"), Unsupported)
+
+    def test_an_unknown_or_unsupported_right_operand_is_not_replaced_by_the_decision(self) -> None:
+        scope = {"variables": {"u": Unknown("variable.no_value")}}
+        self.assertEqual(ev("false && var.u", **scope), Unknown("variable.no_value"))
+        self.assertEqual(ev("true || var.u", **scope), Unknown("variable.no_value"))
+        self.assertEqual(ev("false && abs(1)"), Unsupported("function.not_implemented:abs"))
+
+    def test_the_left_operand_is_always_evaluated(self) -> None:
+        self.assertIsInstance(ev("[1][5] && false"), Unsupported)
 
 
 class TestConditional(unittest.TestCase):
@@ -469,7 +499,7 @@ class TestReferences(unittest.TestCase):
             "b": parse_expression("local.a"),
         }  # probe: "Cycle:"
         value, scope = run("local.a", locals=local_expressions)
-        self.assertIsInstance(value, Unsupported)
+        self.assertEqual(value, Unsupported("local.cycle"))
         self.assertIn("eval.cycle", [d.code for d in scope.diagnostics])
         value, scope = run("local.s", locals={"s": parse_expression("local.s")})
         self.assertIsInstance(value, Unsupported)
@@ -521,10 +551,8 @@ class TestReferences(unittest.TestCase):
 
     def test_data_sources_are_unknown(self) -> None:
         resolver = FakeResolver({("data", "aws_ami", "x"): single("data.aws_ami.x")})
-        self.assertEqual(
-            ev("data.aws_ami.x.id", resources=resolver), Unknown("data_source:aws_ami.x")
-        )
-        self.assertEqual(ev("data.aws_ami.x", resources=resolver), Unknown("data_source:aws_ami.x"))
+        self.assertEqual(ev("data.aws_ami.x.id", resources=resolver), Unknown("data_source"))
+        self.assertEqual(ev("data.aws_ami.x", resources=resolver), Unknown("data_source"))
         value, scope = run("data.aws_ami.nope.id", resources=resolver)
         self.assertIsInstance(value, Unsupported)
         self.assertEqual([d.code for d in scope.diagnostics], ["eval.undeclared_reference"])
@@ -570,7 +598,7 @@ class TestResourceReferences(unittest.TestCase):
     def test_any_other_attribute_is_unknown(self) -> None:
         self.assertEqual(
             ev("aws_security_group.app.arn", resources=self.resolver()),
-            Unknown("computed_attribute:aws_security_group.app.arn"),
+            Unknown("resource.computed:arn"),
         )
 
     def test_a_reference_passes_through_collections_and_single_interpolation(self) -> None:
@@ -643,18 +671,44 @@ class TestResourceReferences(unittest.TestCase):
         )
         self.assertEqual(ev("length([for s in aws_subnet.s : s.id])", resources=resolver), Known(3))
 
-    def test_a_whole_resource_is_not_a_value(self) -> None:
+    def test_a_whole_resource_is_an_object_a_tuple_or_a_map_of_instances(self) -> None:
+        # "References to Named Values": a resource is an object, or a list (count) or a map
+        # (for_each) of objects; an instance object holds id and the configured arguments
         resolver = self.resolver()
-        for text in (
-            "aws_subnet.s",
-            "aws_security_group.app",
-            "[aws_subnet.s]",
-            "length(aws_subnet.s)",
-        ):
-            with self.subTest(text=text):
-                self.assertEqual(
-                    ev(text, resources=resolver), Unsupported("reference.whole_resource")
-                )
+        app = obj(id=Ref("aws_security_group.app", "id"), name="app")
+        self.assertEqual(ev("aws_security_group.app", resources=resolver), app)
+        self.assertEqual(ev("[aws_security_group.app]", resources=resolver), tup(app))
+        subnets = ev("aws_subnet.s", resources=resolver)
+        self.assertEqual(
+            subnets,
+            tup(
+                *[obj(id=Ref(f"aws_subnet.s[{i}]", "id"), cidr=f"10.0.{i}.0/24") for i in range(3)]
+            ),
+        )
+        self.assertEqual(ev("length(aws_subnet.s)", resources=resolver), Known(3))
+        self.assertEqual(ev("length(aws_x.none)", resources=resolver), Known(0))
+        groups = ev("aws_sg.g", resources=resolver)
+        self.assertEqual(
+            groups,
+            obj(
+                a=obj(id=Ref('aws_sg.g["a"]', "id"), name="sg-a"),
+                b=obj(id=Ref('aws_sg.g["b"]', "id"), name="sg-b"),
+            ),
+        )
+        self.assertEqual(ev("keys(aws_sg.g)", resources=resolver), tup("a", "b"))
+
+    def test_a_computed_attribute_of_a_whole_resource_object_is_unsupported(self) -> None:
+        # the object does not hold Terraform's other attributes, and DAIL cannot tell a computed
+        # attribute from one that does not exist
+        resolver = self.resolver()
+        self.assertEqual(
+            ev("aws_security_group.app.arn", resources=resolver), Unknown("resource.computed:arn")
+        )
+        local = {"all": parse_expression("aws_subnet.s")}
+        self.assertIsInstance(ev("local.all[0].arn", locals=local, resources=resolver), Unsupported)
+        self.assertEqual(
+            ev("local.all[0].cidr", locals=local, resources=resolver), Known("10.0.0.0/24")
+        )
 
     def test_an_attribute_without_an_index_is_unsupported(self) -> None:
         self.assertEqual(

@@ -86,7 +86,6 @@ from core.terraform_model.hcl.ast import (
     TemplateIf,
     TemplateInterpolation,
     TemplateLiteral,
-    TemplatePart,
     TraversalStep,
     Tuple,
     UnaryOp,
@@ -120,13 +119,13 @@ REASONS: Final[dict[str, str]] = {
     "limit.for_elements": "A for expression with more than 1,000 result elements (C-105).",
     "reference.undeclared": "A reference to something the configuration does not declare.",
     "reference.context": "each or count.index outside a resource that has for_each or count.",
-    "reference.cycle": "A local value that depends on itself.",
+    "local.cycle": "A local value that depends on itself.",
+    "template.directive": "A %{if} or %{for} template directive (not implemented in v1).",
     "reference.shape": "A reference that is not var.NAME, local.NAME, each.key and so on.",
     "reference.path": "path.module, path.root or path.cwd (depend on the machine).",
     "reference.terraform": "terraform.workspace and the other terraform.* values.",
     "reference.module": "module.* (a module call makes the whole configuration unsupported).",
     "reference.self": "self.* (provisioner and connection blocks).",
-    "reference.whole_resource": "A whole resource or instance used as a value.",
     "reference.missing_key": "A resource with count or for_each referenced without an index.",
     "eval.invalid_index": "An index outside a list, or a key an object does not have.",
     "eval.missing_attribute": "An attribute an object does not have.",
@@ -138,8 +137,8 @@ REASONS: Final[dict[str, str]] = {
     "number.divide_by_zero": "A division or remainder by zero.",
 }
 UNKNOWN_REASONS: Final[dict[str, str]] = {
-    "data_source": "An attribute of a data source (the code carries ':<type>.<name>').",
-    "computed_attribute": "A provider-computed attribute (':<address>.<attribute>').",
+    "data_source": "A data source (its attributes are never known, registry 2.2).",
+    "resource.computed": "A provider-computed attribute (the code carries ':<attribute>').",
     "ref.derived": "A value computed from a reference whose ID is not known.",
     "operator.undecided": "An equality that cannot be decided.",
     "function.contains_undecided": "contains() that cannot be decided.",
@@ -178,7 +177,12 @@ class InstanceView(Protocol):
         ...
 
     def attribute(self, name: str) -> Value:
-        """``Ref`` for ``id``; the configured value of an argument; unknown for anything else."""
+        """``Ref`` for ``id``; the configured value of an argument; unknown for anything else
+        (reason ``resource.computed:<attribute>``)."""
+        ...
+
+    def attributes(self) -> Mapping[str, Value]:
+        """``id`` and every argument configured on the instance, for a whole-instance value."""
         ...
 
 
@@ -336,9 +340,27 @@ class _Evaluator:
             raise _Abort("limit.eval_steps")
 
     def value(self, expression: Expression) -> Value:
-        result = self.raw(expression)
-        if isinstance(result, _Resource | _Instance):
-            raise Fail("reference.whole_resource", "a whole resource cannot be used as a value")
+        return self._finish(self.raw(expression))
+
+    @staticmethod
+    def _finish(result: Raw) -> Value:
+        """A resource used as a value: an object (single instance), a tuple of objects (count) or
+        an object of objects (for_each), as the "References to Named Values" page says. An instance
+        object holds ``id`` and the arguments configured on it; Terraform's other attributes are
+        not in it, so reading one from the object is unsupported (a direct ``aws_x.y.arn`` is
+        unknown instead)."""
+        if isinstance(result, _Instance):
+            return known_object(dict(result.view.attributes()))
+        if isinstance(result, _Resource):
+            objects = [known_object(dict(i.attributes())) for i in result.instances]
+            if result.mode == "count":
+                return Known(tuple(objects))
+            keyed: dict[str, Value] = {}
+            for instance, instance_object in zip(result.instances, objects, strict=True):
+                if instance.key is None:
+                    raise Fail("reference.shape", "an instance of for_each without a key")
+                keyed[as_string(instance.key)] = instance_object
+            return known_object(keyed)
         return result
 
     def raw(self, expression: Expression) -> Raw:
@@ -360,6 +382,9 @@ class _Evaluator:
 
     def _template(self, expr: Template | Heredoc) -> Raw:
         parts = expr.parts
+        if any(isinstance(part, TemplateIf | TemplateFor) for part in parts):
+            # %{if} and %{for} are not implemented in v1 (the work package, Step 3)
+            return Unsupported("template.directive")
         if (
             isinstance(expr, Template)
             and len(parts) == 1
@@ -369,15 +394,6 @@ class _Evaluator:
             return self.value(parts[0].expr)
         out: list[str] = []
         problems: list[Value] = []
-        self._render(parts, out, problems)
-        for pending in problems:
-            if isinstance(pending, Unsupported):
-                return pending
-        if problems:
-            return problems[0]
-        return Known("".join(out))
-
-    def _render(self, parts: Sequence[TemplatePart], out: list[str], problems: list[Value]) -> None:
         for part in parts:
             self.tick()
             if isinstance(part, TemplateLiteral):
@@ -389,32 +405,12 @@ class _Evaluator:
                     problems.append(problem)
                 else:
                     out.append(self._piece(value))
-            elif isinstance(part, TemplateIf):
-                condition = self.value(part.condition)
-                problem = scalar_problem(condition)
-                if problem is not None:
-                    problems.append(problem)
-                    continue
-                chosen = part.true_parts if as_bool(condition) else part.false_parts
-                if chosen is not None:
-                    self._render(chosen, out, problems)
-            else:
-                self._render_for(part, out, problems)
-
-    def _render_for(self, part: TemplateFor, out: list[str], problems: list[Value]) -> None:
-        pairs = self._pairs(self.raw(part.collection))
-        if not isinstance(pairs, list):
-            problems.append(pairs)
-            return
-        for key, item in pairs:
-            frame: dict[str, Raw] = {part.value_var: item}
-            if part.key_var is not None:
-                frame[part.key_var] = key
-            self.frames.append(frame)
-            try:
-                self._render(part.parts, out, problems)
-            finally:
-                self.frames.pop()
+        for pending in problems:
+            if isinstance(pending, Unsupported):
+                return pending
+        if problems:
+            return problems[0]
+        return Known("".join(out))
 
     @staticmethod
     def _piece(value: Value) -> str:
@@ -527,7 +523,7 @@ class _Evaluator:
             raise self._undeclared(expr, f"local value local.{name}")
         if name in shared.resolving:
             self.scope.report("eval.cycle", f"Cycle: local.{name}", expr.range)
-            raise Fail("reference.cycle", f"local.{name} depends on itself")
+            raise Fail("local.cycle", f"local.{name} depends on itself")
         shared.resolving.append(name)
         try:
             assert shared.base is not None
@@ -545,7 +541,7 @@ class _Evaluator:
         resources = self.shared.resources
         if resources is None or resources.resource("data", type_, name) is None:
             raise self._undeclared(expr, f"data source data.{type_}.{name}")
-        return Unknown(f"data_source:{type_}.{name}")
+        return Unknown("data_source")
 
     def _resource(self, expr: ScopeTraversal) -> tuple[Raw, Sequence[TraversalStep]] | Value:
         type_ = expr.root
@@ -665,9 +661,7 @@ class _Evaluator:
             current = element
             for step in expr.steps:
                 current = self._apply(current, step)
-            if isinstance(current, _Resource | _Instance):
-                raise Fail("reference.whole_resource", "a whole instance in a splat result")
-            results.append(current)
+            results.append(self._finish(current))
         return Known(tuple(results))
 
     # -- Operators --
@@ -695,8 +689,35 @@ class _Evaluator:
         accumulated = self.value(node)
         for operation in reversed(spine):
             self.tick()
-            accumulated = self._operate(operation.op, accumulated, self.value(operation.right))
+            decided = self._decides(operation.op, accumulated)
+            if decided is not None:
+                # Terraform 1.15.8 does not evaluate the right operand when the left one decides
+                # (probe: `false && [1][5]` is false), so an error there is not an error.
+                try:
+                    right = self.value(operation.right)
+                except Fail:
+                    accumulated = decided
+                    continue
+            else:
+                right = self.value(operation.right)
+            accumulated = self._operate(operation.op, accumulated, right)
         return accumulated
+
+    @staticmethod
+    def _decides(op: BinaryOperator, left: Value) -> Value | None:
+        if op not in (BinaryOperator.AND, BinaryOperator.OR):
+            return None
+        if not isinstance(left, Known) or kind_of(left) not in ("bool", "string"):
+            return None
+        try:
+            flag = as_bool(left)
+        except Fail:
+            return None
+        if op is BinaryOperator.AND and not flag:
+            return FALSE
+        if op is BinaryOperator.OR and flag:
+            return TRUE
+        return None
 
     def _operate(self, op: BinaryOperator, left: Value, right: Value) -> Value:
         if op in (BinaryOperator.EQ, BinaryOperator.NE):
@@ -761,7 +782,7 @@ class _Evaluator:
                 (v.key if v.key is not None else NULL, _Instance(v)) for v in collection.instances
             ]
         if isinstance(collection, _Instance):
-            raise Fail("eval.not_iterable", "a single resource instance")
+            collection = self._finish(collection)
         if isinstance(collection, Unknown | Unsupported):
             return collection
         if isinstance(collection, Ref):
