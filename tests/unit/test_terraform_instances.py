@@ -915,11 +915,51 @@ class TestReferencesBetweenResources(unittest.TestCase):
         self.assertIsInstance(instance.arguments["x"].value, Unsupported)
         self.assertIn("eval.resource_cycle", [d.code for d in built.scope.diagnostics])
 
-    def test_an_argument_that_refers_to_itself(self) -> None:
-        built = build('resource "aws_a" "a" {\n  x = aws_a.a.x\n}\n')
-        instance = built.one("aws_a", "a")
-        self.assertEqual(instance.arguments["x"].value, Unsupported("resource.cycle"))
-        self.assertIn("eval.resource_cycle", [d.code for d in built.scope.diagnostics])
+    def test_a_resource_that_refers_to_itself_is_unsupported_not_invalid(self) -> None:
+        # Terraform 1.15.8: `validate` accepts `x = aws_a.a.x` and `x = aws_a.a.id`; `plan` fails
+        # with "Self-referential block". So it is not INVALID (C-92); the config cannot be planned.
+        for body in (
+            "x = aws_a.a.x",
+            "x = aws_a.a.id",
+            "x = aws_a.a",
+            "x = [for r in aws_a.a : r]",
+            "count = 2\n  x = aws_a.a[0].id",
+            "count = 2\n  x = aws_a.a[*].x",
+            "count = length(aws_a.a)",
+            "for_each = toset([aws_a.a.id])",
+        ):
+            with self.subTest(body=body):
+                built = build('resource "aws_a" "a" {\n  ' + body + "\n}\n")
+                expansion = built.expand("aws_a", "a")
+                found = [(d.severity, d.code) for d in built.scope.diagnostics]
+                self.assertEqual(
+                    set(found), {(DiagnosticSeverity.UNSUPPORTED, "eval.self_reference")}
+                )
+                values = [
+                    argument.value
+                    for instance in expansion.instances
+                    for argument in instance.arguments.values()
+                ]
+                if expansion.instances:
+                    self.assertEqual(values, [Unsupported("resource.self_reference")] * len(values))
+                else:
+                    assert expansion.indeterminate is not None
+                    self.assertEqual(
+                        expansion.indeterminate.reason, Unsupported("resource.self_reference")
+                    )
+
+    def test_a_data_source_that_refers_to_itself(self) -> None:
+        built = build('data "aws_a" "a" {\n  x = data.aws_a.a.id\n}\n')
+        built.expand("aws_a", "a", "data")
+        self.assertEqual([d.code for d in built.scope.diagnostics], ["eval.self_reference"])
+
+    def test_references_to_another_resource_with_the_same_name_are_not_self_references(
+        self,
+    ) -> None:
+        text = 'resource "aws_a" "n" {}\nresource "aws_b" "n" {\n  x = aws_a.n.id\n}\n'
+        built = build(text)
+        self.assertEqual(built.one("aws_b", "n").arguments["x"].value, Ref("aws_a.n", "id"))
+        self.assertEqual(built.scope.diagnostics, ())
 
     def test_a_cycle_through_count(self) -> None:
         text = (

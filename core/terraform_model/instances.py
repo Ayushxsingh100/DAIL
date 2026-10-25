@@ -627,7 +627,7 @@ class ResourceRuntime:
 
     def __init__(self, decl: ResourceDecl, scope: Scope) -> None:
         self.decl = decl
-        self.scope = scope
+        self.scope = scope.with_owner((decl.kind, decl.type, decl.name))
         self._plan: _Plan | None = None
         self._planning = False
         self._instances: tuple[InstanceRuntime, ...] | None = None

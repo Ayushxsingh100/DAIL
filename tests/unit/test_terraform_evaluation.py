@@ -479,6 +479,15 @@ class TestWholeConfigurationUnsupported(unittest.TestCase):
             f'resource "aws_x" "r{i}" {{\n  count = {per_resource}\n}}\n' for i in range(resources)
         )
 
+    def test_a_resource_that_refers_to_itself(self) -> None:
+        # Terraform 1.15.8: validate accepts it, plan fails ("Self-referential block")
+        for body in ("a = aws_x.x.id", "a = aws_x.x.a", "count = length(aws_x.x)"):
+            with self.subTest(body=body):
+                outcome = run('resource "aws_x" "x" {\n  ' + body + "\n}\n")
+                self.assertEqual(
+                    (outcome.status, codes(outcome)), (UNSUPPORTED, ["eval.self_reference"])
+                )
+
     def test_the_instance_limit_of_the_configuration(self) -> None:
         at_limit = run(self.many(10, 1000))
         self.assertEqual(

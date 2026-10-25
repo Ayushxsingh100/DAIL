@@ -122,6 +122,7 @@ REASONS: Final[dict[str, str]] = {
     "local.cycle": "A local value that depends on itself.",
     "template.directive": "A %{if} or %{for} template directive (not implemented in v1).",
     "reference.shape": "A reference that is not var.NAME, local.NAME, each.key and so on.",
+    "resource.self_reference": "A resource that refers to itself (plan rejects it).",
     "reference.path": "path.module, path.root or path.cwd (depend on the machine).",
     "reference.terraform": "terraform.workspace and the other terraform.* values.",
     "reference.module": "module.* (a module call makes the whole configuration unsupported).",
@@ -150,6 +151,7 @@ DIAGNOSTICS: Final[dict[str, str]] = {
     "eval.each_context": "each used where the resource has no for_each.",
     "eval.count_context": "count.index used where the resource has no count.",
     "eval.cycle": "A cycle between local values.",
+    "eval.self_reference": "A resource that refers to itself (UNSUPPORTED: plan rejects it).",
 }
 
 
@@ -254,6 +256,7 @@ class Scope:
         each: tuple[Value, Value] | None = None,
         count_index: Value | None = None,
         bindings: Mapping[str, Value] | None = None,
+        owner: tuple[str, str, str] | None = None,
         _shared: _Shared | None = None,
     ) -> None:
         if _shared is None:
@@ -263,6 +266,8 @@ class Scope:
         self.each = each
         self.count_index = count_index
         self.bindings: Mapping[str, Value] = bindings or {}
+        # (kind, type, name) of the resource whose arguments are being evaluated, if any
+        self.owner = owner
 
     def with_instance(
         self, *, each: tuple[Value, Value] | None = None, count_index: Value | None = None
@@ -270,7 +275,22 @@ class Scope:
         """The scope of one instance of a resource: ``each.key``/``each.value`` or
         ``count.index``. Shares variables, locals, resources and diagnostics with this scope."""
         return Scope(
-            each=each, count_index=count_index, bindings=self.bindings, _shared=self._shared
+            each=each,
+            count_index=count_index,
+            bindings=self.bindings,
+            owner=self.owner,
+            _shared=self._shared,
+        )
+
+    def with_owner(self, owner: tuple[str, str, str]) -> Scope:
+        """The scope of the arguments of the resource ``owner`` = (kind, type, name): a reference
+        to that resource from its own arguments is a self-reference."""
+        return Scope(
+            each=self.each,
+            count_index=self.count_index,
+            bindings=self.bindings,
+            owner=owner,
+            _shared=self._shared,
         )
 
     def with_binding(self, name: str, value: Value) -> Scope:
@@ -279,6 +299,7 @@ class Scope:
             each=self.each,
             count_index=self.count_index,
             bindings={**self.bindings, name: value},
+            owner=self.owner,
             _shared=self._shared,
         )
 
@@ -502,6 +523,18 @@ class _Evaluator:
             raise Fail("reference.shape", f"{expr.root} must be followed by {what}")
         return expr.steps[0].name
 
+    def _check_self(self, kind: str, type_: str, name: str, where: SourceRange) -> None:
+        """A resource that refers to itself passes ``terraform validate`` and fails ``plan``
+        ("Self-referential block", measured on 1.15.8), so it is unsupported, not INVALID."""
+        if self.scope.owner == (kind, type_, name):
+            self.scope.report(
+                "eval.self_reference",
+                f"{type_}.{name} refers to itself",
+                where,
+                DiagnosticSeverity.UNSUPPORTED,
+            )
+            raise Fail("resource.self_reference", f"{type_}.{name} refers to itself")
+
     def _undeclared(self, where: SourceRange, what: str) -> Fail:
         self.scope.report("eval.undeclared_reference", f"Reference to undeclared {what}", where)
         return Fail("reference.undeclared", what)
@@ -566,6 +599,7 @@ class _Evaluator:
         resources = self.shared.resources
         if resources is None or resources.resource("data", type_, name) is None:
             raise self._undeclared(expr.range, f"data source data.{type_}.{name}")
+        self._check_self("data", type_, name, expr.range)
         return Unknown("data_source")
 
     def _resource(self, expr: ScopeTraversal) -> tuple[Raw, Sequence[TraversalStep]] | Value:
@@ -575,6 +609,7 @@ class _Evaluator:
         view = None if resources is None else resources.resource("resource", type_, name)
         if view is None:
             raise self._undeclared(expr.range, f"resource {type_}.{name}")
+        self._check_self("resource", type_, name, expr.range)
         instances = view.instances()
         if isinstance(instances, Unknown | Unsupported):
             return instances
