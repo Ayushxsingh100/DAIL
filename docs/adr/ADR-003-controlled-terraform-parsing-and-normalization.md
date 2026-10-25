@@ -1,6 +1,6 @@
 # ADR-003: Controlled Terraform parsing and normalization
 
-**Status:** Accepted for the parsing half (C-91 to C-94, 24 Oct 2026, P3a-1). The normalization half is added by P3a-2.
+**Status:** Accepted for the parsing half (C-91 to C-94, 24 Oct 2026, P3a-1). The evaluation half is added by P3a-2 (below, 25 Oct 2026; C-99 to C-111). Normalization into `core.domain` objects is P3a-3.
 
 **Context.** Doc 02 §26 names this ADR "Terraform CLI plus controlled normalization layer", and Doc 04 §4 says the Terraform CLI "may be used as an authoritative structural tool where appropriate" while "DAIL's normalized semantic model remains the internal representation used by the research core". Every later engine (identity, dependency, impact, verification) consumes what `core/terraform_model` produces, so this layer is the base of the safety argument.
 
@@ -10,7 +10,7 @@
 2. The core uses its own standard-library parser for the full HCL native syntax (C-91). Rejected alternatives: `python-hcl2`, which would need an exception to rule R7 (ADR-002), and Terraform CLI JSON output, which overlaps the independent oracle's input path (plan JSON, C-75; ADR-010) and so would remove the diversity between DAIL and the oracle.
 3. **Parse widely, support narrowly.** The parser accepts the whole native expression grammar. Syntax that DAIL cannot evaluate is still valid HCL; P3a-2 classifies it as unresolved or UNSUPPORTED. A syntax error means the input is not valid HCL. The two are never confused.
 
-**Pinned HCL specification.**
+**Pinned HCL specification.** (Terraform 1.15.8 is built with hcl `v2.24.0`, `go.mod` line 36. `hclsyntax/spec.md` is byte-identical at `v2.24.0` and `v2.25.0`, checked 25 Oct 2026 (C-101), so the pin below holds for both.)
 
 | | |
 |---|---|
@@ -38,5 +38,15 @@ Where Terraform restricts HCL further (top-level block types, labels, meta-argum
 - What `OK` means in P3a-1: valid HCL, valid structure for the rules of C-94 and C-96, inside the input subset and limits. It does not mean that Terraform would accept the configuration: the rules listed as not enforced in C-96 are left to later work and to the CI `terraform validate` of the fixtures.
 - Pure Python is slow on large modules; the limits bound the cost.
 - The immutable syntax tree and the `ParseOutcome` that wraps it are the only inputs to P3a-2. `OK` is a trust claim, so `ParseOutcome` and `ParsedConfiguration` can be built only by the loader.
+
+**Evaluation (P3a-2; C-99 to C-111).** `core/terraform_model` evaluates the parsed tree with the Python standard library only.
+
+1. **Value model (C-102).** `Known`, `Unknown(reason)`, `Unsupported(reason)` and `Ref(address, attribute)`; numbers are exact (`int`, else `Decimal`), never `float`. An operation on an unknown or unsupported operand is unknown or unsupported, unsupported beats unknown, and a collection with an unknown element stays a known collection. An unknown is never replaced by a default.
+2. **Evaluator (C-103, C-105).** `evaluate_expression(expression, scope)` is pure and bounded (10,000 steps, 1,000 `for` elements, depth 150). Exactly 25 functions are implemented, each from its Terraform 1.15 page with the page's examples as tests; every other function is `function.not_implemented:<name>`. Terraform errors raised while evaluating are unsupported, never INVALID.
+3. **Instances (registry §2.3, §2.6).** `count`, `for_each` and `dynamic` blocks expand to instances with Terraform's canonical addresses; an expansion that cannot be fixed gives one indeterminate resource and no instances. Every argument keeps its form (`ATTRIBUTE`, `BLOCKS`, `DYNAMIC`, `MIXED`; an attribute with a block of one name is INVALID, C-100).
+4. **Configuration (C-104, C-92).** `evaluate_configuration` returns a guarded `EvaluationOutcome`. INVALID iff the pinned `terraform validate` (1.15.8, provider 6.53.0) rejects it (C-92 as amended, C-106); errors that Terraform raises only at plan are UNSUPPORTED; UNSUPPORTED for the whole configuration when it has a `module` block, more than 10,000 instances, a scenario value for an undeclared variable, a resource that refers to itself, or a `moved` table that is not well-formed (C-107); per-value `Unknown`/`Unsupported` otherwise. Moves are built and validated, not applied (P3b).
+5. **Evidence for Terraform behaviour.** Every behaviour that the documentation does not state was measured on Terraform 1.15.8 in a scratch directory outside the repository (`terraform console`, `validate`, `plan` of the builtin `terraform_data` resource; no credentials, no network). The core and its tests never run Terraform.
+
+What `OK` means after P3a-2: the configuration parsed (P3a-1) and evaluated without an INVALID finding and without a whole-configuration UNSUPPORTED finding. Individual values may still be unknown or unsupported; P5 turns those into UNKNOWN or UNSUPPORTED results. `OK` still does not mean that Terraform accepts the configuration (C-99: the pinned `terraform validate` runs outside the core).
 
 **Revisit when.** The pinned HCL or Terraform version changes; a Terraform-accepted configuration is rejected in practice; or the oracle's input path (C-75) is decided in a way that makes a shared reader acceptable.

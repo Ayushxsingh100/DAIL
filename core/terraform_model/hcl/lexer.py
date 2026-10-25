@@ -20,13 +20,13 @@ Not done here: evaluation, normalization (P3a-2), and no regular expressions.
 from __future__ import annotations
 
 import enum
-import unicodedata
 from array import array
 from bisect import bisect_left, bisect_right
 from collections import deque
 
 from core.terraform_model.hcl.ast import SourceRange
 from core.terraform_model.hcl.errors import HclLimitError, HclSyntaxError
+from core.terraform_model.hcl.unicode_tables import ID_CONTINUE, ID_START
 
 
 class T(enum.Enum):
@@ -147,19 +147,15 @@ class SourceMap:
 
 # --- Identifiers (spec, "Identifiers"; UAX #31) ------------------------------------------------
 #
-# Identifier = ID_Start (ID_Continue | '-')*. Python 3.12 carries Unicode 15.0 tables. ID_Start is
-# the categories L* and Nl plus Other_ID_Start; ID_Continue adds Mn, Mc, Nd, Pc and
-# Other_ID_Continue. Terraform 1.15.8 also accepts a leading '_' (C-95), and the Terraform
-# documentation ("Identifiers") only forbids a leading digit, so '_' starts an identifier here.
-# Terraform 1.15.8 uses older tables (U+1E900, assigned in Unicode 9.0, is an identifier
-# character there; U+11A00, assigned in 10.0, is not), so a code point that Unicode 15.0 does not
-# assign is also rejected by Terraform and is INVALID. The reverse does not hold: a letter added
-# in Unicode 10.0 to 15.0 is accepted here and rejected by Terraform (C-95).
+# Identifier = ID_Start (ID_Continue | '-')*, and Terraform's scanner also starts an identifier
+# with '_': hashicorp/hcl v2.24.0, hclsyntax/scan_tokens.rl line 46,
+# ``Ident = (ID_Start | '_') (ID_Continue | '-')*;``. v2.24.0 is the hcl version that Terraform
+# 1.15.8 is built with (go.mod line 36), and its ID_Start and ID_Continue come from Unicode 9.0
+# (header of hclsyntax/unicode_derived.rl). The tables are frozen in ``unicode_tables`` (C-101), so
+# the result does not depend on the Python version or on its ``unicodedata`` (this module does not
+# import it). A letter added to Unicode after 9.0 is not an identifier character here, exactly as
+# in Terraform 1.15.8; a code point outside the tables is INVALID.
 
-_ID_START_CATEGORIES = frozenset({"Lu", "Ll", "Lt", "Lm", "Lo", "Nl"})
-_ID_CONTINUE_CATEGORIES = frozenset({"Mn", "Mc", "Nd", "Pc"})
-_OTHER_ID_START = frozenset({0x1885, 0x1886, 0x2118, 0x212E, 0x309B, 0x309C})
-_OTHER_ID_CONTINUE = frozenset({0x00B7, 0x0387, 0x19DA, *range(0x1369, 0x1372)})
 _ASCII_LETTERS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 _DIGITS = frozenset("0123456789")
 _ASCII_ID_START = _ASCII_LETTERS | {"_"}
@@ -181,21 +177,34 @@ _UNDECODABLE_FIRST = 0xDC80
 _UNDECODABLE_LAST = 0xDCFF
 
 
+_START_LOW = tuple(low for low, _ in ID_START)
+_START_HIGH = tuple(high for _, high in ID_START)
+_CONTINUE_LOW = tuple(low for low, _ in ID_CONTINUE)
+_CONTINUE_HIGH = tuple(high for _, high in ID_CONTINUE)
+
+
+def _in_ranges(cp: int, lows: tuple[int, ...], highs: tuple[int, ...]) -> bool:
+    index = bisect_right(lows, cp) - 1
+    return index >= 0 and cp <= highs[index]
+
+
 def is_id_start(ch: str) -> bool:
     if ch < "\x80":
         return ch in _ASCII_ID_START
-    return unicodedata.category(ch) in _ID_START_CATEGORIES or ord(ch) in _OTHER_ID_START
+    return _in_ranges(ord(ch), _START_LOW, _START_HIGH)
 
 
 def is_id_continue(ch: str) -> bool:
     if ch < "\x80":
         return ch in _ASCII_ID_CONTINUE
-    cp = ord(ch)
-    return (
-        unicodedata.category(ch) in _ID_START_CATEGORIES | _ID_CONTINUE_CATEGORIES
-        or cp in _OTHER_ID_START
-        or cp in _OTHER_ID_CONTINUE
-    )
+    return _in_ranges(ord(ch), _CONTINUE_LOW, _CONTINUE_HIGH)
+
+
+def is_valid_identifier(name: str) -> bool:
+    """Whether ``name`` is one whole identifier: hcl's ``hclsyntax.ValidIdentifier`` (v2.24.0,
+    hclsyntax/public.go lines 199-205), which scans ``name`` and wants exactly one identifier
+    token. Terraform uses it for the names below (see ``core.terraform_model.config``)."""
+    return name != "" and is_id_start(name[0]) and all(is_id_continue(ch) for ch in name[1:])
 
 
 # --- Frames ------------------------------------------------------------------------------------

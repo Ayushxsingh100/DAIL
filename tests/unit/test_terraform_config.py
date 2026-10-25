@@ -479,6 +479,134 @@ class TestInputSubset(DirectoryCase):
         self.assertIn("é", config.variables)
 
 
+class TestNames(DirectoryCase):
+    """C-96 / P3a-2 step 1: names that Terraform v1.15.8 requires to be valid identifiers
+    (``hclsyntax.ValidIdentifier``) and the variable names it reserves. Each rule has a
+    negative test."""
+
+    VALID = (
+        "a",
+        "_a",
+        "_",
+        "a-b",
+        "a--",
+        "a1",
+        "A",
+        "a_b-c9",
+        chr(0xE9),
+        chr(0x3B1) + "x",
+        chr(0x1E900),
+    )
+    INVALID = (
+        "",
+        "1a",
+        "-a",
+        "a b",
+        "a.b",
+        "a/b",
+        "a$",
+        "a\x00b",
+        "a\tb",
+        " a",
+        "a ",
+        chr(0x870),  # a letter added to Unicode after 9.0
+        "a" + chr(0x1F600),
+        "a" + chr(0xA0),
+        "a" + chr(0x200D),
+    )
+
+    # (block type, template with one %s name, index of the checked label)
+    KINDS = (
+        ("resource type", 'resource "%s" "n" {}\n'),
+        ("resource name", 'resource "t" "%s" {}\n'),
+        ("data type", 'data "%s" "n" {}\n'),
+        ("data name", 'data "t" "%s" {}\n'),
+        ("ephemeral type", 'ephemeral "%s" "n" {}\n'),
+        ("ephemeral name", 'ephemeral "t" "%s" {}\n'),
+        ("variable", 'variable "%s" {}\n'),
+        ("output", 'output "%s" {}\n'),
+        ("module", 'module "%s" {}\n'),
+    )
+
+    def quote(self, name: str) -> str:
+        return name.replace("\\", "\\\\").replace('"', '\\"').replace("\t", "\\t")
+
+    def test_valid_names_are_accepted_everywhere(self) -> None:
+        for kind, template in self.KINDS:
+            for name in self.VALID:
+                if kind == "variable" and name == "_":
+                    continue  # reserved for variables, see test_reserved_variable_names
+                with self.subTest(kind=kind, name=name):
+                    outcome = self.load({"main.tf": template % name})
+                    self.assertEqual(outcome.status, OK, outcome.diagnostics)
+
+    def test_names_that_are_not_identifiers_are_invalid_everywhere(self) -> None:
+        for kind, template in self.KINDS:
+            for name in self.INVALID:
+                with self.subTest(kind=kind, name=name):
+                    outcome = self.load({"main.tf": template % self.quote(name)})
+                    self.assertEqual(outcome.status, INVALID, outcome.diagnostics)
+                    self.assertIn("struct.invalid_name", self.codes(outcome))
+                    self.assertIsNone(outcome.configuration)
+
+    def test_a_dash_may_end_a_name(self) -> None:
+        # hclsyntax: Ident = (ID_Start | '_') (ID_Continue | '-')*
+        self.assertEqual(self.load({"main.tf": 'variable "a-" {}\n'}).status, OK)
+
+    def test_the_diagnostic_points_at_the_label(self) -> None:
+        outcome = self.load({"main.tf": 'resource "aws_vpc" "bad name" {}\n'})
+        (diagnostic,) = outcome.diagnostics
+        self.assertEqual(diagnostic.code, "struct.invalid_name")
+        self.assertEqual((diagnostic.file, diagnostic.line, diagnostic.column), ("main.tf", 1, 20))
+        self.assertIn("letter or underscore", diagnostic.message)
+
+    def test_an_escape_can_make_a_label_invalid(self) -> None:
+        outcome = self.load({"main.tf": 'variable "a\\u0020b" {}\n'})
+        self.assertEqual(self.codes(outcome), ["struct.invalid_name"])
+
+    def test_bare_identifier_labels_are_always_valid(self) -> None:
+        self.assertEqual(
+            self.load({"main.tf": "resource aws_vpc main {}\nvariable v {}\n"}).status, OK
+        )
+
+    def test_both_labels_of_a_resource_are_reported(self) -> None:
+        outcome = self.load({"main.tf": 'resource "a b" "c d" {}\n'})
+        self.assertEqual(self.codes(outcome), ["struct.invalid_name"] * 2)
+
+    def test_blocks_without_name_rules_are_not_checked(self) -> None:
+        # provider, check and action labels are not covered (listed as not enforced in C-96).
+        self.assertEqual(self.load({"main.tf": 'provider "a b" {}\ncheck "x y" {}\n'}).status, OK)
+
+    def test_reserved_variable_names(self) -> None:
+        reserved = (
+            "source",
+            "version",
+            "count",
+            "for_each",
+            "depends_on",
+            "providers",
+            "ignore_nested_deprecations",
+            "_",
+            "lifecycle",
+            "locals",
+            "provider",
+        )
+        for name in reserved:
+            with self.subTest(name=name):
+                outcome = self.load({"main.tf": f'variable "{name}" {{}}\n'})
+                self.assertEqual(outcome.status, INVALID)
+                self.assertEqual(self.codes(outcome), ["struct.reserved_variable_name"])
+                self.assertIsNone(outcome.configuration)
+
+    def test_reserved_names_are_exact_and_only_for_variables(self) -> None:
+        text = (
+            'variable "Source" {}\nvariable "sources" {}\nvariable "count_" {}\n'
+            'variable "data" {}\noutput "source" {}\nmodule "count" {}\n'
+            'resource "t" "lifecycle" {}\nresource "provider" "locals" {}\n'
+        )
+        self.assertEqual(self.load({"main.tf": text}).status, OK)
+
+
 class TestTerraformDirectoryLoader(DirectoryCase):
     """C-98: the files read are the files that Terraform v1.15.8's directory loader reads.
 

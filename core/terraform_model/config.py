@@ -43,10 +43,11 @@ from core.terraform_model.hcl.ast import (
     SourceRange,
 )
 from core.terraform_model.hcl.errors import HclLimitError, HclSyntaxError
+from core.terraform_model.hcl.lexer import is_valid_identifier
 from core.terraform_model.hcl.parser import parse_file
 
 # Doc 04 §22 (versioning) and Doc 05 §6 (Provenance.parser_version).
-PARSER_VERSION: Final = "dail-hcl-parser-1"
+PARSER_VERSION: Final = "dail-hcl-parser-2"
 
 # C-93 limits. Exceeding one is UNSUPPORTED, never a crash or a partial result.
 MAX_FILE_BYTES: Final = 2 * 1024 * 1024
@@ -294,6 +295,51 @@ _LABEL_COUNTS: Final[Mapping[str, int]] = MappingProxyType(
         "removed": 0,
     }
 )
+# Names that must be valid identifiers (label index per block type), from Terraform v1.15.8,
+# repository hashicorp/terraform, each ``if !hclsyntax.ValidIdentifier(...)``:
+#   internal/configs/resource.go   lines 138-151 (resource type and name),
+#                                  lines 555-570 (data source type and name),
+#                                  lines 399-410 (ephemeral resource type and name);
+#   internal/configs/named_values.go  line 81 (variable name), line 430 (output name),
+#                                  line 533 (local value name; always a valid identifier here,
+#                                  because an argument name is scanned as one);
+#   internal/configs/module_call.go   line 53 (module name).
+# The message of all of them is named_values.go line 21 (``badIdentifierDetail``).
+_IDENTIFIER_LABELS: Final[Mapping[str, tuple[int, ...]]] = MappingProxyType(
+    {
+        "resource": (0, 1),
+        "data": (0, 1),
+        "ephemeral": (0, 1),
+        "variable": (0,),
+        "output": (0,),
+        "module": (0,),
+    }
+)
+_BAD_IDENTIFIER: Final = (
+    "a name must start with a letter or underscore and may contain only letters, digits, "
+    "underscores, and dashes"
+)
+# A variable cannot be named like an argument or block of a module call, because those names
+# have a special meaning inside module blocks: internal/configs/named_values.go lines 91-110, with
+# the names of ``moduleBlockSchema`` (internal/configs/module_call.go lines 204-237): the
+# attributes source, version, count, for_each, depends_on, providers and
+# ignore_nested_deprecations, and the blocks "_", lifecycle, locals and provider. The Terraform
+# documentation (block/variable.mdx, line 71) lists a subset of these.
+_RESERVED_VARIABLE_NAMES: Final = frozenset(
+    {
+        "source",
+        "version",
+        "count",
+        "for_each",
+        "depends_on",
+        "providers",
+        "ignore_nested_deprecations",
+        "_",
+        "lifecycle",
+        "locals",
+        "provider",
+    }
+)
 _OTHER_BLOCK_TYPES: Final = frozenset({"check", "import", "removed", "ephemeral", "action"})
 _META_ATTRIBUTES: Final = ("count", "for_each", "provider", "depends_on")
 _K = TypeVar("_K", str, tuple[str, str])
@@ -333,6 +379,10 @@ def _config_extension(name: str) -> str:
     if name.endswith(".tf.json"):
         return ".tf.json"
     return ""
+
+
+def _clip(text: str, limit: int = 40) -> str:
+    return text if len(text) <= limit else text[: limit - 3] + "..."
 
 
 def _is_override_file(name: str) -> bool:
@@ -560,6 +610,7 @@ class _Loader:
                     )
                     continue
                 kind = item.type
+                self._check_names(name, item)
                 if kind == "resource" or kind == "data":
                     declaration = self._resource(kind, name, item)
                     target = resources if kind == "resource" else data_sources
@@ -623,6 +674,28 @@ class _Loader:
             other_blocks=tuple(other_blocks),
             _token=_LOADER_TOKEN,
         )
+
+    def _check_names(self, file: str, block: Block) -> None:
+        """Labels that Terraform requires to be valid identifiers, and reserved variable names."""
+        for index in _IDENTIFIER_LABELS.get(block.type, ()):
+            label = block.labels[index]
+            if not is_valid_identifier(label.value):
+                self.invalid(
+                    "struct.invalid_name",
+                    f"{block.type} label {_clip(label.value)!r} is not a valid name: "
+                    f"{_BAD_IDENTIFIER}",
+                    file,
+                    label.range,
+                )
+        if block.type == "variable" and block.labels[0].value in _RESERVED_VARIABLE_NAMES:
+            label = block.labels[0]
+            self.invalid(
+                "struct.reserved_variable_name",
+                f"the variable name {label.value!r} is reserved due to its special meaning "
+                "inside module blocks",
+                file,
+                label.range,
+            )
 
     def _unique(
         self,
