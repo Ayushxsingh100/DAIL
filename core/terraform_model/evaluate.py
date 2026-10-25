@@ -144,7 +144,6 @@ UNKNOWN_REASONS: Final[dict[str, str]] = {
     "operator.undecided": "An equality that cannot be decided.",
     "function.contains_undecided": "contains() that cannot be decided.",
     "variable.no_value": "A variable with no value and no default.",
-    "expansion.unknown": "A count or for_each that is unknown.",
 }
 DIAGNOSTICS: Final[dict[str, str]] = {
     "eval.undeclared_reference": "A reference to an undeclared variable, local, resource or data.",
