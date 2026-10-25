@@ -25,6 +25,7 @@ from core.terraform_model.values import (
     Unsupported,
     Value,
     ValueModelError,
+    children,
     combine,
     combine_deep,
     first_problem,
@@ -63,6 +64,18 @@ class TestConstruction(unittest.TestCase):
         self.assertEqual(str(Known(Decimal("1.50")).value), "1.5")
         self.assertEqual(Known(Decimal("1.50")), Known(Decimal("1.5")))
         self.assertEqual(normalize_number(Decimal("0.100")), Decimal("0.1"))
+
+    def test_a_long_decimal_is_kept_exactly_not_rounded(self) -> None:
+        # Regression: normalize() under the default context rounds to 28 digits.
+        long_decimal = Decimal("0." + "1234567890" * 10 + "1")
+        self.assertEqual(Known(long_decimal).value, long_decimal)
+        self.assertEqual(Known(long_decimal), Known(Decimal(str(long_decimal))))
+
+    def test_a_number_that_cannot_be_kept_exactly_is_refused(self) -> None:
+        with self.assertRaises(ValueModelError):
+            Known(Decimal("1E+5000"))
+        with self.assertRaises(ValueModelError):
+            normalize_number(Decimal("0." + "1" * 1500))
 
     def test_a_bool_is_not_a_number(self) -> None:
         self.assertIs(Known(True).value, True)
@@ -136,6 +149,12 @@ class TestConstruction(unittest.TestCase):
 
 
 class TestSets(unittest.TestCase):
+    def test_true_and_one_are_two_elements_of_a_set(self) -> None:
+        # Python says True == 1; a Terraform bool and a number are different values
+        value = known_set([Known(True), Known(1)])
+        self.assertEqual(len(children(value)), 2)
+        self.assertEqual(len(children(known_set([Known(1), Known(Decimal("1.0"))]))), 1)
+
     def test_a_set_is_sorted_and_deduplicated(self) -> None:
         a = known_set([Known("b"), Known("a"), Known("b")])
         b = known_set([Known("a"), Known("b")])

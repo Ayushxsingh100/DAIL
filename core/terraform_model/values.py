@@ -50,11 +50,17 @@ def normalize_number(number: int | Decimal) -> int | Decimal:
         return number
     if not number.is_finite():
         raise ValueModelError(f"{number} is not a finite number")
-    if number == number.to_integral_value():
-        if number.adjusted() > _MAX_DIGITS:
-            raise ValueModelError("the number is too large to keep as an integer")
-        return int(number)
-    return number.normalize()
+    # ``normalize`` would round to the 28 digits of the default decimal context; the exact context
+    # raises instead, so a number is never changed silently.
+    with number_context():
+        try:
+            if number == number.to_integral_value():
+                if number.adjusted() > _MAX_DIGITS:
+                    raise ValueModelError("the number is too large to keep as an integer")
+                return int(number)
+            return number.normalize()
+        except ArithmeticError as error:
+            raise ValueModelError("the number cannot be kept exactly") from error
 
 
 @dataclass(frozen=True, slots=True)
@@ -165,7 +171,8 @@ def known_set(items: Iterable[Value]) -> Known:
         (known if is_fully_known(item) else problems).append(item)
     unique: list[Value] = []
     for item in sorted(known, key=sort_key):
-        if not unique or unique[-1] != item:
+        # compare sort keys: Known(True) == Known(1) in Python, but a bool is not a number
+        if not unique or sort_key(unique[-1]) != sort_key(item):
             unique.append(item)
     problems.sort(key=sort_key)
     return Known(SetValue(tuple(unique + problems)))
