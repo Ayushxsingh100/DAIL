@@ -77,6 +77,15 @@ class TestConstruction(unittest.TestCase):
         with self.assertRaises(ValueModelError):
             normalize_number(Decimal("0." + "1" * 1500))
 
+    def test_computed_from_takes_no_part_in_equality_or_hashing(self) -> None:
+        plain = Known(MappingProxyType({"id": Known(1)}))
+        marked = Known(MappingProxyType({"id": Known(1)}), computed_from="aws_x.y")
+        self.assertEqual(plain, marked)
+        self.assertEqual(hash(Known(1)), hash(Known(1, computed_from="a")))
+        self.assertIsNone(plain.computed_from)
+        self.assertEqual(marked.computed_from, "aws_x.y")
+        self.assertNotIn("aws_x.y", repr(marked))
+
     def test_a_bool_is_not_a_number(self) -> None:
         self.assertIs(Known(True).value, True)
         with self.assertRaises(ValueModelError):

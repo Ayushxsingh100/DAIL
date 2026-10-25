@@ -723,17 +723,51 @@ class TestResourceReferences(unittest.TestCase):
         )
         self.assertEqual(ev("keys(aws_sg.g)", resources=resolver), tup("a", "b"))
 
-    def test_a_computed_attribute_of_a_whole_resource_object_is_unsupported(self) -> None:
-        # the object does not hold Terraform's other attributes, and DAIL cannot tell a computed
-        # attribute from one that does not exist
+    def test_an_attribute_not_configured_is_computed_through_the_object_too(self) -> None:
+        # C-110 (authors' condition): the same Unknown("resource.computed:<attr>") as a direct
+        # reference, whatever the way the instance object is reached
         resolver = self.resolver()
-        self.assertEqual(
-            ev("aws_security_group.app.arn", resources=resolver), Unknown("resource.computed:arn")
-        )
-        local = {"all": parse_expression("aws_subnet.s")}
-        self.assertIsInstance(ev("local.all[0].arn", locals=local, resources=resolver), Unsupported)
+        direct = ev("aws_security_group.app.arn", resources=resolver)
+        self.assertEqual(direct, Unknown("resource.computed:arn"))
+        local = {
+            "all": parse_expression("aws_subnet.s"),
+            "one": parse_expression("aws_security_group.app"),
+        }
+        cases = [
+            "local.all[0].arn",
+            'local.all[0]["arn"]',
+            "local.one.arn",
+            'local.one["arn"]',
+            "local.all[*].arn",
+            "[for s in local.all : s.arn]",
+            "aws_subnet.s[0].arn",
+        ]
+        for text in cases:
+            with self.subTest(text=text):
+                value = ev(text, locals=local, resources=resolver)
+                expected = Unknown("resource.computed:arn")
+                if "*" in text or "for" in text:
+                    expected = tup(*[expected] * 3)
+                self.assertEqual(value, expected)
         self.assertEqual(
             ev("local.all[0].cidr", locals=local, resources=resolver), Known("10.0.0.0/24")
+        )
+        self.assertEqual(
+            ev("local.one.id", locals=local, resources=resolver),
+            Ref("aws_security_group.app", "id"),
+        )
+
+    def test_the_marker_is_only_on_instance_objects(self) -> None:
+        # a plain object, or a merge of an instance object, still has no such attribute
+        resolver = self.resolver()
+        local = {"one": parse_expression("aws_security_group.app")}
+        self.assertIsInstance(ev("{a = 1}.arn", resources=resolver), Unsupported)
+        self.assertIsInstance(
+            ev("merge(local.one, {}).arn", locals=local, resources=resolver), Unsupported
+        )
+        self.assertEqual(
+            ev("local.one", locals=local, resources=resolver),
+            obj(id=Ref("aws_security_group.app", "id"), name="app"),
         )
 
     def test_an_attribute_without_an_index_is_unsupported(self) -> None:

@@ -40,6 +40,7 @@ import contextlib
 import decimal
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any, Final, Protocol
 
 from core.terraform_model.config import Diagnostic, DiagnosticSeverity
@@ -111,6 +112,13 @@ MAX_FOR_ELEMENTS: Final = 1_000
 # Expression nesting plus references followed. Each level costs a few Python frames, so this stays
 # far below the interpreter's recursion limit.
 MAX_DEPTH: Final = 150
+
+
+def _instance_object(view: InstanceView) -> Known:
+    """A resource instance used as a value: ``id`` and the configured arguments."""
+    items = dict(sorted(view.attributes().items()))
+    return Known(MappingProxyType(items), computed_from=view.address)
+
 
 # Reason codes of the Unsupported values made here (the others are in convert.py and functions.py).
 REASONS: Final[dict[str, str]] = {
@@ -397,9 +405,9 @@ class _Evaluator:
         not in it, so reading one from the object is unsupported (a direct ``aws_x.y.arn`` is
         unknown instead)."""
         if isinstance(result, _Instance):
-            return known_object(dict(result.view.attributes()))
+            return _instance_object(result.view)
         if isinstance(result, _Resource):
-            objects = [known_object(dict(i.attributes())) for i in result.instances]
+            objects = [_instance_object(i) for i in result.instances]
             if result.mode == "count":
                 return Known(tuple(objects))
             keyed: dict[str, Value] = {}
@@ -638,6 +646,10 @@ class _Evaluator:
             if name in current.value:
                 attribute: Value = current.value[name]
                 return attribute
+            if current.computed_from is not None:
+                # an attribute that is not configured, read through the instance object: the
+                # same as a direct reference (C-110)
+                return Unknown(f"resource.computed:{name}")
             raise Fail("eval.missing_attribute", f"the object has no attribute {name[:30]!r}")
         if current.value is None:
             raise Fail("value.null", "an attribute of null")
@@ -666,6 +678,8 @@ class _Evaluator:
             if name in payload:
                 member: Value = payload[name]
                 return member
+            if current.computed_from is not None:
+                return Unknown(f"resource.computed:{name}")
             raise Fail("eval.invalid_index", f"the object has no key {name[:30]!r}")
         if isinstance(payload, SetValue):
             raise Fail("eval.index_type", "the elements of a set have no index")

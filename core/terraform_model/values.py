@@ -28,7 +28,7 @@ Standard library only.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal, localcontext
 from types import MappingProxyType
 from typing import Any
@@ -107,9 +107,15 @@ class SetValue:
 
 @dataclass(frozen=True, slots=True)
 class Known:
-    """A known value; see the module docstring for the payload types."""
+    """A known value; see the module docstring for the payload types.
+
+    ``computed_from`` is set only on the object that stands for a resource instance used as a
+    value (``aws_x.y``): it names the instance, and says that an attribute missing from the object
+    is a provider-computed attribute (unknown), not a mistake. It takes no part in equality.
+    """
 
     value: Any
+    computed_from: str | None = field(default=None, compare=False, repr=False)
 
     def __post_init__(self) -> None:
         payload = self.value
