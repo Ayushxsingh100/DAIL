@@ -97,7 +97,20 @@ Notes carried forward (none blocks):
 Terraform was not run in the reviewer's environment; C-99 stays a P7 gate item.
 ```
 
-## P3–P10 — NOT STARTED
+## P3c — Dependency graph, and the P3 gate
+
+```text
+P3c mini-gate: PASSED (external review, 28 Oct 2026; PR #18 at e6cf95a, follow-up PR #19 at 0edffed).
+Suite: 2663 tests on Python 3.12 and 3.13 (skipped=1); black, ruff and mypy clean.
+The RDS subnet-placement gap was closed by C-136 (a placement edge that is always UNSUPPORTED).
+P3 gate (P3a + P3b + P3c): PASSED on the Doc 15 §10.3 criteria (canonical fixtures pass; ambiguity
+is conservative; graph output is deterministic; no silent missing dependencies).
+Both PRs were merged before the verdict was issued (C-28 process lapse, recorded).
+Carried forward: C-45 (decided as a proposal in C-141, P4); C-117 (P4 gate item); C-120(c) (P5 gate
+item); C-128 before D4; C-130 before D5; C-131 to C-136 Proposed.
+```
+
+## P4–P10 — NOT STARTED
 
 ## Temporary exceptions
 
