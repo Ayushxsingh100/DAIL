@@ -659,6 +659,38 @@ class TestTheIndex(unittest.TestCase):
         self.assertIsNone(group.inline_forms)
         self.assertEqual(len(group.egress), 1)
 
+    def test_an_inline_rule_is_indexed_under_its_real_group(self) -> None:
+        # the stored view says SELF; the index must say the address of the owning group
+        resources = resources_of(self.TEXT)
+        stored = thaw_json(resources["aws_security_group.a"].security_attributes)["inline_rules"]
+        self.assertEqual([view["target_security_group"] for view in stored], ["SELF"])
+        index = index_rules(resources.values())
+        self.assertNotIn("SELF", index)
+        inline = [r for r in index["aws_security_group.a"].ingress if r.origin == ORIGIN_INLINE]
+        self.assertEqual(len(inline), 1)
+        self.assertEqual(inline[0].target_security_group, "aws_security_group.a")
+        self.assertEqual(inline[0].source_address, "aws_security_group.a")
+        for group in index.values():
+            for rule in (*group.ingress, *group.egress, *group.unresolved_direction):
+                self.assertNotEqual(rule.target_security_group, "SELF")
+
+    def test_self_is_resolved_for_instances_with_a_key(self) -> None:
+        text = (
+            'resource "aws_security_group" "g" {\n'
+            '  for_each = toset(["a", "b"])\n'
+            "  ingress {\n"
+            '    protocol = "tcp"\n'
+            "    from_port = 22\n"
+            "    to_port = 22\n"
+            "  }\n"
+            "}\n"
+        )
+        index = index_rules(resources_of(text).values())
+        self.assertEqual(list(index), ['aws_security_group.g["a"]', 'aws_security_group.g["b"]'])
+        for address, group in index.items():
+            (rule,) = group.ingress
+            self.assertEqual((rule.target_security_group, rule.source_address), (address, address))
+
     def test_the_index_does_not_depend_on_the_order_of_the_resources(self) -> None:
         resources = list(resources_of(self.TEXT).values())
         forward = index_rules(resources)
