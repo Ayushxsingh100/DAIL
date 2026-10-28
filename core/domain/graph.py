@@ -89,6 +89,7 @@ class Relationship(StrEnum):
     SOURCE = "SOURCE"
     DESTINATION = "DESTINATION"
     PROTOCOL_PORT = "PROTOCOL_PORT"
+    BINDING = "BINDING"
 
 
 INFRASTRUCTURE_RELATIONSHIPS: Final = frozenset(
@@ -111,7 +112,12 @@ RELATIONSHIPS_BY_TYPE: Final[Mapping[EdgeType, frozenset[Relationship]]] = Mappi
         EdgeType.INFRASTRUCTURE: INFRASTRUCTURE_RELATIONSHIPS,
         EdgeType.INVARIANT_SCOPE: frozenset({Relationship.SCOPE}),
         EdgeType.INVARIANT_SEMANTIC: frozenset(
-            {Relationship.SOURCE, Relationship.DESTINATION, Relationship.PROTOCOL_PORT}
+            {
+                Relationship.SOURCE,
+                Relationship.DESTINATION,
+                Relationship.PROTOCOL_PORT,
+                Relationship.BINDING,
+            }
         ),
     }
 )

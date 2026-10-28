@@ -67,6 +67,18 @@ class TestVocabularies(unittest.TestCase):
     def test_infrastructure_relationships_are_the_nine_of_doc_07_s16(self) -> None:
         self.assertEqual({r.value for r in INFRASTRUCTURE_RELATIONSHIPS}, set(SUBNET_TYPES))
 
+    def test_the_semantic_class_has_source_destination_port_and_binding(self) -> None:
+        self.assertEqual(
+            {r.value for r in RELATIONSHIPS_BY_TYPE[EdgeType.INVARIANT_SEMANTIC]},
+            {"SOURCE", "DESTINATION", "PROTOCOL_PORT", "BINDING"},
+        )
+        self.assertEqual(
+            {r.value for r in RELATIONSHIPS_BY_TYPE[EdgeType.INVARIANT_SCOPE]}, {"SCOPE"}
+        )
+        self.assertEqual(
+            {r.value for r in RELATIONSHIPS_BY_TYPE[EdgeType.TERRAFORM_REFERENCE]}, {"REFERENCE"}
+        )
+
     def test_every_relationship_belongs_to_exactly_one_class(self) -> None:
         for relationship in Relationship:
             owners = [t for t, rels in RELATIONSHIPS_BY_TYPE.items() if relationship in rels]

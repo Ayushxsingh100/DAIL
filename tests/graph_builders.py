@@ -13,10 +13,12 @@ from typing import Any
 from core.dependency.edges import Parts, finalize
 from core.dependency.index import StateIndex
 from core.dependency.infrastructure import add_infrastructure_edges
+from core.dependency.invariants import SemanticBinding, add_invariant_edges, check_invariants
 from core.dependency.nodes import resource_node
 from core.dependency.references import add_reference_edges
 from core.domain.enums import (
     DependencyStatus,
+    InvariantCategory,
     ProvenanceSourceKind,
     ReferenceResolution,
     ResourceSupport,
@@ -34,6 +36,7 @@ from core.domain.graph import (
     resource_node_id,
     semantic_node_id,
 )
+from core.domain.invariant import Invariant, InvariantScope
 from core.domain.resource import Resource
 from core.domain.values import Provenance, Reference
 from core.terraform_model.normalization import normalize_directory
@@ -294,3 +297,85 @@ BASELINE_INFRASTRUCTURE_EDGES: tuple[tuple[str, str, Relationship], ...] = (
         R.RULE_BELONGS_TO_SECURITY_GROUP,
     ),
 )
+
+
+def make_invariant(
+    invariant_id: str,
+    *,
+    version: int = 1,
+    category: InvariantCategory = InvariantCategory.SECURITY,
+    resources: Iterable[str] = (),
+    resource_types: Iterable[str] = (),
+) -> Invariant:
+    return Invariant(
+        invariant_id=invariant_id,
+        version=version,
+        name=f"{invariant_id} name",
+        category=category,
+        description=f"{invariant_id} description",
+        predicate={"op": "fixture"},
+        scope=InvariantScope(
+            resources=tuple(resources),
+            resource_types=tuple(resource_types),
+            relationships=(),
+            properties=(),
+            dependency_depth=1,
+        ),
+        verifier_id="fixture-verifier",
+        verifier_version="1",
+        created_at=at(0),
+    )
+
+
+# The four registry invariants as the tests declare them (R4 of the P3c prompt: nothing in the code
+# defines them yet). Scopes follow registry-v1.0 §3.5 (every security group and rule, plus the
+# relevant-unsupported types of §2.7), §5.4 and §6.6 (the endpoints S and D).
+SEC_RELEVANT_UNSUPPORTED = (
+    "aws_default_security_group",
+    "aws_vpc_security_group_ingress_rule",
+    "aws_vpc_security_group_rules_exclusive",
+)
+SEC_TYPES = ("aws_security_group", "aws_security_group_rule", *SEC_RELEVANT_UNSUPPORTED)
+
+
+def sec_001(version: int = 1) -> Invariant:
+    return make_invariant("INV-SEC-001", version=version, resource_types=SEC_TYPES)
+
+
+def sec_002(version: int = 1) -> Invariant:
+    return make_invariant("INV-SEC-002", version=version, resource_types=SEC_TYPES)
+
+
+def sec_003(version: int = 1) -> Invariant:
+    return make_invariant("INV-SEC-003", version=version, resource_types=("aws_db_instance",))
+
+
+def func_001(version: int = 1) -> Invariant:
+    return make_invariant(
+        "INV-FUNC-001",
+        version=version,
+        category=InvariantCategory.FUNCTIONAL,
+        resources=("aws_instance.app", "aws_db_instance.database"),
+    )
+
+
+def func_binding() -> SemanticBinding:
+    """S and D of the fixtures' expected.json: EC2 to RDS on TCP/5432."""
+    return SemanticBinding(
+        "INV-FUNC-001", "aws_instance.app", "aws_db_instance.database", "TCP", 5432
+    )
+
+
+def invariant_edges_of(
+    resources: Iterable[Resource],
+    invariants: Iterable[Invariant],
+    bindings: Iterable[SemanticBinding] = (),
+) -> tuple[Parts, tuple[GraphEdge, ...]]:
+    """Only the invariant nodes and edges (step 5), next to the resource nodes."""
+    index = StateIndex.of(resources)
+    ordered, bound = check_invariants(invariants, bindings)
+    parts = Parts()
+    for item in index.sorted_resources():
+        parts.add_node(resource_node(item))
+    add_invariant_edges(ordered, bound, index, parts, now=NOW)
+    return parts, finalize(parts.drafts)
