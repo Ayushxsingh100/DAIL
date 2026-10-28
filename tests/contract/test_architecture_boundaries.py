@@ -40,6 +40,9 @@ R15 core.dependency imports only the standard library, core.domain.* and itself:
 R16 core.impact imports only the standard library, core.domain.* and itself: not
     core.dependency, core.identity, core.terraform_model, core.persistence, core.application,
     core.promotion or any other core.* package, and not evidence (C-137).
+R17 core.verification imports only the standard library, core.domain.* and itself: not
+    core.terraform_model, core.dependency, core.identity, core.impact, core.persistence,
+    core.application, core.promotion or any other core.* package, and not evidence (C-144).
 ORACLE  nothing in this repository imports the TerraPreserve oracle (ADR-010).
 
 A self-test feeds in-memory sources that break each rule, so a checker that
@@ -201,6 +204,15 @@ def check_module(module: str, imports: set[str]) -> list[Violation]:
             or top in ("evidence", "sqlite3")
         ):
             violations.append(Violation("R16", module, name))
+        if _within(module, "core.verification") and (
+            (
+                top == "core"
+                and not _within(name, "core.verification")
+                and not _within(name, "core.domain")
+            )
+            or top in ("evidence", "sqlite3")
+        ):
+            violations.append(Violation("R17", module, name))
         if (in_core or in_evidence) and not is_stdlib and top not in ("core", "evidence"):
             package = ".".join(module.split(".")[:2])
             if top not in THIRD_PARTY_ALLOWLIST.get(package, frozenset()):
@@ -537,6 +549,58 @@ class TestCheckerSelfTest(unittest.TestCase):
             self.assertNotIn("R16", self.rules_for(module, "from core.domain import hashing\n"))
         self.assertNotIn(
             "R16", self.rules_for("core.impactx.bad", "from core.persistence import sqlite\n")
+        )
+
+    def test_r17_rejects_every_core_package_but_the_domain_in_the_verification_engine(self) -> None:
+        # C-144: core.verification may import core.domain.* and the standard library only.
+        for module in ("core.verification", "core.verification.engine", "core.verification.views"):
+            for source in (
+                "from core.terraform_model import security_rules\n",
+                "import core.terraform_model.security_rules\n",
+                "from core.dependency import build\n",
+                "from core.identity import engine\n",
+                "from core.impact import engine\n",
+                "from core.persistence import sqlite\n",
+                "from core.application import config\n",
+                "from core.promotion import controller\n",
+                "import evidence.store\n",
+                "import sqlite3\n",
+                "from ..terraform_model import security_rules\n",
+            ):
+                with self.subTest(module=module, source=source.strip()):
+                    is_package = module == "core.verification"
+                    self.assertIn("R17", self.rules_for(module, source, is_package))
+
+    def test_r17_allows_core_domain_itself_and_the_standard_library(self) -> None:
+        for module in (
+            "core.verification.engine",
+            "core.verification.cidr",
+            "core.verification.values",
+        ):
+            for source in (
+                "from core.domain.verification import VerificationReport\n",
+                "from core.domain import hashing\n",
+                "import core.domain.impact\n",
+                "from core.verification.cidr import covers\n",
+                "from .cidr import covers\n",
+                "import ipaddress\nimport dataclasses\nfrom collections.abc import Mapping\n",
+            ):
+                with self.subTest(module=module, source=source.splitlines()[0]):
+                    self.assertNotIn("R17", self.rules_for(module, source))
+
+    def test_r17_applies_only_to_the_verification_engine(self) -> None:
+        for module in ("core.impact.ok", "core.identity.ok", "core.application.ok"):
+            self.assertNotIn("R17", self.rules_for(module, "from core.domain import hashing\n"))
+        self.assertNotIn(
+            "R17", self.rules_for("core.verificationx.bad", "from core.persistence import sqlite\n")
+        )
+
+    def test_the_verification_engine_cannot_import_the_application_layer_or_promotion(self) -> None:
+        self.assertIn(
+            "R2", self.rules_for("core.verification.engine", "from core.application import x\n")
+        )
+        self.assertIn(
+            "R5", self.rules_for("core.verification.engine", "from core.promotion import x\n")
         )
 
     def test_the_impact_engine_cannot_import_the_application_layer(self) -> None:
