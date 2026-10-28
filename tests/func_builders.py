@@ -103,3 +103,22 @@ def with_attributes(resource: Resource, attributes: Mapping[str, Any]) -> Resour
 def attribute(value: Any) -> dict[str, Any]:
     """An ATTRIBUTE-form argument in the stored encoding."""
     return {"form": "ATTRIBUTE", "value": value}
+
+
+def rule(
+    name: str, kind: str, protocol: str, low: int, high: int, group: str, body: str = ""
+) -> str:
+    """A rule resource in the style of the canonical file."""
+    return (
+        f'resource "aws_security_group_rule" "{name}" {{\n  type = "{kind}"\n'
+        f'  protocol = "{protocol}"\n  from_port = {low}\n  to_port = {high}\n'
+        f"  security_group_id = aws_security_group.{group}.id\n{body}}}\n"
+    )
+
+
+def ingress_5432(name: str, body: str) -> str:
+    return rule(name, "ingress", "tcp", 5432, 5432, "db", body)
+
+
+def egress_5432(name: str, body: str) -> str:
+    return rule(name, "egress", "tcp", 5432, 5432, "app", body)
