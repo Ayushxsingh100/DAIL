@@ -5,6 +5,9 @@ Value objects and entities: ``Reference``, ``Provenance``, the normalized ``Reso
 ``InvariantRegistry``, the state-scoped ``InvariantRef`` and the candidate-scoped
 ``InvariantEvaluation``.
 
+Identity (P3b; Doc 07, C-122): ``identity`` holds ``IdentityEvidence``, ``IdentityMatch`` and
+``IdentityReport``, the answer to "what changed between the trusted and the candidate state?".
+
 Lifecycles: explicit transition tables and functions (``lifecycle``, ``state``) that reject every
 transition the specification forbids, including SM-001 to SM-010. Lifecycle-bearing objects can
 be created only through those functions, so ``dataclasses.replace`` and direct constructor calls

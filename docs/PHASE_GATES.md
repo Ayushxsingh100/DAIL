@@ -62,6 +62,22 @@ Carried forward:
 
 M1 (Doc 15 §21): COMPLETE (external review, 24 Oct 2026). Basic fixture loading works: D2 PR #13 (20 fixtures, tests/fixture_catalog.py, CI validates every fixture root).
 
+## P3a — Terraform parsing, evaluation, normalization
+
+```text
+P3a mini-gate: PASSED (external review, 28 Oct 2026, PR #16 at 0ca0b37, merged at 7def9f8).
+Suite: 2163 tests on every one of the 11 commits (Python 3.12); final tree 2163 OK on Python 3.13
+(1 skip by design: the Unicode-table equality test runs only when the interpreter has Unicode 15.0).
+black, ruff, mypy clean. 31 adversarial probes passed. Mutation checks: always-determinate rule
+(25 tests fail), `unresolved` direction read as absent (1 test fails), reference to an unsupported
+target reported SUPPORTED (4 fail), `$dail` escape disabled (68 fail).
+Notes carried forward (none blocks):
+1. Duplicate CIDRs change the fingerprint by design (C-112); the rule view deduplicates.
+2. The `unresolved` direction form (C-120(c)) needs an invariant-level test in P5 showing UNSUPPORTED, never "no rules" (P5 gate item).
+3. C-117 (fingerprint equality is not "unchanged" when unresolved; P4 gate item) and C-45 (carry_forward needs the P4 UNAFFECTED verdict) stay open.
+Terraform was not run in the reviewer's environment; C-99 stays a P7 gate item.
+```
+
 ## P3–P10 — NOT STARTED
 
 ## Temporary exceptions
