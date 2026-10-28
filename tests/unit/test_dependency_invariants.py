@@ -334,7 +334,7 @@ class TestEvidenceAndProvenance(unittest.TestCase):
             with self.subTest(edge=edge.evidence.source_fact):
                 self.assertEqual(len(edge.provenance), 1)
                 self.assertIs(edge.provenance[0].source_kind, ProvenanceSourceKind.DERIVED)
-                self.assertEqual(edge.provenance[0].algorithm_version, "dail-graph-1")
+                self.assertEqual(edge.provenance[0].algorithm_version, "dail-graph-2")
                 self.assertTrue(edge.evidence.source_fact)
                 self.assertTrue(edge.evidence.target_fact)
 

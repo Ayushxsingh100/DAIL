@@ -73,7 +73,8 @@ class EdgeType(StrEnum):
 
 
 class Relationship(StrEnum):
-    """The typed relationship of an edge (C-132): the nine Doc 07 §16 types and the generic ones."""
+    """The typed relationship of an edge (C-132): the nine Doc 07 §16 types, the RDS subnet
+    placement of C-136 (not a §16 row) and the generic ones."""
 
     REFERENCE = "REFERENCE"
     SUBNET_BELONGS_TO_VPC = "SUBNET_BELONGS_TO_VPC"
@@ -85,6 +86,7 @@ class Relationship(StrEnum):
     INSTANCE_USES_SECURITY_GROUP = "INSTANCE_USES_SECURITY_GROUP"
     DB_USES_SECURITY_GROUP = "DB_USES_SECURITY_GROUP"
     RULE_BELONGS_TO_SECURITY_GROUP = "RULE_BELONGS_TO_SECURITY_GROUP"
+    DB_SUBNET_PLACEMENT = "DB_SUBNET_PLACEMENT"
     SCOPE = "SCOPE"
     SOURCE = "SOURCE"
     DESTINATION = "DESTINATION"
@@ -103,6 +105,7 @@ INFRASTRUCTURE_RELATIONSHIPS: Final = frozenset(
         Relationship.INSTANCE_USES_SECURITY_GROUP,
         Relationship.DB_USES_SECURITY_GROUP,
         Relationship.RULE_BELONGS_TO_SECURITY_GROUP,
+        Relationship.DB_SUBNET_PLACEMENT,
     }
 )
 

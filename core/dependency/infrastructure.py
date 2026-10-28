@@ -83,6 +83,7 @@ class _Emitter:
         rule: DerivationRule,
         source_fact: str,
         target_fact: str,
+        floor: DependencyStatus = DependencyStatus.KNOWN,
     ) -> None:
         if isinstance(target, GraphNode):
             self.parts.add_node(target)
@@ -95,7 +96,7 @@ class _Emitter:
                 target_node_id=target_id,
                 edge_type=edge_type,
                 relationship=relationship,
-                status=worst(status, self.own),
+                status=worst(status, self.own, floor),
                 attributes=dict(attributes),
                 rule=rule,
                 source_fact=source_fact,
@@ -106,6 +107,24 @@ class _Emitter:
 
     def fact(self, argument: str, element: Element) -> str:
         return f"{self.resource.address}.{argument} = {render(element)}"
+
+    def reference_targets(self, argument: str, target_type: str) -> list[str]:
+        """The targets of type ``target_type`` that the ``Reference`` list says ``argument``
+        refers to, sorted."""
+        return sorted(
+            {
+                reference.target_address
+                for reference in self.resource.references
+                if top_level(reference.source_attribute) == argument
+                and type_of(reference.target_address) == target_type
+            }
+        )
+
+    def concrete(self, address: str) -> list[str]:
+        """The addresses an edge to ``address`` ends at: the resource itself, the instances of
+        a block-level address that is no resource, or the address (an absent node)."""
+        instances = self.index.instances_of(address)
+        return list(instances) if instances else [address]
 
 
 # --- Typed slots ----------------------------------------------------------------------------------
@@ -125,8 +144,14 @@ def _typed_reference(emitter: _Emitter, slot: Slot, argument: str, element: Elem
             rule=DerivationRule.TYPE_MISMATCH,
             source_fact=fact,
             target_fact=f"expected {slot.target_type}, found {found}",
+            floor=slot.status_floor,
         )
         return
+    _typed_target(emitter, slot, argument, address, fact)
+
+
+def _typed_target(emitter: _Emitter, slot: Slot, argument: str, address: str, fact: str) -> None:
+    """The typed edge to a resource of the slot's target type (S1)."""
     target = emitter.index.by_address.get(address)
     if target is None:
         emitter.parts.add_node(outside_node(address))
@@ -144,6 +169,7 @@ def _typed_reference(emitter: _Emitter, slot: Slot, argument: str, element: Elem
         rule=DerivationRule.SLOT_REFERENCE,
         source_fact=fact,
         target_fact=target_fact(address, emitter.index),
+        floor=slot.status_floor,
     )
 
 
@@ -162,6 +188,7 @@ def _typed_unresolved(emitter: _Emitter, slot: Slot, argument: str, element: Ele
         ),
         source_fact=emitter.fact(argument, element),
         target_fact=f"unresolved: {element.detail}",
+        floor=slot.status_floor,
     )
 
 
@@ -175,6 +202,7 @@ def _typed_external(emitter: _Emitter, slot: Slot, argument: str, element: Eleme
         rule=DerivationRule.EXTERNAL_OBJECT,
         source_fact=emitter.fact(argument, element),
         target_fact=_EXTERNAL_TARGET,
+        floor=slot.status_floor,
     )
 
 
@@ -188,7 +216,36 @@ def _typed_unset(emitter: _Emitter, slot: Slot, reason: str, fact: str) -> None:
         rule=DerivationRule.UNSET,
         source_fact=fact,
         target_fact=_UNRESOLVED_TARGET,
+        floor=slot.status_floor,
     )
+
+
+def _literal_edges(
+    emitter: _Emitter, slot: Slot, name: str, live: list[Element], literals: list[Element]
+) -> None:
+    """S3 for the literal elements of an argument, unless the ``Reference`` list explains them.
+
+    Terraform evaluates ``aws_db_subnet_group.db.name`` to the configured string, so the value
+    is a literal while the relationship survives only as a ``Reference`` from the argument
+    (C-110, C-115). Each such reference to a resource of the target type that no ``Ref`` element
+    already covers gives the typed edge (S1); the literals are then explained. When there are
+    more literals than such references, the unexplained ones stay external objects (C-136).
+    """
+    if not literals:
+        return
+    covered = {element.address for element in live if element.kind is ElementKind.REF}
+    derived = [
+        address
+        for address in emitter.reference_targets(name, slot.target_type)
+        if address not in covered
+    ]
+    for address in derived:
+        for concrete in emitter.concrete(address):
+            fact = f"{emitter.resource.address}.{name} is the configured value of {address}"
+            _typed_target(emitter, slot, name, concrete, fact)
+    if len(literals) > len(derived):
+        for element in literals:
+            _typed_external(emitter, slot, name, element)
 
 
 def _slot_edges(emitter: _Emitter, slot: Slot) -> None:
@@ -211,13 +268,13 @@ def _slot_edges(emitter: _Emitter, slot: Slot) -> None:
             reasons.add("empty" if not elements else "null")
             continue
         contributed = True
+        literals = [element for element in live if element.kind is ElementKind.LITERAL]
         for element in live:
             if element.kind is ElementKind.REF:
                 _typed_reference(emitter, slot, name, element)
-            elif element.kind is ElementKind.LITERAL:
-                _typed_external(emitter, slot, name, element)
-            else:
+            elif element.kind is not ElementKind.LITERAL:
                 _typed_unresolved(emitter, slot, name, element)
+        _literal_edges(emitter, slot, name, live, literals)
     if not contributed:
         reason = "+".join(sorted(reasons))
         _typed_unset(emitter, slot, reason, f"{address}.{slot.label} is {reason}")

@@ -1,9 +1,15 @@
-"""The relationship slots of Doc 07 §16 as data (C-133 item 4).
+"""The relationship slots of Doc 07 §16, and the RDS placement slot of C-136, as data (C-133
+item 4).
 
 A slot says: the argument(s) ``arguments`` of a resource of ``source_type`` hold a reference to a
 resource of ``target_type``, and the relationship is ``relationship``. The engine reads this table;
 there are no per-type branches in code, so adding an argument later is a table change plus a
 register row (an argument name is a provider fact; the names are those of C-112).
+
+``status_floor`` is the best status an edge of the slot can have: KNOWN for the section 16
+rows (no floor), UNSUPPORTED for the RDS subnet placement of C-136, whose target type
+``aws_db_subnet_group`` is not a supported type (Doc 07 §23, the known RDS gap), so every edge
+of that slot is UNSUPPORTED whatever the value.
 
 A slot may name several arguments (the instance's two security-group arguments are alternatives).
 It is one slot: when none of its arguments yields an element the slot is **unset** (S4), once.
@@ -19,6 +25,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Final
 
+from core.domain.enums import DependencyStatus
 from core.domain.graph import Relationship
 
 
@@ -28,6 +35,7 @@ class Slot:
     arguments: tuple[str, ...]
     target_type: str
     relationship: Relationship
+    status_floor: DependencyStatus = DependencyStatus.KNOWN
 
     @property
     def label(self) -> str:
@@ -69,6 +77,14 @@ SLOTS: Final[tuple[Slot, ...]] = (
         ("security_group_id",),
         "aws_security_group",
         Relationship.RULE_BELONGS_TO_SECURITY_GROUP,
+    ),
+    # C-136: not a Doc 07 section 16 row; the placement of an RDS instance
+    Slot(
+        "aws_db_instance",
+        ("db_subnet_group_name",),
+        "aws_db_subnet_group",
+        Relationship.DB_SUBNET_PLACEMENT,
+        DependencyStatus.UNSUPPORTED,
     ),
 )
 
