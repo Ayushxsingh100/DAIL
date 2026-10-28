@@ -479,7 +479,9 @@ class _Model:
         if fact.state == UNKNOWN_STATE:
             run.unresolved.append(f"{owner}: vpc_security_group_ids {fact.reason}")
             return _Sides()
-        return run.groups_of(fact, f"{owner}.vpc_security_group_ids")
+        side = run.groups_of(fact, f"{owner}.vpc_security_group_ids")
+        run.unresolved.extend(side.unresolved)  # E3: every entry must be resolved (C-156)
+        return side
 
     def _subnet(self, inst: Any) -> None:
         run = self.run
@@ -679,7 +681,7 @@ class _Model:
         engine = db.engine
         if engine.state == UNKNOWN_STATE:
             run.unresolved.append(f"{db.address}: engine {engine.reason}")
-        elif engine.state == KNOWN and str(engine.value).lower() != "postgres":
+        elif engine.state == KNOWN and engine.value != "postgres":  # E2: the exact string
             raise run.stop(F, 3, R.PORT_MISMATCH, f"{db.address}.engine is {engine.value}")
 
     # --- rows 6 to 9 -----------------------------------------------------------------------------
