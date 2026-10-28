@@ -11,7 +11,7 @@ project decisions (see `docs/DECISIONS_REGISTER.md`).
 | [002](ADR-002-python-3.12-and-dependency-management.md) | Python 3.12 and dependency management | Accepted |
 | [003](ADR-003-controlled-terraform-parsing-and-normalization.md) | Terraform CLI plus controlled normalization layer (own stdlib parser inside the core; CLI only outside it) | Parsing half accepted (C-91 to C-94, 24 Oct 2026, P3a-1); normalization half added in P3a-2 |
 | [004](ADR-004-sqlite-through-persistence-abstraction.md) | SQLite through a persistence abstraction | Accepted (C-10) |
-| 005 | NetworkX for the dependency graph | Pending — written in P3c |
+| [005](ADR-005-dependency-graph-representation.md) | Dependency graph representation; NetworkX deferred (deviates from Doc 02 §26) | Proposed (C-131, P3c) |
 | 006 | Provider-agnostic LLM boundary | Pending — written in P7a |
 | 007 | Promotion Controller as sole trusted-state mutation authority | Pending — written in P6a |
 | [008](ADR-008-explicit-uncertainty-result-semantics.md) | Explicit uncertainty result semantics | Accepted (1 Oct 2026) |

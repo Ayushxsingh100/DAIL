@@ -14,8 +14,8 @@ R5  core.identity, core.dependency, core.impact and core.verification do not
 R6  core.terraform_model imports the standard library (except sqlite3) and
     core.domain.*; no other core.* package and no evidence (C-27, ADR-014).
 R7  core.* and evidence.* import no third-party package (sys.stdlib_module_names).
-    The per-package allowlist is empty; ADR-005 adds networkx for core.dependency
-    in P3c.
+    The per-package allowlist is empty: ADR-005 defers NetworkX, so core.dependency
+    is standard library only too (C-131).
 R8  promotion authority (SM-001, SM-002): the attribute ``promote`` on ``TrustedState`` and any
     reference to ``mark_promoted`` appear only in core.domain.state and core.promotion.*.
 R9  no lifecycle bypass through deserialization: ``from_dict`` on TrustedState, CandidateState,
@@ -34,6 +34,9 @@ R13 ``core.domain.codec`` (the route back from stored data into lifecycle object
 R14 core.identity imports only the standard library, core.domain.* and itself: not
     core.terraform_model, core.persistence, core.application, core.promotion or any other core.*
     package, and not evidence (C-121, ADR-015).
+R15 core.dependency imports only the standard library, core.domain.* and itself: not
+    core.terraform_model, core.identity, core.persistence, core.application, core.promotion or
+    any other core.* package, and not evidence (C-131, ADR-005).
 ORACLE  nothing in this repository imports the TerraPreserve oracle (ADR-010).
 
 A self-test feeds in-memory sources that break each rule, so a checker that
@@ -60,7 +63,8 @@ R11_ALLOWED_MODULES = ("core.persistence", "core.application.health")
 # R13: the only importers of core.domain.codec (C-48).
 R13_CODEC = "core.domain.codec"
 R13_ALLOWED_MODULES = ("core.persistence",)
-# R7 per-package third-party allowlist. Empty until P3c (ADR-005: networkx in core.dependency).
+# R7 per-package third-party allowlist. Empty: ADR-005 defers NetworkX (C-131), so no package of
+# core.* has a third-party import.
 THIRD_PARTY_ALLOWLIST: dict[str, frozenset[str]] = {}
 SKIP_DIRS = frozenset(
     {
@@ -176,6 +180,15 @@ def check_module(module: str, imports: set[str]) -> list[Violation]:
             or top in ("evidence", "sqlite3")
         ):
             violations.append(Violation("R14", module, name))
+        if _within(module, "core.dependency") and (
+            (
+                top == "core"
+                and not _within(name, "core.dependency")
+                and not _within(name, "core.domain")
+            )
+            or top in ("evidence", "sqlite3")
+        ):
+            violations.append(Violation("R15", module, name))
         if (in_core or in_evidence) and not is_stdlib and top not in ("core", "evidence"):
             package = ".".join(module.split(".")[:2])
             if top not in THIRD_PARTY_ALLOWLIST.get(package, frozenset()):
@@ -435,6 +448,53 @@ class TestCheckerSelfTest(unittest.TestCase):
         self.assertNotIn(
             "R14", self.rules_for("core.identityx.bad", "from core.persistence import sqlite\n")
         )
+
+    def test_r15_rejects_every_core_package_but_the_domain_in_the_dependency_engine(self) -> None:
+        # C-131 / ADR-005: core.dependency may import core.domain.* and the standard library only.
+        for module in ("core.dependency", "core.dependency.build", "core.dependency.slots"):
+            for source in (
+                "from core.terraform_model import normalization\n",
+                "import core.terraform_model.normalization\n",
+                "from core.identity import engine\n",
+                "from core.persistence import sqlite\n",
+                "from core.application import config\n",
+                "from core.promotion import controller\n",
+                "from core.impact import engine\n",
+                "import evidence.store\n",
+                "import sqlite3\n",
+                "from ..identity import engine\n",
+            ):
+                with self.subTest(module=module, source=source.strip()):
+                    is_package = module == "core.dependency"
+                    self.assertIn("R15", self.rules_for(module, source, is_package))
+
+    def test_r15_allows_core_domain_itself_and_the_standard_library(self) -> None:
+        for module in ("core.dependency.build", "core.dependency.slots", "core.dependency.paths"):
+            for source in (
+                "from core.domain.resource import Resource\n",
+                "from core.domain import hashing\n",
+                "import core.domain.graph\n",
+                "from core.dependency.slots import SLOTS\n",
+                "from .slots import SLOTS\n",
+                "import dataclasses\nimport re\nfrom collections.abc import Mapping\n",
+            ):
+                with self.subTest(module=module, source=source.splitlines()[0]):
+                    self.assertNotIn("R15", self.rules_for(module, source))
+
+    def test_r15_applies_only_to_the_dependency_engine(self) -> None:
+        for module in ("core.terraform_model.ok", "core.identity.ok", "core.impact.ok"):
+            self.assertNotIn("R15", self.rules_for(module, "from core.domain import hashing\n"))
+        self.assertNotIn(
+            "R15", self.rules_for("core.dependencyx.bad", "from core.persistence import sqlite\n")
+        )
+
+    def test_networkx_is_refused_in_the_dependency_engine(self) -> None:
+        # C-131: NetworkX is deferred, so the R7 allowlist stays empty and the import is refused.
+        self.assertEqual(THIRD_PARTY_ALLOWLIST, {})
+        for module in ("core.dependency", "core.dependency.build"):
+            with self.subTest(module=module):
+                found = self.rules_for(module, "import networkx\n", module == "core.dependency")
+                self.assertIn("R7", found)
 
     def test_r1_keeps_the_domain_from_importing_the_persistence_adapter(self) -> None:
         for source in (
