@@ -17,6 +17,11 @@ Impact (P4; Doc 08, C-138, C-139): ``impact`` holds ``ImpactReport``, ``Impacted
 ``carry_forward_ok``, the single query P6 needs; ``registry_v1`` builds the four registry-v1.0
 invariants, with the walk policy of INV-FUNC-001, as data.
 
+Verification (P5a; Doc 09, C-145): ``verification`` holds ``VerificationRequest``,
+``VerificationResultRecord`` and ``VerificationReport``, the closed vocabularies of classes and
+reasons, and the three pure functions P6 needs (``sufficient``, ``fresh``, ``aggregate``), which
+never count anything doubtful as proof.
+
 Lifecycles: explicit transition tables and functions (``lifecycle``, ``state``) that reject every
 transition the specification forbids, including SM-001 to SM-010. Lifecycle-bearing objects can
 be created only through those functions, so ``dataclasses.replace`` and direct constructor calls
