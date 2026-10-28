@@ -8,21 +8,23 @@ Not a test module.
 from __future__ import annotations
 
 import copy
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import replace
+from datetime import datetime, timedelta
 from typing import Any
 
 from core.dependency.build import build_graph
 from core.dependency.invariants import SemanticBinding
 from core.domain.graph import DependencyGraph
+from core.domain.impact import AFFECTED_CODES, VerificationWorkItem, WorkPriority, WorkTargetType
 from core.domain.resource import Resource
 from core.domain.state import resource_set_hash
-from core.domain.verification import ConstructionStatus
+from core.domain.verification import ConstructionStatus, RequiredTarget
 from core.identity.engine import compare
 from core.impact.engine import compute_impact
 from core.terraform_model.normalize import NORMALIZATION_VERSION
 from core.verification.inputs import VerificationInputs
-from tests.domain_builders import uid
+from tests.domain_builders import at, uid
 from tests.identity_builders import NOW, normalize
 from tests.impact_builders import DESTINATION, SOURCE, registry
 
@@ -132,3 +134,67 @@ def tampered_graph(graph: DependencyGraph, **fields: Any) -> DependencyGraph:
     for name, value in fields.items():
         object.__setattr__(clone, name, value)
     return clone
+
+
+# --- clock, ids, work items and requirements for the engine tests --------------------------------
+
+
+def fixed_clock(start_minutes: int = 0, step_seconds: int = 1) -> Callable[[], datetime]:
+    """A clock that returns ``at(start)`` and then moves on ``step_seconds`` per call."""
+    state = {"calls": 0}
+
+    def clock() -> datetime:
+        moment = at(start_minutes) + timedelta(seconds=state["calls"] * step_seconds)
+        state["calls"] += 1
+        return moment
+
+    return clock
+
+
+def counting_ids(start: int = 5000) -> Callable[[], str]:
+    """Deterministic UUIDs: ``uid(start)``, ``uid(start + 1)``, ..."""
+    state = {"next": start}
+
+    def ids() -> str:
+        value = state["next"]
+        state["next"] += 1
+        return uid(value)
+
+    return ids
+
+
+def invariant_item(invariant_id: str, version: int = 1) -> VerificationWorkItem:
+    """A P4-shaped work item for an invariant (the reason is any affected code)."""
+    return VerificationWorkItem(
+        target_id=f"INVARIANT:{invariant_id}:{version}",
+        target_type=WorkTargetType.INVARIANT,
+        reason=sorted(AFFECTED_CODES)[0],
+        scope=("aws_security_group.app",),
+        required_evidence="L1",
+        priority=WorkPriority.BLOCKING,
+    )
+
+
+def required_for(
+    inputs: VerificationInputs, items: Iterable[VerificationWorkItem]
+) -> list[RequiredTarget]:
+    """What the Promotion Controller would require for the invariant items: the definition's own
+    verifier, at the definition's versions."""
+    needs = []
+    for item in items:
+        if item.target_type is not WorkTargetType.INVARIANT:
+            continue
+        _, _, rest = item.target_id.partition(":")
+        invariant_id, _, version = rest.rpartition(":")
+        definition = inputs.invariant(invariant_id, int(version))
+        assert definition is not None
+        needs.append(
+            RequiredTarget(
+                item.target_id,
+                invariant_id,
+                int(version),
+                definition.verifier_id,
+                definition.verifier_version,
+            )
+        )
+    return needs

@@ -69,6 +69,16 @@ def _verifier(inputs: VerificationInputs, invariant_id: str) -> tuple[str, str] 
     return None if definition is None else (definition.verifier_id, definition.verifier_version)
 
 
+def baseline_verifier(inputs: VerificationInputs, kind: str) -> tuple[str, str] | None:
+    """The verifier a baseline item of this resource type is attributed to, or ``None`` when the
+    definitions do not have the invariant it belongs to."""
+    if kind in _SECURITY_TYPES:
+        return _verifier(inputs, "INV-SEC-001")
+    if kind == DB_INSTANCE_TYPE:
+        return _verifier(inputs, "INV-SEC-003")
+    return BASELINE_VERIFIER
+
+
 def _worst(values: list[VerificationResult]) -> VerificationResult:
     """FAIL if any value FAILs, otherwise the worst of UNSUPPORTED, UNKNOWN, PASS."""
     return combine({str(index): value for index, value in enumerate(values)}) if values else P
@@ -131,13 +141,7 @@ def verify_baseline(address: str, inputs: VerificationInputs) -> BaselineOutcome
             *BASELINE_VERIFIER,
         )
     kind = resource.resource_type
-    ids: tuple[str, str] | None
-    if kind in _SECURITY_TYPES:
-        ids = _verifier(inputs, "INV-SEC-001")
-    elif kind == DB_INSTANCE_TYPE:
-        ids = _verifier(inputs, "INV-SEC-003")
-    else:
-        ids = BASELINE_VERIFIER
+    ids = baseline_verifier(inputs, kind)
     if ids is None:
         return BaselineOutcome(
             S, R.INVARIANT_UNKNOWN, _base(resource), (), True, *BASELINE_VERIFIER
