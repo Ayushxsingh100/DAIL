@@ -341,6 +341,11 @@ resource "aws_db_instance" "database" {
 }
 """
 
+DB_BLOCK = (
+    'resource "aws_db_instance" "database" {\n  identifier = "d"\n'
+    "  vpc_security_group_ids = [aws_security_group.db.id]\n}\n"
+)
+
 PIPE_PARENT = uid(201)
 PIPE_CANDIDATE = uid(202)
 
