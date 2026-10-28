@@ -95,6 +95,18 @@ class TestDeterminism(unittest.TestCase):
                 now=NOW,
             )
             print(graph.graph_hash)
+
+        # two start nodes that both reach the vpc at the same depth: which edge first reached it
+        # must not depend on the order a set of start nodes happens to iterate in
+        from core.dependency.traversal import Direction, reachable
+
+        graph = build_graph(fixture_resources(folders[0]), [], state_id=STATE, now=NOW)
+        found = reachable(
+            graph,
+            {"RESOURCE:aws_instance.app", "RESOURCE:aws_db_instance.database"},
+            direction=Direction.FORWARD,
+        )
+        print(found.via["RESOURCE:aws_vpc.main"])
         """)
 
     def hashes_under(self, *flags: str, seed: str | None = None) -> list[str]:
@@ -118,8 +130,8 @@ class TestDeterminism(unittest.TestCase):
         """Four fixed PYTHONHASHSEED values, then two isolated runs (``-I`` ignores the variable
         and picks a random seed each time, so the fixed seeds run without it)."""
         reference = self.hashes_under(seed="0")
-        self.assertEqual(len(reference), 4)
-        self.assertEqual(len(set(reference)), 4)
+        self.assertEqual(len(reference), 5)  # four graph hashes and one traversal edge key
+        self.assertEqual(len(set(reference[:4])), 4)
         for seed in ("1", "4242", "99991"):
             with self.subTest(PYTHONHASHSEED=seed):
                 self.assertEqual(self.hashes_under(seed=seed), reference)

@@ -130,6 +130,30 @@ resource "aws_db_instance" "d" {
         _, edges = reference_edges_of(resources)
         self.assertIs(one(edges, "aws_db_instance.d", "aws_db_subnet_group.db").status, UN)
 
+    def test_the_target_status_counts_even_when_the_reference_says_supported(self) -> None:
+        # C-133 item 2 takes the worst of the reference, the source and the target in the state
+        resources = [
+            hand_resource("aws_db_subnet_group.db", support=ResourceSupport.UNSUPPORTED),
+            hand_resource(
+                "aws_db_instance.d",
+                references=[hand_ref("aws_db_instance.d", "aws_db_subnet_group.db", "x")],
+            ),
+        ]
+        _, edges = reference_edges_of(resources)
+        self.assertIs(one(edges, "aws_db_instance.d", "aws_db_subnet_group.db").status, UN)
+
+    def test_a_placeholder_target_status_counts_even_when_the_reference_says_supported(
+        self,
+    ) -> None:
+        resources = [
+            hand_resource("aws_vpc.main", support=ResourceSupport.UNKNOWN),
+            hand_resource(
+                "aws_subnet.s", references=[hand_ref("aws_subnet.s", "aws_vpc.main", "vpc_id")]
+            ),
+        ]
+        _, edges = reference_edges_of(resources)
+        self.assertIs(one(edges, "aws_subnet.s", "aws_vpc.main").status, UC)
+
     def test_a_supported_edge_between_supported_resources_is_known(self) -> None:
         resources = resources_of("""
 resource "aws_vpc" "main" { cidr_block = "10.0.0.0/16" }
