@@ -136,6 +136,64 @@ class TestCovers(unittest.TestCase):
         self.assertGreater(misses, 30)
 
 
+class TestCoverageOracle(unittest.TestCase):
+    """The work package's oracle: the address space is cut into 64 blocks (the /6 networks), a CIDR
+    of prefix length 1 to 6 is a run of consecutive blocks, and coverage is plain set containment of
+    block numbers. It shares no code with ``covers`` and does not use ``ipaddress`` to decide."""
+
+    BLOCKS = 64
+
+    @staticmethod
+    def text(version: int, prefix: int, index: int) -> str:
+        bits = 32 if version == 4 else 128
+        value = index << (bits - prefix)
+        if version == 4:
+            return (
+                f"{value >> 24}.{(value >> 16) & 255}.{(value >> 8) & 255}.{value & 255}/{prefix}"
+            )
+        groups = [f"{(value >> shift) & 0xFFFF:x}" for shift in range(112, -16, -16)]
+        return ":".join(groups) + f"/{prefix}"
+
+    def blocks(self, prefix: int, index: int) -> set[int]:
+        width = 2 ** (6 - prefix)
+        return set(range(index * width, (index + 1) * width))
+
+    def run_family(self, version: int, seed: int) -> None:
+        rng = random.Random(seed)
+        everything = set(range(self.BLOCKS))
+        covered = uncovered = 0
+        for _ in range(800):
+            members = []
+            union: set[int] = set()
+            for _ in range(rng.randint(0, 8)):
+                prefix = rng.randint(1, 6)
+                index = rng.randrange(2**prefix)
+                members.append(self.text(version, prefix, index))
+                union |= self.blocks(prefix, index)
+            whole = "0.0.0.0/0" if version == 4 else "::/0"
+            self.assertEqual(covers(members, whole), union == everything, members)
+            target_prefix = rng.randint(1, 6)
+            target_index = rng.randrange(2**target_prefix)
+            wanted = self.blocks(target_prefix, target_index)
+            got = covers(members, self.text(version, target_prefix, target_index))
+            self.assertEqual(got, wanted <= union, (members, target_prefix, target_index))
+            covered += wanted <= union
+            uncovered += not wanted <= union
+        self.assertGreater(covered, 40)
+        self.assertGreater(uncovered, 40)
+
+    def test_ipv4(self) -> None:
+        self.run_family(4, 20261028)
+
+    def test_ipv6(self) -> None:
+        self.run_family(6, 424242)
+
+    def test_the_oracle_renders_the_s4_split(self) -> None:
+        self.assertEqual(self.text(4, 1, 0), "0.0.0.0/1")
+        self.assertEqual(self.text(4, 1, 1), "128.0.0.0/1")
+        self.assertEqual(self.text(6, 1, 1), "8000:0:0:0:0:0:0:0/1")
+
+
 class TestPorts(unittest.TestCase):
     def test_permits_tcp_table(self) -> None:
         table = [

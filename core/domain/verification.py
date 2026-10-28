@@ -114,6 +114,7 @@ class VerificationReason(StrEnum):
     IDENTITY_MISSING = "identity.missing"
     CONSTRUCTION_INVALID = "construction.invalid"
     INVARIANT_UNKNOWN = "invariant.unknown"
+    RESOURCE_INDETERMINATE = "resource.indeterminate"
     STRUCTURAL_FINDING = "structural.finding"
     CONSISTENCY_FINDING = "consistency.finding"
     VERIFIER_NOT_AVAILABLE = "verifier.not_available"
