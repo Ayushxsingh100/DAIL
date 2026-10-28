@@ -78,6 +78,25 @@ Notes carried forward (none blocks):
 Terraform was not run in the reviewer's environment; C-99 stays a P7 gate item.
 ```
 
+## P3b — Identity engine
+
+```text
+P3b mini-gate: PASSED (external review, 28 Oct 2026, PR #17 at 1f23d4c, merged at bf4c8e5).
+Suite: 2395 tests on every one of the 9 commits (Python 3.12, 2163 up to 2395); final tree 2395 OK on
+Python 3.13 (1 skip by design). black, ruff, mypy clean. 55 adversarial probes passed. Mutation
+checks (6 rules broken in a scratch copy, all caught): RT-1 undecided case dropped (5 tests fail),
+REPLACED on one-side-known (2 fail, 8 errors), UNRESOLVED_CONTENT never attached (4 fail, 2 errors),
+symmetric AMB-1 removed (2 fail), REPLACED allowed for unsupported types (1 fail), partition check
+removed (1 fail, 1 error).
+Notes carried forward (none blocks):
+1. C-129: a move that only changes the instance key is MODIFIED (conservative; accepted).
+2. C-128 (key-less to keyed explicit move is UNSUPPORTED in the pipeline) stays Open; decide before D4.
+3. C-130 (one-field RT-1 list vs the provider's ForceNew arguments) stays Open; decide before D5.
+4. P4 must use the UNRESOLVED_CONTENT and UNSUPPORTED_TYPE evidence (C-117); restructuring
+   (inline rule vs separate rule resource) is decided from rule_index in P4/P5.
+Terraform was not run in the reviewer's environment; C-99 stays a P7 gate item.
+```
+
 ## P3–P10 — NOT STARTED
 
 ## Temporary exceptions

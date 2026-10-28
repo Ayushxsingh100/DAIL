@@ -8,6 +8,10 @@ Value objects and entities: ``Reference``, ``Provenance``, the normalized ``Reso
 Identity (P3b; Doc 07, C-122): ``identity`` holds ``IdentityEvidence``, ``IdentityMatch`` and
 ``IdentityReport``, the answer to "what changed between the trusted and the candidate state?".
 
+Dependency (P3c; Doc 07, C-132): ``graph`` holds ``GraphNode``, ``GraphEdge``,
+``DependencyEvidence`` and ``DependencyGraph``, the typed "what is connected to what" of one state,
+with UNCERTAIN and UNSUPPORTED edges as first-class values and a structural graph hash.
+
 Lifecycles: explicit transition tables and functions (``lifecycle``, ``state``) that reject every
 transition the specification forbids, including SM-001 to SM-010. Lifecycle-bearing objects can
 be created only through those functions, so ``dataclasses.replace`` and direct constructor calls

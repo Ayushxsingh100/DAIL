@@ -1,0 +1,381 @@
+"""Hand-built graph objects for the dependency tests (P3c). Not a test module.
+
+Everything is deterministic: ids come from ``tests.domain_builders.uid`` and timestamps from ``at``.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterable, Mapping
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+from core.dependency.edges import Parts, finalize
+from core.dependency.index import StateIndex
+from core.dependency.infrastructure import add_infrastructure_edges
+from core.dependency.invariants import SemanticBinding, add_invariant_edges, check_invariants
+from core.dependency.nodes import resource_node
+from core.dependency.references import add_reference_edges
+from core.domain.enums import (
+    DependencyStatus,
+    InvariantCategory,
+    ProvenanceSourceKind,
+    ReferenceResolution,
+    ResourceSupport,
+)
+from core.domain.graph import (
+    DependencyEvidence,
+    DependencyGraph,
+    DerivationRule,
+    EdgeType,
+    GraphEdge,
+    GraphNode,
+    NodeType,
+    Relationship,
+    invariant_node_id,
+    resource_node_id,
+    semantic_node_id,
+)
+from core.domain.invariant import Invariant, InvariantScope
+from core.domain.resource import Resource
+from core.domain.values import Provenance, Reference
+from core.terraform_model.normalization import normalize_directory
+from tests.domain_builders import at, provenance, uid
+from tests.identity_builders import normalize, resources_of
+
+__all__ = ["normalize", "resources_of"]
+
+NORMALIZATION = "dail-tf-norm-1"
+ALGORITHM = "dail-graph-1"
+NOW = at(0)
+STATE = uid(1)
+
+
+def rnode(address: str, **attributes: Any) -> GraphNode:
+    base = {
+        "kind": "resource",
+        "resource_type": address.split(".")[0],
+        "support_status": "SUPPORTED",
+    }
+    return GraphNode(
+        node_id=resource_node_id(address),
+        node_type=NodeType.RESOURCE,
+        ref_id=address,
+        attributes={**base, **attributes},
+    )
+
+
+def inode(invariant_id: str = "INV-SEC-001", version: int = 1) -> GraphNode:
+    return GraphNode(
+        node_id=invariant_node_id(invariant_id, version),
+        node_type=NodeType.INVARIANT,
+        ref_id=invariant_id,
+        attributes={"category": "SECURITY", "name": invariant_id},
+    )
+
+
+def snode(token: str, kind: str = "unresolved") -> GraphNode:
+    return GraphNode(
+        node_id=semantic_node_id(token),
+        node_type=NodeType.SEMANTIC,
+        ref_id=token,
+        attributes={"kind": kind},
+    )
+
+
+def edge(
+    source: str,
+    target: str,
+    *,
+    edge_type: EdgeType = EdgeType.TERRAFORM_REFERENCE,
+    relationship: Relationship = Relationship.REFERENCE,
+    status: DependencyStatus = DependencyStatus.KNOWN,
+    attributes: Mapping[str, Any] | None = None,
+    rule: DerivationRule = DerivationRule.REFERENCE,
+    source_fact: str = "a = b",
+    target_fact: str = "b is SUPPORTED",
+) -> GraphEdge:
+    """An edge between two node ids."""
+    return GraphEdge.create(
+        source_node_id=source,
+        target_node_id=target,
+        edge_type=edge_type,
+        relationship=relationship,
+        status=status,
+        attributes={"source_attribute": "x"} if attributes is None else attributes,
+        evidence=DependencyEvidence(
+            source=source,
+            target=target,
+            edge_type=edge_type,
+            relationship=relationship,
+            source_fact=source_fact,
+            target_fact=target_fact,
+            derivation_rule=rule,
+            status=status,
+        ),
+        provenance=(provenance(),),
+    )
+
+
+def ref_edge(source: str, target: str, **kwargs: Any) -> GraphEdge:
+    """A TERRAFORM_REFERENCE edge between two resource addresses."""
+    return edge(resource_node_id(source), resource_node_id(target), **kwargs)
+
+
+def graph(
+    nodes: Iterable[GraphNode],
+    edges: Iterable[GraphEdge],
+    *,
+    state_id: str = STATE,
+    normalization_version: str = NORMALIZATION,
+    algorithm_version: str = ALGORITHM,
+    now: datetime = NOW,
+    graph_id: str | None = None,
+) -> DependencyGraph:
+    return DependencyGraph.create(
+        state_id=state_id,
+        nodes=nodes,
+        edges=edges,
+        normalization_version=normalization_version,
+        algorithm_version=algorithm_version,
+        now=now,
+        graph_id=graph_id,
+    )
+
+
+def triangle() -> DependencyGraph:
+    """a -> b, b -> c, c -> a: a cycle, which the type allows."""
+    return graph(
+        [rnode("t.a"), rnode("t.b"), rnode("t.c")],
+        [ref_edge("t.a", "t.b"), ref_edge("t.b", "t.c"), ref_edge("t.c", "t.a")],
+    )
+
+
+def hand_provenance() -> Provenance:
+    """Provenance with the normalization version that ``build_graph`` requires."""
+    return Provenance(
+        source_kind=ProvenanceSourceKind.TERRAFORM_CONFIG,
+        source_component="fixture",
+        source_reference="main.tf",
+        observed_at=at(0),
+        normalization_version=NORMALIZATION,
+    )
+
+
+def hand_ref(
+    source: str,
+    target: str,
+    attribute: str = "x",
+    resolution: ReferenceResolution = ReferenceResolution.SUPPORTED,
+    reference_type: str = "ATTRIBUTE_REFERENCE",
+) -> Reference:
+    return Reference(
+        source_address=source,
+        source_attribute=attribute,
+        target_address=target,
+        reference_type=reference_type,
+        resolution_status=resolution,
+    )
+
+
+def hand_resource(
+    address: str,
+    resource_type: str | None = None,
+    *,
+    references: Iterable[Reference] = (),
+    support: ResourceSupport = ResourceSupport.SUPPORTED,
+    attributes: Mapping[str, Any] | None = None,
+    security_attributes: Mapping[str, Any] | None = None,
+) -> Resource:
+    """A resource built by hand, for cases the Terraform front end cannot produce."""
+    return Resource.create(
+        address=address,
+        resource_type=resource_type or address.split(".")[0],
+        logical_identity={},
+        attributes={} if attributes is None else attributes,
+        security_attributes={} if security_attributes is None else security_attributes,
+        semantic_attributes={},
+        references=references,
+        provenance=hand_provenance(),
+        support_status=support,
+    )
+
+
+def reference_edges_of(resources: Iterable[Resource]) -> tuple[Parts, tuple[GraphEdge, ...]]:
+    """Only the reference edges (step 3): the nodes and the finalized edges."""
+    index = StateIndex.of(resources)
+    parts = Parts()
+    for item in index.sorted_resources():
+        parts.add_node(resource_node(item))
+    for item in index.sorted_resources():
+        add_reference_edges(item, index, parts)
+    return parts, finalize(parts.drafts)
+
+
+FIXTURE_ROOT = Path(__file__).resolve().parents[1]
+BASELINE = "fixtures/canonical_regression/baseline"
+
+K, U = DependencyStatus.KNOWN, DependencyStatus.UNSUPPORTED
+
+# The reference edges of the canonical baseline, derived by hand from the .tf text (Doc 07 §15):
+# (source, target, status). The subnet group is an unsupported (tolerated) type, so the three
+# edges that touch it are UNSUPPORTED (C-133 item 2); the others are KNOWN.
+BASELINE_REFERENCE_EDGES: tuple[tuple[str, str, DependencyStatus], ...] = (
+    ("aws_subnet.app", "aws_vpc.main", K),
+    ("aws_subnet.db_a", "aws_vpc.main", K),
+    ("aws_subnet.db_b", "aws_vpc.main", K),
+    ("aws_internet_gateway.igw", "aws_vpc.main", K),
+    ("aws_route_table.public", "aws_vpc.main", K),
+    ("aws_route_table.public", "aws_internet_gateway.igw", K),
+    ("aws_route_table_association.app", "aws_subnet.app", K),
+    ("aws_route_table_association.app", "aws_route_table.public", K),
+    ("aws_security_group.app", "aws_vpc.main", K),
+    ("aws_security_group.db", "aws_vpc.main", K),
+    ("aws_security_group_rule.app_ssh_public", "aws_security_group.app", K),
+    ("aws_security_group_rule.app_egress_all", "aws_security_group.app", K),
+    ("aws_security_group_rule.app_to_db_5432", "aws_security_group.db", K),
+    ("aws_security_group_rule.app_to_db_5432", "aws_security_group.app", K),
+    ("aws_instance.app", "aws_subnet.app", K),
+    ("aws_instance.app", "aws_security_group.app", K),
+    ("aws_db_subnet_group.db", "aws_subnet.db_a", U),
+    ("aws_db_subnet_group.db", "aws_subnet.db_b", U),
+    ("aws_db_instance.database", "aws_db_subnet_group.db", U),
+    ("aws_db_instance.database", "aws_security_group.db", K),
+)
+
+_FIXTURE_CACHE: dict[str, tuple[Resource, ...]] = {}
+
+
+def fixture_resources(folder: str) -> tuple[Resource, ...]:
+    """The normalized resources of a fixture folder (cached; tests only)."""
+    if folder not in _FIXTURE_CACHE:
+        outcome = normalize_directory(FIXTURE_ROOT / folder, None, now=NOW)
+        _FIXTURE_CACHE[folder] = outcome.resources
+    return _FIXTURE_CACHE[folder]
+
+
+def edges_of(resources: Iterable[Resource]) -> tuple[Parts, tuple[GraphEdge, ...]]:
+    """Reference and infrastructure edges (steps 3 and 4): the nodes and the finalized edges."""
+    index = StateIndex.of(resources)
+    parts = Parts()
+    for item in index.sorted_resources():
+        parts.add_node(resource_node(item))
+    for item in index.sorted_resources():
+        add_reference_edges(item, index, parts)
+        add_infrastructure_edges(item, index, parts)
+    return parts, finalize(parts.drafts)
+
+
+R = Relationship
+
+# The 13 typed infrastructure edges of the canonical baseline, derived by hand from the .tf text and
+# the Doc 07 §16 table: (source, target, relationship). All KNOWN.
+BASELINE_INFRASTRUCTURE_EDGES: tuple[tuple[str, str, Relationship], ...] = (
+    ("aws_subnet.app", "aws_vpc.main", R.SUBNET_BELONGS_TO_VPC),
+    ("aws_subnet.db_a", "aws_vpc.main", R.SUBNET_BELONGS_TO_VPC),
+    ("aws_subnet.db_b", "aws_vpc.main", R.SUBNET_BELONGS_TO_VPC),
+    ("aws_route_table.public", "aws_vpc.main", R.ROUTE_TABLE_BELONGS_TO_VPC),
+    ("aws_route_table_association.app", "aws_subnet.app", R.ASSOCIATES_SUBNET),
+    ("aws_route_table_association.app", "aws_route_table.public", R.ASSOCIATES_ROUTE_TABLE),
+    ("aws_internet_gateway.igw", "aws_vpc.main", R.IGW_ATTACHED_TO_VPC),
+    ("aws_instance.app", "aws_subnet.app", R.INSTANCE_IN_SUBNET),
+    ("aws_instance.app", "aws_security_group.app", R.INSTANCE_USES_SECURITY_GROUP),
+    ("aws_db_instance.database", "aws_security_group.db", R.DB_USES_SECURITY_GROUP),
+    (
+        "aws_security_group_rule.app_ssh_public",
+        "aws_security_group.app",
+        R.RULE_BELONGS_TO_SECURITY_GROUP,
+    ),
+    (
+        "aws_security_group_rule.app_egress_all",
+        "aws_security_group.app",
+        R.RULE_BELONGS_TO_SECURITY_GROUP,
+    ),
+    (
+        "aws_security_group_rule.app_to_db_5432",
+        "aws_security_group.db",
+        R.RULE_BELONGS_TO_SECURITY_GROUP,
+    ),
+)
+
+
+def make_invariant(
+    invariant_id: str,
+    *,
+    version: int = 1,
+    category: InvariantCategory = InvariantCategory.SECURITY,
+    resources: Iterable[str] = (),
+    resource_types: Iterable[str] = (),
+) -> Invariant:
+    return Invariant(
+        invariant_id=invariant_id,
+        version=version,
+        name=f"{invariant_id} name",
+        category=category,
+        description=f"{invariant_id} description",
+        predicate={"op": "fixture"},
+        scope=InvariantScope(
+            resources=tuple(resources),
+            resource_types=tuple(resource_types),
+            relationships=(),
+            properties=(),
+            dependency_depth=1,
+        ),
+        verifier_id="fixture-verifier",
+        verifier_version="1",
+        created_at=at(0),
+    )
+
+
+# The four registry invariants as the tests declare them (R4 of the P3c prompt: nothing in the code
+# defines them yet). Scopes follow registry-v1.0 §3.5 (every security group and rule, plus the
+# relevant-unsupported types of §2.7), §5.4 and §6.6 (the endpoints S and D).
+SEC_RELEVANT_UNSUPPORTED = (
+    "aws_default_security_group",
+    "aws_vpc_security_group_ingress_rule",
+    "aws_vpc_security_group_rules_exclusive",
+)
+SEC_TYPES = ("aws_security_group", "aws_security_group_rule", *SEC_RELEVANT_UNSUPPORTED)
+
+
+def sec_001(version: int = 1) -> Invariant:
+    return make_invariant("INV-SEC-001", version=version, resource_types=SEC_TYPES)
+
+
+def sec_002(version: int = 1) -> Invariant:
+    return make_invariant("INV-SEC-002", version=version, resource_types=SEC_TYPES)
+
+
+def sec_003(version: int = 1) -> Invariant:
+    return make_invariant("INV-SEC-003", version=version, resource_types=("aws_db_instance",))
+
+
+def func_001(version: int = 1) -> Invariant:
+    return make_invariant(
+        "INV-FUNC-001",
+        version=version,
+        category=InvariantCategory.FUNCTIONAL,
+        resources=("aws_instance.app", "aws_db_instance.database"),
+    )
+
+
+def func_binding() -> SemanticBinding:
+    """S and D of the fixtures' expected.json: EC2 to RDS on TCP/5432."""
+    return SemanticBinding(
+        "INV-FUNC-001", "aws_instance.app", "aws_db_instance.database", "TCP", 5432
+    )
+
+
+def invariant_edges_of(
+    resources: Iterable[Resource],
+    invariants: Iterable[Invariant],
+    bindings: Iterable[SemanticBinding] = (),
+) -> tuple[Parts, tuple[GraphEdge, ...]]:
+    """Only the invariant nodes and edges (step 5), next to the resource nodes."""
+    index = StateIndex.of(resources)
+    ordered, bound = check_invariants(invariants, bindings)
+    parts = Parts()
+    for item in index.sorted_resources():
+        parts.add_node(resource_node(item))
+    add_invariant_edges(ordered, bound, index, parts, now=NOW)
+    return parts, finalize(parts.drafts)
