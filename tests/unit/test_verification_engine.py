@@ -2,8 +2,10 @@
 
 Doc 09 §3-§18, §30, §37, §41; registry §2.4, §2.8, §2.10; C-144 to C-148. Expected values are
 derived by hand: a clean group passes the three security invariants, a public SSH group fails
-INV-SEC-001 only, INV-FUNC-001 is UNSUPPORTED ``verifier.not_available`` until P5b, and the two
-gate items run on every candidate.
+INV-SEC-001 only, INV-FUNC-001 is answered by its own verifier (a configuration without the two
+endpoints fails it at row 1; the canonical topology passes it at row 6), a verifier pair the table
+does not have is UNSUPPORTED ``verifier.not_available``, and the two gate items run on every
+candidate.
 """
 
 from __future__ import annotations
@@ -51,6 +53,7 @@ from core.verification.inputs import VerificationInputs
 from core.verification.outcome import PredicateOutcome
 from core.verification.views import ViewError
 from tests.domain_builders import uid
+from tests.func_builders import canonical
 from tests.impact_builders import baseline_work
 from tests.pipeline_builders import (
     CANDIDATE_STATE,
@@ -77,6 +80,8 @@ FOUR = (SEC1, SEC2, SEC3, FUNC)
 CLEAN = sg(body=inline("ingress", "tcp", 443, 443, ["10.0.0.0/8"]))
 OPEN = sg(body=inline("ingress", "tcp", 22, 22, ["0.0.0.0/0"]))
 KEY_PUBLIC_INGRESS = ("dail.verify.public_ingress", "1")
+KEY_RDS_PUBLIC_FLAG = ("dail.verify.rds_public_flag", "1")
+KEY_REACHABILITY = ("dail.verify.reachability_cfg", "1")
 
 
 def items(*invariants: str) -> list[VerificationWorkItem]:
@@ -162,12 +167,43 @@ class TestReport(unittest.TestCase):
         self.assertIs(found["INVARIANT:INV-SEC-002:1"].result, P)
         self.assertIs(found["INVARIANT:INV-SEC-003:1"].result, P)
 
-    def test_the_functional_invariant_is_unsupported_never_pass_until_p5b(self) -> None:
+    def test_the_functional_invariant_is_answered_by_its_own_verifier(self) -> None:
+        # P5b: a configuration without the two endpoints fails at row 1 (the protected endpoint is
+        # gone), whatever its security groups say
         for text in (CLEAN, OPEN):
             func = by_target(run(text))["INVARIANT:INV-FUNC-001:1"]
-            self.assertEqual((func.result, func.reason), (S, R.VERIFIER_NOT_AVAILABLE))
+            self.assertEqual((func.result, func.reason), (F, R.ENDPOINT_ABSENT))
+            self.assertEqual(func.observations["row"], 1)
+            self.assertEqual((func.verifier_id, func.verifier_version), KEY_REACHABILITY)
+            self.assertEqual(
+                (func.evidence_level, func.verification_class.value), ("L1", "FUNCTIONAL")
+            )
             self.assertIsNone(func.clauses)
             self.assertIsNone(func.error)
+
+    def test_on_the_canonical_topology_the_functional_invariant_passes(self) -> None:
+        report = run(canonical(), inputs=inputs_for(canonical()))
+        func = by_target(report)["INVARIANT:INV-FUNC-001:1"]
+        self.assertEqual((func.result, func.reason, func.observations["row"]), (P, None, 6))
+        self.assertIn("M4: default network ACL assumed (no NACL type present)", func.assumptions)
+        self.assertEqual(func.evidence["result"], "PASS")
+        self.assertIn("§6", func.evidence["predicate"])
+        for name in (SEC1, SEC2, SEC3):
+            self.assertIs(by_target(report)[f"INVARIANT:{name}:1"].result, P, name)
+
+    def test_a_verifier_pair_the_table_does_not_have_is_still_not_available(self) -> None:
+        table = {k: v for k, v in DEFAULT_VERIFIERS.items() if k != KEY_REACHABILITY}
+        report = run(canonical(), inputs=inputs_for(canonical()), verifiers=table)
+        func = by_target(report)["INVARIANT:INV-FUNC-001:1"]
+        self.assertEqual((func.result, func.reason), (S, R.VERIFIER_NOT_AVAILABLE))
+        self.assertIsNone(func.error)
+        # three security verifiers and the two gates ran; the functional item did not run one
+        self.assertEqual(report.verifier_invocations, 5)
+
+    def test_the_default_table_has_the_three_registry_verifiers(self) -> None:
+        self.assertEqual(
+            set(DEFAULT_VERIFIERS), {KEY_PUBLIC_INGRESS, KEY_RDS_PUBLIC_FLAG, KEY_REACHABILITY}
+        )
 
     def test_every_result_carries_its_metadata(self) -> None:
         report = run(CLEAN)
@@ -196,14 +232,13 @@ class TestReport(unittest.TestCase):
             thaw_json(report.summary["by_class"]),
             {
                 "CONSISTENCY": {"PASS": 1},
-                "FUNCTIONAL": {"UNSUPPORTED": 1},
+                "FUNCTIONAL": {"FAIL": 1},
                 "SECURITY": {"PASS": 3},
                 "STRUCTURAL": {"PASS": 1},
             },
         )
-        # three security verifiers and the two gates ran; the functional item was answered
-        # without running a verifier
-        self.assertEqual(report.verifier_invocations, 5)
+        # the three security verifiers, the functional verifier and the two gates ran
+        self.assertEqual(report.verifier_invocations, 6)
 
     def test_the_mandatory_gate_runs_even_when_the_impact_report_is_empty(self) -> None:
         report = run(CLEAN, work=[])
@@ -295,7 +330,7 @@ class TestErrors(unittest.TestCase):
             self.assertIsNone(item.clauses)
         # the other verifiers are not affected, and the failed runs are still invocations
         self.assertIs(found["INVARIANT:INV-SEC-003:1"].result, P)
-        self.assertEqual(report.verifier_invocations, 5)
+        self.assertEqual(report.verifier_invocations, 6)
 
     def test_a_verifier_error_is_never_a_fail_or_a_pass(self) -> None:
         def boom(_definition: Invariant, _inputs: VerificationInputs) -> PredicateOutcome:
@@ -425,9 +460,17 @@ class TestAggregationOfReports(unittest.TestCase):
         )
         self.assertIs(self.verdict(text), AggregateResult.INSUFFICIENT_PROOF)
 
-    def test_unsupported_verifier_with_the_functional_invariant_is_never_a_pass(self) -> None:
-        # the interim: with INV-FUNC-001 required, a clean candidate is INSUFFICIENT_PROOF
-        self.assertIs(self.verdict(CLEAN, FOUR), AggregateResult.INSUFFICIENT_PROOF)
+    def test_a_missing_functional_verifier_is_never_a_pass(self) -> None:
+        # with INV-FUNC-001 required and no verifier for it, even a sound candidate is
+        # INSUFFICIENT_PROOF
+        table = {k: v for k, v in DEFAULT_VERIFIERS.items() if k != KEY_REACHABILITY}
+        verdict = self.verdict(canonical(), FOUR, verifiers=table)
+        self.assertIs(verdict, AggregateResult.INSUFFICIENT_PROOF)
+
+    def test_the_functional_result_counts_in_the_aggregate(self) -> None:
+        self.assertIs(self.verdict(canonical(), FOUR), AggregateResult.PASS)
+        # no endpoints: INV-FUNC-001 fails at row 1, so the aggregate fails
+        self.assertIs(self.verdict(CLEAN, FOUR), AggregateResult.FAIL)
 
     def test_a_verifier_exception_is_insufficient_proof(self) -> None:
         def boom(_definition: Invariant, _inputs: VerificationInputs) -> PredicateOutcome:

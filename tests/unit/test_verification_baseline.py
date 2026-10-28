@@ -13,6 +13,7 @@ import dataclasses
 import unittest
 
 from core.domain.enums import ResourceSupport, VerificationResult
+from core.domain.registry_v1 import FUNC_RELEVANT_UNSUPPORTED
 from core.domain.resource import Resource
 from core.domain.verification import VerificationReason
 from core.verification.baseline import verify_baseline
@@ -145,6 +146,18 @@ class TestOtherTypes(unittest.TestCase):
         self.assertEqual(
             (item.result, item.reason, item.applicable), (S, R.TYPE_RELEVANT_UNSUPPORTED, True)
         )
+
+    def test_every_functional_relevant_unsupported_type_is_unsupported_when_created(self) -> None:
+        # C-154: the 26 types of registry §2.7 for INV-FUNC-001, not only the security list's three
+        self.assertEqual(len(FUNC_RELEVANT_UNSUPPORTED), 26)
+        for kind in sorted(FUNC_RELEVANT_UNSUPPORTED):
+            text = OLD + f'resource "{kind}" "x" {{\n}}\n'
+            with self.subTest(type=kind):
+                item = baseline(f"{kind}.x", text)
+                self.assertEqual(
+                    (item.result, item.reason, item.applicable),
+                    (S, R.TYPE_RELEVANT_UNSUPPORTED, True),
+                )
 
     def test_an_unrelated_type_passes_but_says_it_is_not_applicable(self) -> None:
         text = OLD + 'resource "aws_vpc" "v" {\n  cidr_block = "10.0.0.0/16"\n}\n'
