@@ -119,6 +119,17 @@ class VerificationReason(StrEnum):
     CONSISTENCY_FINDING = "consistency.finding"
     VERIFIER_NOT_AVAILABLE = "verifier.not_available"
     VERIFIER_ERROR = "verifier.error"
+    # INV-FUNC-001 (C-151, C-153)
+    PARAMETERS_INVALID = "parameters.invalid"
+    ENDPOINT_ABSENT = "endpoint.absent"
+    PORT_MISMATCH = "port.mismatch"
+    VPC_MISMATCH = "vpc.mismatch"
+    PATH_MISSING = "path.missing"
+    COVERAGE_PARTIAL = "coverage.partial"
+    ROUTE_UNSUPPORTED = "route.unsupported"
+    INTERFACE_UNSUPPORTED = "interface.unsupported"
+    VALUE_UNSUPPORTED = "value.unsupported"
+    MODEL_UNSUPPORTED = "model.unsupported"
 
 
 # --- helpers --------------------------------------------------------------------------------------

@@ -72,6 +72,22 @@ class TestVocabularies(unittest.TestCase):
     def test_the_construction_statuses(self) -> None:
         self.assertEqual({c.value for c in ConstructionStatus}, {"OK", "INVALID", "UNSUPPORTED"})
 
+    def test_the_functional_predicate_reason_codes_of_c_151(self) -> None:
+        # C-151: the closed codes the reachability verifier reports, besides the P5a ones
+        wanted = {
+            "parameters.invalid",
+            "endpoint.absent",
+            "port.mismatch",
+            "vpc.mismatch",
+            "path.missing",
+            "coverage.partial",
+            "route.unsupported",
+            "interface.unsupported",
+            "value.unsupported",
+            "model.unsupported",
+        }
+        self.assertTrue(wanted <= {c.value for c in VerificationReason})
+
     def test_reason_codes_are_dotted_lower_case_text(self) -> None:
         for code in VerificationReason:
             self.assertRegex(code.value, r"^[a-z_]+(\.[a-z_]+)+$")
