@@ -32,7 +32,11 @@ from core.domain.impact import (
 from core.domain.invariant import Invariant
 from core.domain.registry_v1 import registry_v1_invariants
 from core.domain.resource import Resource
+from core.identity.engine import compare
+from core.impact.engine import compute_impact
+from core.impact.inputs import PriorProof
 from tests.domain_builders import at, uid
+from tests.identity_builders import normalize
 
 NOW = at(0)
 PARENT = uid(101)
@@ -261,3 +265,155 @@ def graph_of(
     )
     bindings = [SemanticBinding("INV-FUNC-001", source, destination, "TCP", 5432)] if bound else []
     return build_graph(resources, chosen, bindings, state_id=STATE, now=NOW)
+
+
+# --- a small network in Terraform text, and the whole pipeline from text to an ImpactReport -----
+
+NET = """
+variable "unset" {}
+resource "aws_vpc" "main" { cidr_block = "10.0.0.0/16" }
+resource "aws_vpc" "elsewhere" { cidr_block = "10.9.0.0/16" }
+resource "aws_subnet" "app" {
+  vpc_id = aws_vpc.main.id
+  cidr_block = "10.0.1.0/24"
+}
+resource "aws_subnet" "other" {
+  vpc_id = aws_vpc.main.id
+  cidr_block = "10.0.9.0/24"
+}
+resource "aws_internet_gateway" "igw" { vpc_id = aws_vpc.main.id }
+resource "aws_route_table" "public" { vpc_id = aws_vpc.main.id }
+resource "aws_route_table" "elsewhere" { vpc_id = aws_vpc.elsewhere.id }
+resource "aws_route_table_association" "app" {
+  subnet_id = aws_subnet.app.id
+  route_table_id = aws_route_table.public.id
+}
+resource "aws_security_group" "app" {
+  name = "app"
+  description = "d"
+  vpc_id = aws_vpc.main.id
+}
+resource "aws_security_group" "db" {
+  name = "db"
+  vpc_id = aws_vpc.main.id
+}
+resource "aws_security_group" "stray" {
+  name = "stray"
+  vpc_id = aws_vpc.main.id
+}
+resource "aws_security_group_rule" "to_app" {
+  type = "egress"
+  protocol = "-1"
+  from_port = 0
+  to_port = 0
+  cidr_blocks = ["0.0.0.0/0"]
+  security_group_id = aws_security_group.app.id
+}
+resource "aws_security_group_rule" "to_db" {
+  type = "ingress"
+  protocol = "tcp"
+  from_port = 5432
+  to_port = 5432
+  source_security_group_id = aws_security_group.app.id
+  security_group_id = aws_security_group.db.id
+}
+resource "aws_security_group_rule" "to_stray" {
+  type = "ingress"
+  protocol = "tcp"
+  from_port = 80
+  to_port = 80
+  cidr_blocks = ["10.0.0.0/8"]
+  security_group_id = aws_security_group.stray.id
+}
+resource "aws_instance" "app" {
+  ami = "a"
+  subnet_id = aws_subnet.app.id
+  vpc_security_group_ids = [aws_security_group.app.id]
+}
+resource "aws_instance" "unrelated" {
+  ami = "a"
+  subnet_id = aws_subnet.other.id
+  vpc_security_group_ids = [aws_security_group.stray.id]
+}
+resource "aws_db_instance" "database" {
+  identifier = "d"
+  vpc_security_group_ids = [aws_security_group.db.id]
+}
+"""
+
+PIPE_PARENT = uid(201)
+PIPE_CANDIDATE = uid(202)
+
+
+def impact_between(
+    trusted_text: str,
+    candidate_text: str,
+    *,
+    prior: Iterable[PriorProof] = (),
+    invariants: Iterable[Invariant] | None = None,
+    bound: bool = True,
+    moves: list[tuple[str, str]] | None = None,
+) -> ImpactReport:
+    """The whole pipeline for two texts: normalize, identity, graphs, impact."""
+    before, after = normalize(trusted_text), normalize(candidate_text)
+    return impact_of_outcomes(
+        before.resources,
+        after.resources,
+        list(after.moves) if moves is None else moves,
+        prior=prior,
+        invariants=invariants,
+        bound=bound,
+    )
+
+
+def impact_of_outcomes(
+    trusted: tuple[Resource, ...],
+    candidate: tuple[Resource, ...],
+    moves: list[tuple[str, str]],
+    *,
+    prior: Iterable[PriorProof] = (),
+    invariants: Iterable[Invariant] | None = None,
+    bound: bool = True,
+    source: str = SOURCE,
+    destination: str = DESTINATION,
+) -> ImpactReport:
+    definitions = (
+        list(invariants) if invariants is not None else list(registry(source, destination).values())
+    )
+    identity = compare(
+        trusted,
+        candidate,
+        moves,
+        parent_state_id=PIPE_PARENT,
+        candidate_id=PIPE_CANDIDATE,
+        now=NOW,
+    )
+    return compute_impact(
+        trusted,
+        candidate,
+        identity,
+        graph_of(
+            trusted, invariants=definitions, bound=bound, source=source, destination=destination
+        ),
+        graph_of(
+            candidate, invariants=definitions, bound=bound, source=source, destination=destination
+        ),
+        definitions,
+        tuple(prior),
+        parent_state_id=PIPE_PARENT,
+        candidate_id=PIPE_CANDIDATE,
+        now=NOW,
+    )
+
+
+def impacted(report: ImpactReport) -> dict[str, ImpactedInvariant]:
+    """The impacted invariants of a report by id (version 1)."""
+    return {item.invariant_id: item for item in report.affected_invariants}
+
+
+def impacted_ids(report: ImpactReport) -> set[str]:
+    return {item.invariant_id for item in report.affected_invariants}
+
+
+def codes_of(item: ImpactedInvariant) -> set[ReasonCode]:
+    return {reason.code for reason in item.reasons}

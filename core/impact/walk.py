@@ -175,9 +175,10 @@ class Member:
 class Incompleteness:
     code: IncompleteCode
     detail: str
+    subject: str = ""
 
-    def sort_key(self) -> tuple[str, str]:
-        return (self.code.value, self.detail)
+    def sort_key(self) -> tuple[str, str, str]:
+        return (self.code.value, self.detail, self.subject)
 
 
 @dataclass(frozen=True)
@@ -303,6 +304,7 @@ def _seeds(index: _Index, invariant_node: str) -> _Seeds:
                     Incompleteness(
                         IncompleteCode.ABSENT_SEED,
                         f"{target.ref_id} is named by the invariant and is absent from the state",
+                        target.ref_id,
                     )
                 )
         elif edge.relationship is Relationship.BINDING:
@@ -310,6 +312,7 @@ def _seeds(index: _Index, invariant_node: str) -> _Seeds:
                 Incompleteness(
                     IncompleteCode.MISSING_BINDING,
                     f"{invariant_node} has no semantic binding, so its endpoints are unknown",
+                    invariant_node,
                 )
             )
     return found
@@ -444,7 +447,7 @@ def footprint(graph: DependencyGraph, invariant: Invariant) -> Footprint:
                 )
             )
 
-    unique = {(item.code, item.detail): item for item in incomplete}
+    unique = {(item.code, item.detail, item.subject): item for item in incomplete}
     return Footprint(
         invariant_id=invariant.invariant_id,
         invariant_version=invariant.version,
