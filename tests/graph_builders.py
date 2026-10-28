@@ -308,6 +308,7 @@ def make_invariant(
     category: InvariantCategory = InvariantCategory.SECURITY,
     resources: Iterable[str] = (),
     resource_types: Iterable[str] = (),
+    relationships: Iterable[str] = (),
 ) -> Invariant:
     return Invariant(
         invariant_id=invariant_id,
@@ -319,7 +320,7 @@ def make_invariant(
         scope=InvariantScope(
             resources=tuple(resources),
             resource_types=tuple(resource_types),
-            relationships=(),
+            relationships=tuple(relationships),
             properties=(),
             dependency_depth=1,
         ),

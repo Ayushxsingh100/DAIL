@@ -37,6 +37,9 @@ R14 core.identity imports only the standard library, core.domain.* and itself: n
 R15 core.dependency imports only the standard library, core.domain.* and itself: not
     core.terraform_model, core.identity, core.persistence, core.application, core.promotion or
     any other core.* package, and not evidence (C-131, ADR-005).
+R16 core.impact imports only the standard library, core.domain.* and itself: not
+    core.dependency, core.identity, core.terraform_model, core.persistence, core.application,
+    core.promotion or any other core.* package, and not evidence (C-137).
 ORACLE  nothing in this repository imports the TerraPreserve oracle (ADR-010).
 
 A self-test feeds in-memory sources that break each rule, so a checker that
@@ -189,6 +192,15 @@ def check_module(module: str, imports: set[str]) -> list[Violation]:
             or top in ("evidence", "sqlite3")
         ):
             violations.append(Violation("R15", module, name))
+        if _within(module, "core.impact") and (
+            (
+                top == "core"
+                and not _within(name, "core.impact")
+                and not _within(name, "core.domain")
+            )
+            or top in ("evidence", "sqlite3")
+        ):
+            violations.append(Violation("R16", module, name))
         if (in_core or in_evidence) and not is_stdlib and top not in ("core", "evidence"):
             package = ".".join(module.split(".")[:2])
             if top not in THIRD_PARTY_ALLOWLIST.get(package, frozenset()):
@@ -486,6 +498,55 @@ class TestCheckerSelfTest(unittest.TestCase):
             self.assertNotIn("R15", self.rules_for(module, "from core.domain import hashing\n"))
         self.assertNotIn(
             "R15", self.rules_for("core.dependencyx.bad", "from core.persistence import sqlite\n")
+        )
+
+    def test_r16_rejects_every_core_package_but_the_domain_in_the_impact_engine(self) -> None:
+        # C-137: core.impact may import core.domain.* and the standard library only.
+        for module in ("core.impact", "core.impact.engine", "core.impact.walk"):
+            for source in (
+                "from core.dependency import build\n",
+                "import core.dependency.traversal\n",
+                "from core.identity import engine\n",
+                "from core.terraform_model import normalization\n",
+                "from core.persistence import sqlite\n",
+                "from core.application import config\n",
+                "from core.promotion import controller\n",
+                "import evidence.store\n",
+                "import sqlite3\n",
+                "from ..dependency import build\n",
+            ):
+                with self.subTest(module=module, source=source.strip()):
+                    is_package = module == "core.impact"
+                    self.assertIn("R16", self.rules_for(module, source, is_package))
+
+    def test_r16_allows_core_domain_itself_and_the_standard_library(self) -> None:
+        for module in ("core.impact.engine", "core.impact.walk", "core.impact.changes"):
+            for source in (
+                "from core.domain.impact import ImpactReport\n",
+                "from core.domain import hashing\n",
+                "import core.domain.graph\n",
+                "from core.impact.walk import footprint\n",
+                "from .walk import footprint\n",
+                "import dataclasses\nimport re\nfrom collections.abc import Mapping\n",
+            ):
+                with self.subTest(module=module, source=source.splitlines()[0]):
+                    self.assertNotIn("R16", self.rules_for(module, source))
+
+    def test_r16_applies_only_to_the_impact_engine(self) -> None:
+        for module in ("core.dependency.ok", "core.identity.ok", "core.application.ok"):
+            self.assertNotIn("R16", self.rules_for(module, "from core.domain import hashing\n"))
+        self.assertNotIn(
+            "R16", self.rules_for("core.impactx.bad", "from core.persistence import sqlite\n")
+        )
+
+    def test_the_impact_engine_cannot_import_the_application_layer(self) -> None:
+        # the policy interface lives in core.application (C-142); the dependency points one way
+        self.assertIn(
+            "R2", self.rules_for("core.impact.engine", "from core.application import x\n")
+        )
+        self.assertIn(
+            "R1",
+            self.rules_for("core.domain.impact", "from core.application import scope_policy\n"),
         )
 
     def test_networkx_is_refused_in_the_dependency_engine(self) -> None:
