@@ -69,8 +69,7 @@ prompt and this file conflict, stop and ask.
 ## Architecture rules (enforced by `tests/contract/`)
 
 - **Standard library only in `core/` and `evidence/`** (Python 3.12, ADR-002, ADR-004).
-  - Any third-party import needs its own ADR first.
-  - The one known future exception is `networkx` in `core/dependency` (ADR-005, P3c).
+  - Any third-party import needs its own ADR first. There is no standing exception: NetworkX is deferred (ADR-005).
 - **Import boundaries R1–R7** are in `tests/contract/test_architecture_boundaries.py`. Never loosen that test or its allowlist unless the prompt names the ADR that allows it.
 - **No Pydantic or SQLAlchemy in the core.** Pydantic is allowed only in `llm/`, from P7.
 - **Configuration.**
