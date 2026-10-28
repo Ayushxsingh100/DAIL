@@ -12,6 +12,7 @@ from typing import Any
 
 from core.dependency.edges import Parts, finalize
 from core.dependency.index import StateIndex
+from core.dependency.infrastructure import add_infrastructure_edges
 from core.dependency.nodes import resource_node
 from core.dependency.references import add_reference_edges
 from core.domain.enums import (
@@ -248,3 +249,48 @@ def fixture_resources(folder: str) -> tuple[Resource, ...]:
         outcome = normalize_directory(FIXTURE_ROOT / folder, None, now=NOW)
         _FIXTURE_CACHE[folder] = outcome.resources
     return _FIXTURE_CACHE[folder]
+
+
+def edges_of(resources: Iterable[Resource]) -> tuple[Parts, tuple[GraphEdge, ...]]:
+    """Reference and infrastructure edges (steps 3 and 4): the nodes and the finalized edges."""
+    index = StateIndex.of(resources)
+    parts = Parts()
+    for item in index.sorted_resources():
+        parts.add_node(resource_node(item))
+    for item in index.sorted_resources():
+        add_reference_edges(item, index, parts)
+        add_infrastructure_edges(item, index, parts)
+    return parts, finalize(parts.drafts)
+
+
+R = Relationship
+
+# The 13 typed infrastructure edges of the canonical baseline, derived by hand from the .tf text and
+# the Doc 07 §16 table: (source, target, relationship). All KNOWN.
+BASELINE_INFRASTRUCTURE_EDGES: tuple[tuple[str, str, Relationship], ...] = (
+    ("aws_subnet.app", "aws_vpc.main", R.SUBNET_BELONGS_TO_VPC),
+    ("aws_subnet.db_a", "aws_vpc.main", R.SUBNET_BELONGS_TO_VPC),
+    ("aws_subnet.db_b", "aws_vpc.main", R.SUBNET_BELONGS_TO_VPC),
+    ("aws_route_table.public", "aws_vpc.main", R.ROUTE_TABLE_BELONGS_TO_VPC),
+    ("aws_route_table_association.app", "aws_subnet.app", R.ASSOCIATES_SUBNET),
+    ("aws_route_table_association.app", "aws_route_table.public", R.ASSOCIATES_ROUTE_TABLE),
+    ("aws_internet_gateway.igw", "aws_vpc.main", R.IGW_ATTACHED_TO_VPC),
+    ("aws_instance.app", "aws_subnet.app", R.INSTANCE_IN_SUBNET),
+    ("aws_instance.app", "aws_security_group.app", R.INSTANCE_USES_SECURITY_GROUP),
+    ("aws_db_instance.database", "aws_security_group.db", R.DB_USES_SECURITY_GROUP),
+    (
+        "aws_security_group_rule.app_ssh_public",
+        "aws_security_group.app",
+        R.RULE_BELONGS_TO_SECURITY_GROUP,
+    ),
+    (
+        "aws_security_group_rule.app_egress_all",
+        "aws_security_group.app",
+        R.RULE_BELONGS_TO_SECURITY_GROUP,
+    ),
+    (
+        "aws_security_group_rule.app_to_db_5432",
+        "aws_security_group.db",
+        R.RULE_BELONGS_TO_SECURITY_GROUP,
+    ),
+)
