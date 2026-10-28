@@ -11,6 +11,7 @@ import copy
 from collections.abc import Callable, Iterable
 from dataclasses import replace
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 from core.dependency.build import build_graph
@@ -22,6 +23,7 @@ from core.domain.state import resource_set_hash
 from core.domain.verification import ConstructionStatus, RequiredTarget
 from core.identity.engine import compare
 from core.impact.engine import compute_impact
+from core.terraform_model.normalization import normalize_directory
 from core.terraform_model.normalize import NORMALIZATION_VERSION
 from core.verification.inputs import VerificationInputs
 from tests.domain_builders import at, uid
@@ -198,3 +200,79 @@ def required_for(
             )
         )
     return needs
+
+
+# --- the fixture directories through the same pipeline --------------------------------------------
+
+
+def inputs_for_directories(
+    config: str,
+    parent: str | None,
+    *,
+    source: str,
+    destination: str,
+    root: Path,
+) -> VerificationInputs:
+    """Inputs for a fixture: its configuration directory and, if it has one, its parent's. The
+    state hash is the normalizer's own, so the structural gate is checked against an independent
+    producer of it."""
+    after = normalize_directory(root / config, None, now=NOW)
+    assert after.resource_set_hash is not None
+    definitions = list(registry(source, destination).values())
+    bindings = [SemanticBinding("INV-FUNC-001", source, destination, "TCP", 5432)]
+    candidate_graph = build_graph(
+        after.resources, definitions, bindings, state_id=CANDIDATE_STATE, now=NOW
+    )
+    if parent is None:
+        return VerificationInputs(
+            candidate_resources=after.resources,
+            parent_resources=None,
+            candidate_state_hash=after.resource_set_hash,
+            normalization_version=NORMALIZATION_VERSION,
+            candidate_id=CANDIDATE_STATE,
+            parent_state_id=None,
+            identity=None,
+            impact=None,
+            candidate_graph=candidate_graph,
+            trusted_graph=None,
+            invariants=tuple(definitions),
+            construction=ConstructionStatus.OK,
+        )
+    before = normalize_directory(root / parent, None, now=NOW)
+    identity = compare(
+        before.resources,
+        after.resources,
+        list(after.moves),
+        parent_state_id=PARENT_STATE,
+        candidate_id=CANDIDATE_STATE,
+        now=NOW,
+    )
+    trusted_graph = build_graph(
+        before.resources, definitions, bindings, state_id=PARENT_STATE, now=NOW
+    )
+    impact = compute_impact(
+        before.resources,
+        after.resources,
+        identity,
+        trusted_graph,
+        candidate_graph,
+        definitions,
+        (),
+        parent_state_id=PARENT_STATE,
+        candidate_id=CANDIDATE_STATE,
+        now=NOW,
+    )
+    return VerificationInputs(
+        candidate_resources=after.resources,
+        parent_resources=before.resources,
+        candidate_state_hash=after.resource_set_hash,
+        normalization_version=NORMALIZATION_VERSION,
+        candidate_id=CANDIDATE_STATE,
+        parent_state_id=PARENT_STATE,
+        identity=identity,
+        impact=impact,
+        candidate_graph=candidate_graph,
+        trusted_graph=trusted_graph,
+        invariants=tuple(definitions),
+        construction=ConstructionStatus.OK,
+    )
