@@ -31,6 +31,9 @@ R12 core.persistence.* imports only the standard library, core.domain.* and itse
     already keeps core.domain from importing core.persistence.
 R13 ``core.domain.codec`` (the route back from stored data into lifecycle objects, C-48) is
     imported only by core.persistence.*; tests are exempt (they are not checked roots).
+R14 core.identity imports only the standard library, core.domain.* and itself: not
+    core.terraform_model, core.persistence, core.application, core.promotion or any other core.*
+    package, and not evidence (C-121, ADR-015).
 ORACLE  nothing in this repository imports the TerraPreserve oracle (ADR-010).
 
 A self-test feeds in-memory sources that break each rule, so a checker that
@@ -164,6 +167,15 @@ def check_module(module: str, imports: set[str]) -> list[Violation]:
             or top in ("evidence", "sqlite3")
         ):
             violations.append(Violation("R6", module, name))
+        if _within(module, "core.identity") and (
+            (
+                top == "core"
+                and not _within(name, "core.identity")
+                and not _within(name, "core.domain")
+            )
+            or top in ("evidence", "sqlite3")
+        ):
+            violations.append(Violation("R14", module, name))
         if (in_core or in_evidence) and not is_stdlib and top not in ("core", "evidence"):
             package = ".".join(module.split(".")[:2])
             if top not in THIRD_PARTY_ALLOWLIST.get(package, frozenset()):
@@ -384,6 +396,45 @@ class TestCheckerSelfTest(unittest.TestCase):
                     "from core.terraform_model.hcl.ast import Body\n"
                 )
                 self.assertEqual(self.rules_for(module, allowed), set())
+
+    def test_r14_rejects_every_core_package_but_the_domain_in_the_identity_engine(self) -> None:
+        # C-121 / ADR-015: core.identity may import core.domain.* and the standard library only.
+        for module in ("core.identity", "core.identity.engine", "core.identity.moves"):
+            for source in (
+                "from core.terraform_model import normalization\n",
+                "import core.terraform_model.normalization\n",
+                "from core.persistence import sqlite\n",
+                "from core.application import config\n",
+                "from core.promotion import controller\n",
+                "from core.impact import engine\n",
+                "from core.dependency import graph\n",
+                "import evidence.store\n",
+                "import sqlite3\n",
+                "from ..terraform_model import normalization\n",
+            ):
+                with self.subTest(module=module, source=source.strip()):
+                    self.assertIn("R14", self.rules_for(module, source, module == "core.identity"))
+
+    def test_r14_allows_core_domain_itself_and_the_standard_library(self) -> None:
+        for module in ("core.identity.engine", "core.identity.moves", "core.identity.strategy"):
+            for source in (
+                "from core.domain.resource import Resource\n",
+                "from core.domain import hashing\n",
+                "import core.domain.identity\n",
+                "from core.identity.moves import plan_moves\n",
+                "from .moves import plan_moves\n",
+                "import dataclasses\nimport re\nfrom collections.abc import Mapping\n",
+            ):
+                with self.subTest(module=module, source=source.splitlines()[0]):
+                    self.assertNotIn("R14", self.rules_for(module, source))
+
+    def test_r14_applies_only_to_the_identity_engine(self) -> None:
+        # the terraform front end and the other engines are governed by their own rules
+        for module in ("core.terraform_model.ok", "core.impact.ok", "core.application.ok"):
+            self.assertNotIn("R14", self.rules_for(module, "from core.domain import hashing\n"))
+        self.assertNotIn(
+            "R14", self.rules_for("core.identityx.bad", "from core.persistence import sqlite\n")
+        )
 
     def test_r1_keeps_the_domain_from_importing_the_persistence_adapter(self) -> None:
         for source in (
