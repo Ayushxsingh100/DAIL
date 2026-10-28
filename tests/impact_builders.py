@@ -8,9 +8,11 @@ from __future__ import annotations
 from collections.abc import Iterable
 from datetime import datetime
 
+from core.dependency.build import build_graph
+from core.dependency.invariants import SemanticBinding
 from core.domain.enums import ChangeType, DependencyStatus, ImpactStatus
 from core.domain.evidence import EvidenceValidity
-from core.domain.graph import Relationship
+from core.domain.graph import DependencyGraph, Relationship
 from core.domain.impact import (
     ChangedResource,
     ImpactedInvariant,
@@ -27,6 +29,9 @@ from core.domain.impact import (
     WorkPriority,
     WorkTargetType,
 )
+from core.domain.invariant import Invariant
+from core.domain.registry_v1 import registry_v1_invariants
+from core.domain.resource import Resource
 from tests.domain_builders import at, uid
 
 NOW = at(0)
@@ -225,3 +230,34 @@ def report(
 
 def path(changed_ref: str = "aws_security_group.app", *edges: ImpactStep) -> ImpactPath:
     return ImpactPath(changed_ref, tuple(edges))
+
+
+# --- graphs from Terraform text, with the registry definitions (tests only) ---------------------
+
+SOURCE = "aws_instance.app"
+DESTINATION = "aws_db_instance.database"
+STATE = uid(1)
+
+
+def registry(source: str = SOURCE, destination: str = DESTINATION) -> dict[str, Invariant]:
+    """The four registry-v1.0 definitions by id."""
+    return {
+        item.invariant_id: item
+        for item in registry_v1_invariants(NOW, source=source, destination=destination)
+    }
+
+
+def graph_of(
+    resources: Iterable[Resource],
+    *,
+    source: str = SOURCE,
+    destination: str = DESTINATION,
+    invariants: Iterable[Invariant] | None = None,
+    bound: bool = True,
+) -> DependencyGraph:
+    """A P3c graph with the four registry definitions and the FUNC binding."""
+    chosen = (
+        list(invariants) if invariants is not None else list(registry(source, destination).values())
+    )
+    bindings = [SemanticBinding("INV-FUNC-001", source, destination, "TCP", 5432)] if bound else []
+    return build_graph(resources, chosen, bindings, state_id=STATE, now=NOW)
