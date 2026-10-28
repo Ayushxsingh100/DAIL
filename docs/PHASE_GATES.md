@@ -138,6 +138,21 @@ with C-143 option B before D4. C-148 NOT_APPLICABLE question goes to the authors
 Proposed; C-149, C-150 Open. C-120(c) verified in source; probe in the P5 gate.
 ```
 
+## P5b — Verification, part 2 (INV-FUNC-001)
+
+```text
+P5 gate: NOT PASSED YET (external review, 29 Oct 2026; PR #22 at 20def0d, merged before the verdict,
+C-28 process lapse recorded a fifth time). Suite passes on Python 3.12 and 3.13 (skipped=1); black,
+ruff and mypy clean. Carry-forward 1 of the P5a verdict is closed: the three covers() mutants are
+killed by the new boundary tests. About 100 reviewer probes of INV-FUNC-001 and 7 mutations of the
+reviewer's own were all as the registry says, except one soundness defect: an unresolved entry in
+vpc_security_group_ids (for example [aws_security_group.db.id, var.u]) gives PASS when the path
+is otherwise established, although E3 requires every entry to be resolved and row 4 gives UNKNOWN.
+Fix package: P5b-fix (feature/p5b-fix). The P5 gate and milestone M2 are decided after it.
+Carry-forward: C-150 and C-155 for registry v1.1 before D4; index_rules placeholder hazard with
+C-143 option B before D4; C-148 NOT_APPLICABLE question goes to the authors.
+```
+
 ## P5b–P10 — NOT STARTED
 
 ## Temporary exceptions
