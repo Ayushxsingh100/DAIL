@@ -123,7 +123,22 @@ C-120(c) is decided (unresolved direction form is UNSUPPORTED) and is a P5 gate 
 D4; C-130 before D5; C-137 to C-143 Proposed.
 ```
 
-## P5–P10 — NOT STARTED
+## P5a — Verification, part 1 (security predicates)
+
+```text
+P5a mini-gate: PASSED (external review, 29 Oct 2026; PR #21 at 247a6c6, merged before the
+verdict, C-28 process lapse recorded a fourth time). Suite passes on Python 3.12 and 3.13
+(skipped=1); black, ruff and mypy clean. 60 of 60 SEC fixture cells equal expected.json (Claude
+Code report); reviewer probes (about 40) found no unsound result other than C-150.
+Carry-forward: (1) add CIDR boundary tests (one-address gap, uncovered last address, single-address
+member advancing the cursor); three mutants of covers() survive; fix in P5b step 0 or P5b step 1,
+no behaviour change. (2) C-150 Open: registry v1.1 amendment before D4, SEC-001/002 version bump,
+oracle must match; limitation stated until then. (3) index_rules placeholder hazard: cleanup
+with C-143 option B before D4. C-148 NOT_APPLICABLE question goes to the authors. C-144 to C-148
+Proposed; C-149, C-150 Open. C-120(c) verified in source; probe in the P5 gate.
+```
+
+## P5b–P10 — NOT STARTED
 
 ## Temporary exceptions
 

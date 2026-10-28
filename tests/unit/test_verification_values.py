@@ -24,6 +24,7 @@ from core.verification.values import (
     decode_argument,
     first_problem,
     has_problem,
+    has_unresolved,
 )
 
 
@@ -173,6 +174,44 @@ class TestProblems(unittest.TestCase):
         for _ in range(5000):
             value = (value,)
         self.assertTrue(has_problem(value))
+
+
+class TestUnresolved(unittest.TestCase):
+    """``has_unresolved``: unknown or unsupported anywhere. A reference is a *resolved* value (it
+    names a configured resource), unlike in ``has_problem``, which counts it as not fixed."""
+
+    def test_a_reference_is_resolved(self) -> None:
+        ref = Ref("aws_security_group.app", "id")
+        for value in (
+            ref,
+            (ref,),
+            SetValue((ref, "x")),
+            decode({"k": [{"$dail": "ref", "address": "a.b", "attribute": "id"}]}),
+        ):
+            with self.subTest(value=value):
+                self.assertFalse(has_unresolved(value))
+                self.assertTrue(has_problem(value))
+
+    def test_unknown_and_unsupported_are_found_anywhere(self) -> None:
+        for value in (
+            Unknown("r"),
+            Unsupported("r"),
+            ("x", Unknown("r")),
+            SetValue((Unsupported("r"),)),
+            decode({"k": [{"$dail": "unknown", "reason": "r"}]}),
+        ):
+            with self.subTest(value=value):
+                self.assertTrue(has_unresolved(value))
+
+    def test_plain_values_are_resolved(self) -> None:
+        for value in ("x", 1, None, ("a", ("b",)), Decimal("1.5")):
+            self.assertFalse(has_unresolved(value))
+
+    def test_a_deep_value_does_not_overflow_the_stack(self) -> None:
+        value: object = Unknown("deep")
+        for _ in range(5000):
+            value = (value,)
+        self.assertTrue(has_unresolved(value))
 
 
 class TestArgument(unittest.TestCase):

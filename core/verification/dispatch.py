@@ -3,8 +3,8 @@
 The definition of an invariant names its verifier (``verifier_id``, ``verifier_version``, registry
 §10) and its parameters (``predicate.parameters``). The table maps that pair to a function
 ``(definition, inputs) -> PredicateOutcome``. A pair the table does not have is not an error of the
-engine: the item is UNSUPPORTED ``verifier.not_available``, never PASS. INV-FUNC-001 is such a pair
-until P5b adds its verifier.
+engine: the item is UNSUPPORTED ``verifier.not_available``, never PASS (P5a had no entry for
+INV-FUNC-001, so that was its answer; P5b registers ``dail.verify.reachability_cfg``).
 
 The table is data so that a test can inject a verifier that raises, or one that returns something
 that is not an outcome, and watch the engine fail closed.
@@ -23,13 +23,14 @@ from core.verification.inputs import VerificationInputs
 from core.verification.outcome import PredicateOutcome
 from core.verification.public_ingress import evaluate_public_ingress
 from core.verification.rds_public_flag import evaluate_rds_public_flag
+from core.verification.reachability import evaluate_reachability
 
 Verifier = Callable[[Invariant, VerificationInputs], PredicateOutcome]
 VerifierTable = Mapping[tuple[str, str], Verifier]
 
 PUBLIC_INGRESS: Final = ("dail.verify.public_ingress", "1")
 RDS_PUBLIC_FLAG: Final = ("dail.verify.rds_public_flag", "1")
-REACHABILITY_CFG: Final = ("dail.verify.reachability_cfg", "1")  # P5b; not in the table yet
+REACHABILITY_CFG: Final = ("dail.verify.reachability_cfg", "1")
 
 
 def _port(definition: Invariant) -> int:
@@ -59,5 +60,6 @@ DEFAULT_VERIFIERS: Final[VerifierTable] = MappingProxyType(
     {
         PUBLIC_INGRESS: public_ingress,
         RDS_PUBLIC_FLAG: rds_public_flag,
+        REACHABILITY_CFG: evaluate_reachability,
     }
 )

@@ -49,6 +49,7 @@ from core.verification.values import (
     decode_argument,
     describe,
     has_problem,
+    has_unresolved,
 )
 
 INGRESS: Final = "INGRESS"
@@ -83,6 +84,8 @@ _RULE_KEYS: Final = frozenset(
 _GROUP_KEYS: Final = frozenset({"forms", "inline_indeterminate", "inline_rules"})
 _RULE_RESOURCE_KEYS: Final = frozenset({"rule", "target"})
 _RULE_FIELDS: Final = ("cidr_blocks", "ipv6_cidr_blocks")
+_SOURCE_FIELDS: Final = ("security_groups", "source_security_group_id")
+BLOCK_FORMS: Final = frozenset({"blocks", "dynamic", "mixed"})  # "has inline blocks" (registry 2.6)
 
 
 class ViewError(ValueError):
@@ -111,6 +114,8 @@ class Rule:
     problems: tuple[str, ...]
     ipv4_unresolved: bool = False
     ipv6_unresolved: bool = False
+    sources_unresolved: bool = False  # the source (or destination) security group is unresolved
+    self_unresolved: bool = False
 
     def core_json(self) -> dict[str, Any]:
         """The fields that decide equivalence, as ``CanonicalSecurityRule.core_json`` has them."""
@@ -258,6 +263,57 @@ def _resource_families(attributes: Mapping[str, Any], owner: str) -> tuple[bool,
     return flags[0], flags[1]
 
 
+def _unresolved_argument(argument: Argument | None) -> bool:
+    """Like ``_field_unresolved`` but a reference is resolved (source groups, ``self``)."""
+    if argument is None:
+        return False
+    if argument.form != "ATTRIBUTE":
+        return True
+    return has_unresolved(argument.value)
+
+
+def _resource_extra(attributes: Mapping[str, Any], owner: str) -> tuple[bool, bool]:
+    """Exact flags of a rule resource: its source group and ``self`` (C-151)."""
+    sources = any(
+        _unresolved_argument(_argument(attributes[name], f"{owner}.{name}"))
+        for name in _SOURCE_FIELDS
+        if name in attributes
+    )
+    own = "self" in attributes and _unresolved_argument(
+        _argument(attributes["self"], f"{owner}.self")
+    )
+    return sources, own
+
+
+def _direction_extra(encoded: object, owner: str, name: str) -> tuple[bool, bool]:
+    """For one direction of a group: whether some block leaves a source group, or ``self``,
+    unresolved (the union over the blocks, like the family flags of C-149)."""
+    if encoded is None:
+        return False, False
+    argument = _argument(encoded, f"{owner}.{name}")
+    sources = own = False
+    if argument.form == "ATTRIBUTE":
+        value = argument.value
+        elements: tuple[Any, ...] = ()
+        if isinstance(value, tuple):
+            elements = value
+        elif isinstance(value, SetValue):
+            elements = value.items
+        for element in elements:
+            if isinstance(element, Mapping):
+                sources = sources or any(
+                    has_problem(element.get(field)) for field in _SOURCE_FIELDS
+                )
+                own = own or has_unresolved(element.get("self"))
+        return sources, own
+    for block in argument.blocks:
+        sources = sources or any(
+            _unresolved_argument(block.arguments.get(field)) for field in _SOURCE_FIELDS
+        )
+        own = own or _unresolved_argument(block.arguments.get("self"))
+    return sources, own
+
+
 def _direction_details(
     encoded: object, owner: str, name: str
 ) -> tuple[bool, bool, tuple[str, ...]]:
@@ -331,6 +387,7 @@ def _group_parts(
     details = {
         name: _direction_details(attributes.get(name), owner, name) for name, _ in DIRECTIONS
     }
+    extra = {name: _direction_extra(attributes.get(name), owner, name) for name, _ in DIRECTIONS}
     rules = []
     for view in security["inline_rules"]:
         rule = read_rule(view, owner=owner)
@@ -338,7 +395,13 @@ def _group_parts(
             raise _fail(owner, "an inline rule must be INLINE and have a direction")
         if not rule.determinate:
             name = "ingress" if rule.direction == INGRESS else "egress"
-            rule = replace(rule, ipv4_unresolved=details[name][0], ipv6_unresolved=details[name][1])
+            rule = replace(
+                rule,
+                ipv4_unresolved=details[name][0],
+                ipv6_unresolved=details[name][1],
+                sources_unresolved=extra[name][0],
+                self_unresolved=extra[name][1],
+            )
         rules.append(rule)
     blocks = {name: details[name][2] for name, _ in DIRECTIONS}
     return rules, MappingProxyType(dict(forms)), tuple(security["inline_indeterminate"]), blocks
@@ -350,8 +413,16 @@ def _rule_of_resource(resource: Resource) -> Rule:
     if rule.origin != ORIGIN_RULE_RESOURCE:
         raise _fail(resource.address, "a rule resource's rule must be RULE_RESOURCE")
     if not rule.determinate:
-        v4, v6 = _resource_families(thaw_json(resource.attributes), resource.address)
-        rule = replace(rule, ipv4_unresolved=v4, ipv6_unresolved=v6)
+        attributes = thaw_json(resource.attributes)
+        v4, v6 = _resource_families(attributes, resource.address)
+        sources, own = _resource_extra(attributes, resource.address)
+        rule = replace(
+            rule,
+            ipv4_unresolved=v4,
+            ipv6_unresolved=v6,
+            sources_unresolved=sources,
+            self_unresolved=own,
+        )
     return rule
 
 
@@ -423,3 +494,31 @@ def inline_form(resource: Resource, direction: str = "ingress") -> str | None:
         return None
     forms = _group_parts(resource)[1]
     return forms[direction]
+
+
+def group_is_mixed(view: GroupView) -> bool:
+    """Registry §2.6 MIXED (C-84), reading a direction that cannot be fixed conservatively.
+
+    A configured group is MIXED when it has inline blocks (in either direction) and is also the
+    target of a rule resource, or when a direction is an explicit empty list and a rule resource
+    of that direction (or of an unresolved direction) targets it. If a direction cannot be fixed,
+    whether inline blocks exist cannot be told, so a rule resource makes it MIXED. A pseudo-group
+    has no inline form and is never MIXED."""
+    forms = view.forms
+    rule_resources = [
+        rule
+        for rule in (*view.ingress, *view.egress, *view.unresolved_direction)
+        if rule.origin == ORIGIN_RULE_RESOURCE
+    ]
+    if forms is None or not rule_resources:
+        return False
+    if any(forms[name] in BLOCK_FORMS for name in ("ingress", "egress")):
+        return True
+    if any(forms[name] == "unresolved" for name in ("ingress", "egress")):
+        return True
+    for name, direction in DIRECTIONS:
+        if forms[name] == "explicit_empty" and any(
+            rule.direction in (direction, None) for rule in rule_resources
+        ):
+            return True
+    return False

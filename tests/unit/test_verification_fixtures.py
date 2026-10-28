@@ -6,9 +6,10 @@ P4 lists). The expected values are the hand-written ``expected.json`` results (D
 external reviewer from registry-v1.0, not computed): the result of INV-SEC-001, INV-SEC-002 and
 INV-SEC-003, and the IPv4 and IPv6 clauses of the first two.
 
-INV-FUNC-001 is not implemented in P5a. The interim assertion is that it is UNSUPPORTED
-``verifier.not_available`` and never PASS; P5b replaces it. For the same reason the aggregate with
-INV-FUNC-001 required is INSUFFICIENT_PROOF, never PASS, unless a security result already FAILs.
+INV-FUNC-001 (P5b) is compared with ``expected.json`` in the same way. The aggregate over all four
+invariants (Doc 09 §18) is FAIL if any expected result is FAIL, PASS if all four are PASS, and
+INSUFFICIENT_PROOF otherwise (an expected UNKNOWN or UNSUPPORTED). It is computed from the engine's
+own records, never taken from a constant.
 """
 
 from __future__ import annotations
@@ -88,15 +89,24 @@ class TestFixtures(unittest.TestCase):
                     else:
                         self.assertIsNone(item.clauses)
 
-    def test_the_functional_invariant_is_unsupported_and_never_pass_for_now(self) -> None:
-        for fixture_id in fixtures():
+    def test_the_functional_result_equals_expected_json(self) -> None:
+        for fixture_id, fx in fixtures().items():
             with self.subTest(fixture=fixture_id):
                 _, report = world(fixture_id)
                 func = next(i for i in report.results if i.target_id == f"INVARIANT:{FUNC}:1")
-                self.assertEqual(
-                    (func.result, func.reason),
-                    (VerificationResult.UNSUPPORTED, VerificationReason.VERIFIER_NOT_AVAILABLE),
-                )
+                self.assertEqual(func.result.value, expected(fx, FUNC)["result"])
+                self.assertIsNone(func.clauses)
+                self.assertNotEqual(func.reason, VerificationReason.VERIFIER_NOT_AVAILABLE)
+                self.assertIsNone(func.error)
+
+    def test_the_functional_invariant_is_never_a_pass_unless_expected_json_says_so(self) -> None:
+        for fixture_id, fx in fixtures().items():
+            if expected(fx, FUNC)["result"] == "PASS":
+                continue
+            with self.subTest(fixture=fixture_id):
+                _, report = world(fixture_id)
+                func = next(i for i in report.results if i.target_id == f"INVARIANT:{FUNC}:1")
+                self.assertIsNot(func.result, VerificationResult.PASS)
 
     def test_the_mandatory_gate_passes_on_every_sound_candidate(self) -> None:
         for fixture_id in fixtures():
@@ -153,14 +163,55 @@ class TestAggregationOnFixtures(unittest.TestCase):
             with self.subTest(fixture=fixture_id):
                 self.assertIs(self.verdict(fixture_id, SEC), hand)
 
-    def test_with_the_functional_invariant_required_nothing_passes_for_now(self) -> None:
-        # the interim: INV-FUNC-001 is UNSUPPORTED, so the aggregate is never PASS; a security
-        # FAIL still makes it FAIL
+    def test_the_aggregate_over_all_four_invariants_follows_expected_json(self) -> None:
         for fixture_id, fx in fixtures().items():
-            wanted = [expected(fx, name)["result"] for name in SEC]
-            hand = AggregateResult.FAIL if "FAIL" in wanted else AggregateResult.INSUFFICIENT_PROOF
+            wanted = [expected(fx, name)["result"] for name in (*SEC, FUNC)]
+            if "FAIL" in wanted:
+                hand = AggregateResult.FAIL
+            elif set(wanted) == {"PASS"}:
+                hand = AggregateResult.PASS
+            else:
+                hand = AggregateResult.INSUFFICIENT_PROOF
             with self.subTest(fixture=fixture_id):
                 self.assertIs(self.verdict(fixture_id, (*SEC, FUNC)), hand)
+
+
+class TestCanonicalTransitions(unittest.TestCase):
+    """The canonical scenario (CLAUDE.md): a candidate that fixes SSH and keeps the path is
+    promotable, one that fixes SSH and breaks EC2 -> RDS must be rejected. Doc 09 §18, from the
+    engine's own records."""
+
+    SAFE = "canonical_safe_repair_promote_v1"
+    BREAKS = "canonical_security_repair_breaks_function_reject_v1"
+
+    def verdict(self, fixture_id: str, *, without_functional: bool = False) -> AggregateResult:
+        inputs, report = world(fixture_id)
+        needs = required_for(inputs, [invariant_item(name) for name in (*SEC, FUNC)])
+        results = [
+            r
+            for r in report.results
+            if not (without_functional and r.target_id == f"INVARIANT:{FUNC}:1")
+        ]
+        return aggregate(results, needs, candidate_hash=report.candidate_hash)
+
+    def test_the_safe_repair_aggregates_to_pass(self) -> None:
+        self.assertIs(self.verdict(self.SAFE), AggregateResult.PASS)
+
+    def test_the_repair_that_breaks_the_database_path_aggregates_to_fail(self) -> None:
+        self.assertIs(self.verdict(self.BREAKS), AggregateResult.FAIL)
+        inputs, report = world(self.BREAKS)
+        by_id = {r.target_id: r for r in report.results}
+        # the security invariants hold; it is the functional one that fails (row 9: no ingress rule)
+        for name in SEC:
+            self.assertIs(by_id[f"INVARIANT:{name}:1"].result, VerificationResult.PASS)
+        func = by_id[f"INVARIANT:{FUNC}:1"]
+        self.assertEqual((func.result, func.observations["row"]), (VerificationResult.FAIL, 9))
+
+    def test_without_the_functional_result_nothing_passes(self) -> None:
+        # a missing required result is INSUFFICIENT_PROOF, never PASS (Doc 09 §18)
+        self.assertIs(
+            self.verdict(self.SAFE, without_functional=True), AggregateResult.INSUFFICIENT_PROOF
+        )
 
 
 if __name__ == "__main__":

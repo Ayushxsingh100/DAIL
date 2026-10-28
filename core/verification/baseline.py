@@ -9,8 +9,9 @@ no earlier evidence to carry forward, so it is checked on its own.
   groups. The restriction only narrows what is reported; it never turns another group's FAIL into a
   PASS, which the invariant items still carry.
 * A created ``aws_db_instance`` runs INV-SEC-003 for that instance.
-* A created resource of a relevant-unsupported type (registry §2.7, the security-group list) is
-  UNSUPPORTED, even as a placeholder (R5).
+* A created resource of a relevant-unsupported type (registry §2.7: the 26 types of
+  INV-FUNC-001, which contain the three of the security list; C-154) is UNSUPPORTED, even as a
+  placeholder (R5).
 * A created placeholder (an unknown ``count`` or ``for_each``) is UNKNOWN.
 * Any other type is PASS with ``applicable = false`` and the assumption that the registry declares
   no baseline predicate for it. **This is a modelling assumption, not a proof** (C-148, flagged for
@@ -29,11 +30,12 @@ from dataclasses import dataclass
 from typing import Any, Final
 
 from core.domain.enums import ResourceSupport, VerificationResult
+from core.domain.registry_v1 import FUNC_RELEVANT_UNSUPPORTED
 from core.domain.resource import Resource
 from core.domain.verification import VerificationReason
 from core.verification.inputs import VerificationInputs
 from core.verification.outcome import CLAUSE_IPV4, CLAUSE_IPV6, combine
-from core.verification.public_ingress import RELEVANT_UNSUPPORTED, GroupStatus, analyse
+from core.verification.public_ingress import GroupStatus, analyse
 from core.verification.rds_public_flag import DB_INSTANCE_TYPE, instance_state
 from core.verification.views import (
     SECURITY_GROUP_RULE_TYPE,
@@ -146,7 +148,7 @@ def verify_baseline(address: str, inputs: VerificationInputs) -> BaselineOutcome
         return BaselineOutcome(
             S, R.INVARIANT_UNKNOWN, _base(resource), (), True, *BASELINE_VERIFIER
         )
-    if kind in RELEVANT_UNSUPPORTED:
+    if kind in FUNC_RELEVANT_UNSUPPORTED:
         return BaselineOutcome(S, R.TYPE_RELEVANT_UNSUPPORTED, _base(resource), (), True, *ids)
     if resource.support_status is ResourceSupport.UNKNOWN:
         return BaselineOutcome(U, R.RESOURCE_INDETERMINATE, _base(resource), (), True, *ids)

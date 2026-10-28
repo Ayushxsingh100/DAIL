@@ -270,6 +270,128 @@ class TestRuleResources(unittest.TestCase):
         self.assertEqual(index["aws_security_group.a"].ingress, ())
 
 
+class TestSourceAndSelfFlags(unittest.TestCase):
+    """P5b (C-151): which *other* fields of an indeterminate rule are unresolved, for INV-FUNC-001
+    (E5 and E6 look at the source group and at ``self``). Read like the family flags of C-149."""
+
+    BASE = '  type = "ingress"\n  protocol = "tcp"\n  from_port = 5432\n  to_port = 5432\n'
+
+    def rule(self, body: str) -> views.Rule:
+        (found,) = view_of(VARS + group() + rule_resource(self.BASE + body)).ingress
+        return found
+
+    def test_an_unresolved_source_group(self) -> None:
+        found = self.rule("  source_security_group_id = var.u\n")
+        self.assertTrue(found.sources_unresolved)
+        self.assertFalse(found.self_unresolved or found.ipv4_unresolved or found.ipv6_unresolved)
+
+    def test_an_unresolved_self(self) -> None:
+        found = self.rule("  self = var.u\n")
+        self.assertTrue(found.self_unresolved)
+        self.assertFalse(found.sources_unresolved)
+
+    def test_a_reference_to_a_group_is_a_resolved_source(self) -> None:
+        line = "  source_security_group_id = aws_security_group.other.id" + chr(10)
+        text = VARS + group() + group(name="other") + rule_resource(self.BASE + line)
+        (found,) = views.index_rules(resources_of(text))[APP].ingress
+        self.assertTrue(found.determinate)
+        self.assertFalse(found.sources_unresolved)
+        self.assertEqual(found.source_security_groups, ("aws_security_group.other",))
+
+    def test_a_reference_beside_an_unresolved_entry_is_still_unresolved(self) -> None:
+        body = (
+            ' ingress {\n protocol = "tcp"\n from_port = 1\n to_port = 1\n'
+            "    security_groups = [aws_security_group.other.id, var.u]\n }"
+        )
+        text = VARS + group(name="other") + group(body)
+        (found,) = views.index_rules(resources_of(text))[APP].ingress
+        self.assertFalse(found.determinate)
+        self.assertTrue(found.sources_unresolved)
+
+    def test_a_resolved_rule_is_never_flagged(self) -> None:
+        found = self.rule('  cidr_blocks = ["10.0.0.0/8"]\n  self = true\n')
+        self.assertFalse(found.sources_unresolved or found.self_unresolved)
+
+    def test_a_cidr_list_alone_is_not_a_source_group(self) -> None:
+        found = self.rule("  cidr_blocks = var.u\n")
+        self.assertTrue(found.ipv4_unresolved)
+        self.assertFalse(found.sources_unresolved)
+
+    def test_inline_blocks_use_the_union_of_their_direction(self) -> None:
+        text = VARS + group(
+            '  ingress {\n protocol = "tcp"\n from_port = 5432\n to_port = 5432\n'
+            "    security_groups = [var.u]\n }\n"
+            '  ingress {\n protocol = "tcp"\n from_port = 22\n to_port = 22\n'
+            "    self = var.u\n }\n"
+            '  ingress {\n protocol = "tcp"\n from_port = 80\n to_port = 80\n'
+            '    cidr_blocks = ["10.0.0.0/8"]\n }\n'
+        )
+        rules = view_of(text).ingress
+        indeterminate = [r for r in rules if not r.determinate]
+        self.assertEqual(len(indeterminate), 2)
+        for (
+            found
+        ) in indeterminate:  # the stored blocks are sorted: a rule is not paired with its block
+            self.assertTrue(found.sources_unresolved and found.self_unresolved)
+        (determinate,) = (r for r in rules if r.determinate)
+        self.assertFalse(determinate.sources_unresolved or determinate.self_unresolved)
+
+    def test_flags_are_per_direction(self) -> None:
+        text = VARS + group(
+            '  egress {\n protocol = "tcp"\n from_port = 1\n to_port = 1\n    self = var.u\n }\n'
+            '  ingress {\n protocol = "tcp"\n from_port = 1\n to_port = 1\n'
+            "    cidr_blocks = var.u\n }\n"
+        )
+        view = view_of(text)
+        self.assertTrue(view.egress[0].self_unresolved)
+        self.assertFalse(view.ingress[0].self_unresolved)
+
+
+class TestGroupIsMixed(unittest.TestCase):
+    """The MIXED test of registry §2.6 (C-84), shared by the SEC and the FUNC verifiers."""
+
+    def mixed(self, text: str) -> bool:
+        return views.group_is_mixed(view_of(VARS + text))
+
+    def test_inline_blocks_and_a_rule_resource(self) -> None:
+        text = group(
+            '  ingress {\n protocol = "tcp"\n from_port = 22\n to_port = 22\n }'
+        ) + rule_resource(
+            '  type = "ingress"\n  protocol = "tcp"\n  from_port = 1\n  to_port = 1\n'
+        )
+        self.assertTrue(self.mixed(text))
+
+    def test_inline_blocks_alone_or_rule_resources_alone(self) -> None:
+        blocks = group('  egress {\n protocol = "-1"\n from_port = 0\n to_port = 0\n }')
+        self.assertFalse(self.mixed(blocks))
+        only_rules = group() + rule_resource(
+            '  type = "ingress"\n  protocol = "tcp"\n  from_port = 1\n  to_port = 1\n'
+        )
+        self.assertFalse(self.mixed(only_rules))
+
+    def test_explicit_empty_with_a_rule_of_the_same_direction_only(self) -> None:
+        ingress_rule = rule_resource(
+            '  type = "ingress"\n  protocol = "tcp"\n  from_port = 1\n  to_port = 1\n'
+        )
+        self.assertTrue(self.mixed(group("  ingress = []\n") + ingress_rule))
+        self.assertFalse(self.mixed(group("  egress = []\n") + ingress_rule))
+
+    def test_a_direction_that_cannot_be_fixed_with_a_rule_resource(self) -> None:
+        text = group("  egress = var.u\n") + rule_resource(
+            '  type = "ingress"\n  protocol = "tcp"\n  from_port = 1\n  to_port = 1\n'
+        )
+        self.assertTrue(self.mixed(text))
+        self.assertFalse(self.mixed(group("  egress = var.u\n")))
+
+    def test_a_pseudo_group_is_never_mixed(self) -> None:
+        text = rule_resource(
+            '  type = "ingress"\n  protocol = "tcp"\n  from_port = 1\n  to_port = 1\n',
+            target='"sg-1"',
+        )
+        index = views.index_rules(resources_of(text))
+        self.assertFalse(views.group_is_mixed(index["EXTERNAL:sg-1"]))
+
+
 class TestOtherTypes(unittest.TestCase):
     def test_other_resources_have_no_rules(self) -> None:
         for resource in resources_of(

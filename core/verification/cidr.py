@@ -69,3 +69,18 @@ def covers(cidrs: Iterable[str], target: str) -> bool:
         if cursor > wanted.last:
             return True
     return cursor > wanted.last
+
+
+def overlaps(cidrs: Iterable[str], target: str) -> bool:
+    """Whether some member shares at least one address with ``target`` (registry §6.4 row 8: a CIDR
+    that overlaps the target without covering it covers it "partly").
+
+    Same rules as ``covers``: one address family, an invalid member is an error, never ignored."""
+    wanted = parse_network(target)
+    found = False
+    for text in cidrs:
+        member = parse_network(text)
+        if member.version != wanted.version:
+            raise CidrError("an overlap question mixes IPv4 and IPv6")
+        found = found or (member.first <= wanted.last and member.last >= wanted.first)
+    return found

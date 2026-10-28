@@ -177,6 +177,14 @@ def has_problem(value: object) -> bool:
     return first_problem(value) is not None
 
 
+def has_unresolved(value: object) -> bool:
+    """Whether ``value`` is, or contains, an unknown or unsupported value.
+
+    Unlike ``has_problem`` a reference counts as resolved: it names a configured resource (registry
+    §2.2), which is what a source security group normally is."""
+    return any(isinstance(item, Unknown | Unsupported) for item in _walk(value))
+
+
 def describe(problem: Unknown | Unsupported | Ref) -> str:
     """Short stable text of a problem value, for observations."""
     if isinstance(problem, Ref):

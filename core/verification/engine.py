@@ -15,8 +15,9 @@ randomness, and the same inputs with the same injected values give the same repo
 * Malformed inputs (``VerificationInputError``) stop the run before any item runs.
 * A construction status that is not OK makes every invariant and baseline item UNSUPPORTED
   ``construction.invalid``; no predicate runs (registry §2.8).
-* An invariant the definitions do not have is UNSUPPORTED ``invariant.unknown``; a verifier the
-  table does not have (INV-FUNC-001 until P5b) is UNSUPPORTED ``verifier.not_available``.
+* An invariant the definitions do not have is UNSUPPORTED ``invariant.unknown``; a verifier pair
+  the table does not have is UNSUPPORTED ``verifier.not_available`` (the table of P5b has the three
+  registry verifiers).
 
 ``verifier_invocations`` counts verifier executions: the predicates, the baseline checks and the two
 gates, including executions that raised. Items answered without running a verifier are not counted.

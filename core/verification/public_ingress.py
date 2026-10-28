@@ -55,12 +55,12 @@ from core.domain.verification import VerificationReason
 from core.verification.cidr import IPV4_ANY, IPV6_ANY, covers
 from core.verification.outcome import CLAUSE_IPV4, CLAUSE_IPV6, PredicateOutcome, combine
 from core.verification.ports import may_permit_tcp, permits_tcp
-from core.verification.retention import BLOCK_FORMS, ingress_retention
+from core.verification.retention import ingress_retention
 from core.verification.views import (
-    ORIGIN_RULE_RESOURCE,
     GroupView,
     Rule,
     SecurityConfig,
+    group_is_mixed,
     read_security,
 )
 
@@ -122,23 +122,6 @@ class Analysis:
     outcome: PredicateOutcome
 
 
-def _is_mixed(view: GroupView, rule_resources: Sequence[Rule]) -> bool:
-    """Registry §2.6 MIXED, with the conservative reading of a direction that cannot be fixed."""
-    forms = view.forms
-    if forms is None or not rule_resources:
-        return False
-    if any(forms[name] in BLOCK_FORMS for name in ("ingress", "egress")):
-        return True
-    if any(forms[name] == "unresolved" for name in ("ingress", "egress")):
-        return True  # whether inline blocks exist cannot be told
-    for name, direction in (("ingress", "INGRESS"), ("egress", "EGRESS")):
-        if forms[name] == "explicit_empty" and any(
-            rule.direction in (direction, None) for rule in rule_resources
-        ):
-            return True
-    return False
-
-
 def _could_expose(rule: Rule, port: int, family: tuple[str, str, str, str]) -> bool:
     """``possible`` for one indeterminate rule and one address family (registry §3.3)."""
     if not may_permit_tcp(rule.protocol, rule.from_port, rule.to_port, port):
@@ -174,10 +157,8 @@ def _group_status(
     retention: VerificationReason | None,
 ) -> tuple[GroupStatus, bool]:
     """The status of one group, and whether it is MIXED."""
-    directional = (*view.ingress, *view.egress, *view.unresolved_direction)
-    rule_resources = [rule for rule in directional if rule.origin == ORIGIN_RULE_RESOURCE]
     ingress_like = (*view.ingress, *view.unresolved_direction)
-    mixed = _is_mixed(view, rule_resources)
+    mixed = group_is_mixed(view)
     forms_unresolved = view.forms is not None and view.forms["ingress"] == "unresolved"
     reasons = [
         reason

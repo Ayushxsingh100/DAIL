@@ -588,6 +588,28 @@ class TestCheckerSelfTest(unittest.TestCase):
                 with self.subTest(module=module, source=source.splitlines()[0]):
                     self.assertNotIn("R17", self.rules_for(module, source))
 
+    def test_r17_covers_the_functional_verifier_modules(self) -> None:
+        # C-151: the reachability verifier and its reader are under the same rule as the rest
+        for module in ("core.verification.reachability", "core.verification.func_view"):
+            for source in (
+                "from core.terraform_model import security_rules\n",
+                "from core.dependency import build\n",
+                "from core.identity import engine\n",
+                "from core.impact import engine\n",
+                "from core.persistence import sqlite\n",
+                "import evidence.store\n",
+            ):
+                with self.subTest(module=module, source=source.strip(), allowed=False):
+                    self.assertIn("R17", self.rules_for(module, source))
+            for source in (
+                "from core.domain.registry_v1 import FUNC_RELEVANT_UNSUPPORTED\n",
+                "from core.verification.views import read_security\n",
+                "from .cidr import covers, overlaps\n",
+                "import ipaddress\n",
+            ):
+                with self.subTest(module=module, source=source.strip(), allowed=True):
+                    self.assertNotIn("R17", self.rules_for(module, source))
+
     def test_r17_applies_only_to_the_verification_engine(self) -> None:
         for module in ("core.impact.ok", "core.identity.ok", "core.application.ok"):
             self.assertNotIn("R17", self.rules_for(module, "from core.domain import hashing\n"))
