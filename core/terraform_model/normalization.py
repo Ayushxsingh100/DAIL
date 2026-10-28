@@ -20,7 +20,9 @@ and diagnostics are copied and there are no resources: the failure is never hidd
 
 ``parsed`` is needed besides ``evaluated`` because references are read from the expression trees
 (registry §2.2, Doc 07 §15), which the evaluation does not keep; its configuration hash must equal
-the one of the evaluation. The package has no clock: ``now`` becomes ``Provenance.observed_at``.
+the one of the evaluation, and the evaluation must have been made with this parser
+version; otherwise ``DomainValidationError``, never a mixed result. The package has no clock:
+``now`` becomes ``Provenance.observed_at``.
 """
 
 from __future__ import annotations
@@ -37,6 +39,7 @@ from core.domain.hashing import content_hash
 from core.domain.resource import Resource
 from core.domain.state import resource_set_hash
 from core.terraform_model.config import (
+    PARSER_VERSION,
     Diagnostic,
     DiagnosticSeverity,
     ParsedConfiguration,
@@ -158,7 +161,14 @@ def normalize_configuration(
 ) -> NormalizationOutcome:
     """Normalize an evaluated configuration into ``Resource`` objects."""
     if evaluated.configuration_hash != parsed.configuration_hash:
-        raise ValueError("the parsed configuration is not the one that was evaluated")
+        raise DomainValidationError(
+            "the parsed configuration is not the one that was evaluated (configuration_hash)"
+        )
+    if evaluated.parser_version != PARSER_VERSION:
+        raise DomainValidationError(
+            f"the evaluation was made with parser {evaluated.parser_version!r}, "
+            f"not {PARSER_VERSION!r} (parser_version)"
+        )
     if evaluated.status is not ParseStatus.OK:
         return _empty(
             evaluated.status,

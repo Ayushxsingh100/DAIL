@@ -13,9 +13,10 @@ from pathlib import Path
 from core.domain.enums import ResourceSupport
 from core.domain.errors import DomainValidationError, UnauthorizedConstructionError
 from core.domain.state import resource_set_hash
+from core.terraform_model import evaluation as evaluation_module
 from core.terraform_model import normalization as module
 from core.terraform_model.config import PARSER_VERSION, ParseStatus
-from core.terraform_model.evaluation import EVALUATOR_VERSION
+from core.terraform_model.evaluation import EVALUATOR_VERSION, EvaluationOutcome
 from core.terraform_model.normalization import (
     NormalizationOutcome,
     normalize_configuration,
@@ -187,8 +188,28 @@ class TestFailuresAreNotHidden(unittest.TestCase):
     def test_a_different_parse_is_refused(self) -> None:
         parsed, _ = evaluate_text('resource "aws_vpc" "v" {}\n')
         _, evaluated = evaluate_text('resource "aws_vpc" "w" {}\n')
-        with self.assertRaises(ValueError):
+        with self.assertRaises(DomainValidationError) as caught:
             normalize_configuration(parsed, evaluated, now=NOW)
+        self.assertIn("configuration_hash", str(caught.exception))
+
+    def test_an_evaluation_made_with_another_parser_version_is_refused(self) -> None:
+        parsed, evaluated = evaluate_text('resource "aws_vpc" "v" {}\n')
+        fields = {f.name: getattr(evaluated, f.name) for f in dataclasses.fields(evaluated)}
+        token = evaluation_module._OUTCOME_TOKEN
+        other = EvaluationOutcome(**{**fields, "parser_version": "dail-hcl-parser-0"}, _token=token)
+        with self.assertRaises(DomainValidationError) as caught:
+            normalize_configuration(parsed, other, now=NOW)
+        self.assertIn("parser_version", str(caught.exception))
+        # the same pair with the right version is accepted
+        self.assertEqual(normalize_configuration(parsed, evaluated, now=NOW).status, OK)
+
+    def test_a_refused_pair_gives_no_outcome_at_all(self) -> None:
+        # also when the evaluation is not OK: a mixed pair is never turned into a failure outcome
+        parsed, _ = evaluate_text('resource "aws_vpc" "v" {}\n')
+        _, bad = evaluate_text('resource "aws_vpc" "w" {\n  a = var.nope\n}\n')
+        self.assertEqual(bad.status, ParseStatus.INVALID)
+        with self.assertRaises(DomainValidationError):
+            normalize_configuration(parsed, bad, now=NOW)
 
 
 class TestGuard(unittest.TestCase):
