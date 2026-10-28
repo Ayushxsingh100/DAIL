@@ -76,12 +76,14 @@ class BlockedMove:
     """A statement that was skipped because its target is occupied (a conflict, C-123).
 
     ``movers`` and ``occupants`` are the *original* trusted addresses of the objects involved: the
-    ones that wanted to move, and the ones already at the target.
+    ones that wanted to move, and the ones already at the target. ``intended`` are the addresses
+    the movers would have reached.
     """
 
     statement: MoveStatement
     movers: tuple[str, ...]
     occupants: tuple[str, ...]
+    intended: tuple[str, ...]
 
     @property
     def involved(self) -> tuple[str, ...]:
@@ -268,6 +270,7 @@ def plan_moves(
                         statement,
                         tuple(current[a].origin for a in movers),
                         tuple(current[a].origin for a in occupants),
+                        tuple(statement.target_block + (key_of(a) or "") for a in movers),
                     )
                 )
                 continue
@@ -283,7 +286,9 @@ def plan_moves(
         matched.add(statement)
         occupant = current.get(statement.target)
         if occupant is not None and not occupant.placeholder:
-            blocked.append(BlockedMove(statement, (source.origin,), (occupant.origin,)))
+            blocked.append(
+                BlockedMove(statement, (source.origin,), (occupant.origin,), (statement.target,))
+            )
         elif placeholder_at(statement.target_block):
             undecidable.append(
                 UndecidableMove(statement, "target", statement.target_block, (source.origin,))

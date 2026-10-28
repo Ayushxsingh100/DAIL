@@ -148,6 +148,7 @@ class TestResourceLevel(unittest.TestCase):
         self.assertEqual(blocked.statement, MoveStatement(A, B))
         self.assertEqual(blocked.movers, (key(A, "x"), key(A, "y")))
         self.assertEqual(blocked.occupants, (key(B, "z"),))
+        self.assertEqual(blocked.intended, (key(B, "x"), key(B, "y")))
         self.assertEqual(result.conflicted, {key(A, "x"), key(A, "y"), key(B, "z")})
 
     def test_a_target_with_the_same_key_is_also_blocked_all_or_nothing(self) -> None:
