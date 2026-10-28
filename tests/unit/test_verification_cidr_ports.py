@@ -136,6 +136,97 @@ class TestCovers(unittest.TestCase):
         self.assertGreater(misses, 30)
 
 
+class TestCoverageBoundaries(unittest.TestCase):
+    """P5a carry-forward 1: the edges of the sweep, where an off-by-one would hide.
+
+    A target network ``T`` covers the addresses ``first..last``. Members are built by cutting that
+    range into CIDRs with ``summarize_address_range`` (input construction only: the expected answer
+    follows from which addresses are left out, never from ``covers``). For each family:
+
+    * a set that leaves out exactly one address in the middle does not cover ``T``; adding that
+      address as a single-address member makes it cover;
+    * leaving out only the last address (or only the first) does not cover; adding it does;
+    * a single-address member (``/32``, ``/128``) at the cursor advances it: ``[x/32]`` covers
+      ``x/32``, consecutive single-address members cover the network they tile, and a single
+      address next to the target does not cover it;
+    * order and duplicates never change any of these answers.
+    """
+
+    TARGETS = ("10.0.0.0/24", "2001:db8::/120")
+
+    @staticmethod
+    def cut(first: int, last: int, version: int) -> list[str]:
+        """The CIDRs that exactly tile the addresses first..last (empty when first > last)."""
+        if first > last:
+            return []
+        make = ipaddress.IPv4Address if version == 4 else ipaddress.IPv6Address
+        return [str(net) for net in ipaddress.summarize_address_range(make(first), make(last))]
+
+    @staticmethod
+    def single(value: int, version: int) -> str:
+        make = ipaddress.IPv4Address if version == 4 else ipaddress.IPv6Address
+        return f"{make(value)}/{32 if version == 4 else 128}"
+
+    def each_family(self) -> list[tuple[str, int, int, int]]:
+        found = []
+        for target in self.TARGETS:
+            net = ipaddress.ip_network(target)
+            found.append(
+                (target, net.version, int(net.network_address), int(net.broadcast_address))
+            )
+        return found
+
+    def check_every_order(self, members: list[str], target: str, expected: bool) -> None:
+        rng = random.Random(len(members) * 31 + int(expected))
+        variants = [members, [*members, *members]]
+        for _ in range(4):
+            shuffled = [*members, members[0]] if members else []
+            rng.shuffle(shuffled)
+            variants.append(shuffled)
+        for variant in variants:
+            self.assertIs(covers(variant, target), expected, (target, variant))
+
+    def test_one_missing_address_in_the_middle(self) -> None:
+        for target, version, first, last in self.each_family():
+            gap = first + (last - first) // 2 + 1  # not at an edge, not on a CIDR boundary
+            around = [*self.cut(first, gap - 1, version), *self.cut(gap + 1, last, version)]
+            with self.subTest(target=target):
+                self.check_every_order(around, target, False)
+                self.check_every_order([*around, self.single(gap, version)], target, True)
+
+    def test_the_last_address_uncovered(self) -> None:
+        for target, version, first, last in self.each_family():
+            short = self.cut(first, last - 1, version)
+            with self.subTest(target=target):
+                self.check_every_order(short, target, False)
+                self.check_every_order([*short, self.single(last, version)], target, True)
+
+    def test_the_first_address_uncovered(self) -> None:
+        for target, version, first, last in self.each_family():
+            short = self.cut(first + 1, last, version)
+            with self.subTest(target=target):
+                self.check_every_order(short, target, False)
+                self.check_every_order([self.single(first, version), *short], target, True)
+
+    def test_a_single_address_member_advances_the_cursor(self) -> None:
+        for _target, version, first, _last in self.each_family():
+            one = self.single(first + 5, version)
+            with self.subTest(family=version):
+                self.assertTrue(covers([one], one))
+                self.assertFalse(covers([one], self.single(first + 6, version)))
+                self.assertFalse(covers([one], self.single(first + 4, version)))
+
+    def test_consecutive_single_address_members_tile_a_network(self) -> None:
+        for _target, version, first, _last in self.each_family():
+            bits = 30 if version == 4 else 126
+            network = f"{ipaddress.ip_address(first)}/{bits}"
+            tiles = [self.single(first + offset, version) for offset in range(4)]
+            with self.subTest(family=version):
+                self.check_every_order(tiles, network, True)
+                self.check_every_order(tiles[:3], network, False)  # the fourth is missing
+                self.check_every_order([tiles[0], tiles[1], tiles[3]], network, False)
+
+
 class TestCoverageOracle(unittest.TestCase):
     """The work package's oracle: the address space is cut into 64 blocks (the /6 networks), a CIDR
     of prefix length 1 to 6 is a run of consecutive blocks, and coverage is plain set containment of
