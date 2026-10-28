@@ -110,7 +110,20 @@ Carried forward: C-45 (decided as a proposal in C-141, P4); C-117 (P4 gate item)
 item); C-128 before D4; C-130 before D5; C-131 to C-136 Proposed.
 ```
 
-## P4–P10 — NOT STARTED
+## P4 — Impact and invalidation
+
+```text
+P4 gate: PASSED (external review, 28 Oct 2026; PR #20 at d3170e9, merged before the verdict, C-28
+process lapse recorded a third time). Suite: 2941 tests on Python 3.12 and 3.13 (skipped=1);
+black, ruff and mypy clean. Recall 18 of 18 transition fixtures (affected ⊇ required_affected, 0
+extras against required); 5 extras against the field-level oracle (R1, resource-level impact).
+Steps 5-6 were drafted before their tests (disclosed, accepted).
+Carry-forward: C-143 option B (identity cleanup before D4); C-45 enforcement in P6 (blocker);
+C-120(c) is decided (unresolved direction form is UNSUPPORTED) and is a P5 gate item; C-128 before
+D4; C-130 before D5; C-137 to C-143 Proposed.
+```
+
+## P5–P10 — NOT STARTED
 
 ## Temporary exceptions
 
