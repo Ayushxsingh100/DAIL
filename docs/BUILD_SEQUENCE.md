@@ -14,7 +14,7 @@ The build is split into 18 work packages (N-06 in `DECISIONS_REGISTER.md`). Ever
 | 6 | Oct 13–15 | D2 15 canonical fixtures |
 | 7a | Oct 16–19 | P3a-1 HCL parser and structural model (`core/terraform_model/hcl`, loader, C-91 to C-94) |
 | 7b | Oct 25–27 | P3a-2 expression evaluation, instance expansion and the move table (`values`, `evaluate`, `instances`, `evaluation`; C-99 to C-105) |
-| 7c | after the P3a-2 review | P3a-3 supported-resource filtering, reference extraction, canonical normalization into `core.domain` `Resource`, fingerprints |
+| 7c | Oct 25–27 (P3a-2 passed) | P3a-3 supported-resource filtering, reference extraction, canonical normalization into `core.domain` `Resource`, canonical security rules, fingerprints (`canonical`, `normalize`, `security_rules`, `references`, `normalization`; C-112 to C-118); ends with the P3a mini-gate review |
 | 8 | Oct 20–21 | P3b identity |
 | 9 | Oct 22–23 | P3c dependency → P3 gate |
 | 10 | Oct 24–27 | P4 impact → P4 gate |
