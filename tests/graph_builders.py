@@ -268,8 +268,9 @@ def edges_of(resources: Iterable[Resource]) -> tuple[Parts, tuple[GraphEdge, ...
 
 R = Relationship
 
-# The 13 typed infrastructure edges of the canonical baseline, derived by hand from the .tf text and
-# the Doc 07 §16 table: (source, target, relationship). All KNOWN.
+# The 14 typed infrastructure edges of the canonical baseline, derived by hand from the .tf text:
+# the 13 of the Doc 07 §16 table, all KNOWN, and the C-136 placement edge of the database to its
+# subnet group, UNSUPPORTED. (source, target, relationship).
 BASELINE_INFRASTRUCTURE_EDGES: tuple[tuple[str, str, Relationship], ...] = (
     ("aws_subnet.app", "aws_vpc.main", R.SUBNET_BELONGS_TO_VPC),
     ("aws_subnet.db_a", "aws_vpc.main", R.SUBNET_BELONGS_TO_VPC),
@@ -281,6 +282,7 @@ BASELINE_INFRASTRUCTURE_EDGES: tuple[tuple[str, str, Relationship], ...] = (
     ("aws_instance.app", "aws_subnet.app", R.INSTANCE_IN_SUBNET),
     ("aws_instance.app", "aws_security_group.app", R.INSTANCE_USES_SECURITY_GROUP),
     ("aws_db_instance.database", "aws_security_group.db", R.DB_USES_SECURITY_GROUP),
+    ("aws_db_instance.database", "aws_db_subnet_group.db", R.DB_SUBNET_PLACEMENT),
     (
         "aws_security_group_rule.app_ssh_public",
         "aws_security_group.app",

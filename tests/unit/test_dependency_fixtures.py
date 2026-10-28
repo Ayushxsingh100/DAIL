@@ -48,9 +48,9 @@ def build(resources, invariants=(), bindings=(), **kwargs):  # type: ignore[no-u
 class TestBuildInputs(unittest.TestCase):
     def test_the_algorithm_and_normalization_versions_are_recorded(self) -> None:
         built = build(fixture_resources(BASELINE))
-        self.assertEqual(GRAPH_ALGORITHM_VERSION, "dail-graph-1")
-        self.assertEqual(built.algorithm_version, "dail-graph-1")
-        self.assertEqual(built.graph_version, "dail-graph-1")
+        self.assertEqual(GRAPH_ALGORITHM_VERSION, "dail-graph-2")
+        self.assertEqual(built.algorithm_version, "dail-graph-2")
+        self.assertEqual(built.graph_version, "dail-graph-2")
         self.assertEqual(built.normalization_version, NORMALIZATION)
 
     def test_a_resource_without_a_normalization_version_is_refused(self) -> None:
@@ -236,7 +236,8 @@ def count(built: DependencyGraph, edge_type: EdgeType) -> int:
 
 
 class TestCanonicalBaselineGraph(unittest.TestCase):
-    """The 20 reference edges and 13 typed edges derived by hand from the .tf text."""
+    """The 20 reference edges and 14 typed edges derived by hand from the .tf text: the 13
+    of section 16 and the C-136 placement edge."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -266,7 +267,7 @@ class TestCanonicalBaselineGraph(unittest.TestCase):
             if e.edge_type is EdgeType.INFRASTRUCTURE
         }
         self.assertEqual(got, set(BASELINE_INFRASTRUCTURE_EDGES))
-        self.assertEqual(count(self.graph, EdgeType.INFRASTRUCTURE), 13)
+        self.assertEqual(count(self.graph, EdgeType.INFRASTRUCTURE), 14)  # 13 + C-136
 
     def test_the_edges_that_touch_the_subnet_group_are_unsupported_and_no_other_is(self) -> None:
         group = "RESOURCE:aws_db_subnet_group.db"
@@ -350,10 +351,11 @@ class TestDependencyFixtures(unittest.TestCase):
         self.assertEqual(refs, [])
 
     def test_unknown_dependency_edge_counts(self) -> None:
-        # patch_safe = baseline without the public SSH rule: 19 references and 12 typed edges;
+        # patch_safe = baseline without the public SSH rule: 19 references and 13 typed edges
+        # (12 of section 16 and the C-136 placement edge);
         # this fixture replaces the rule's source reference by one unresolved edge
         built = fixture_graph(UNKNOWN)
-        self.assertEqual(count(built, EdgeType.INFRASTRUCTURE), 12)
+        self.assertEqual(count(built, EdgeType.INFRASTRUCTURE), 13)
         self.assertEqual(count(built, EdgeType.TERRAFORM_REFERENCE), 19)
         unresolved = [e for e in built.edges if e.target_node_id.startswith("SEMANTIC:UNRESOLVED:")]
         self.assertEqual(len(unresolved), 1)

@@ -15,7 +15,7 @@ Doc 02 §26 requires an ADR for the Python 3.12 and dependency management approa
 - The dev toolchain is exact-pinned in `pyproject.toml` and hash-locked in `requirements/dev.lock` via pip-tools (`pip-compile --extra=dev --generate-hashes`).
 - Later-phase dependency groups are re-verified and locked when their phase starts.
 - CI proves the core tests run with zero installed packages before it installs anything.
-- Any third-party import in `core/` needs its own ADR. The known future exception is `networkx` in `core/dependency` (ADR-005, P3c).
+- Any third-party import in `core/` needs its own ADR. There is no standing exception: NetworkX is deferred (ADR-005).
 
 ## Consequences
 

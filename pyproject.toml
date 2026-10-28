@@ -9,18 +9,13 @@ readme = "README.md"
 # core/ and evidence/ use the Python 3.12 standard library only (ADR-002,
 # ADR-004), so a fresh clone can bootstrap and run the core tests with no
 # network access and no secrets (Doc 15 §7.3). Any third-party import in core/
-# needs its own ADR (the known future exception is networkx, ADR-005, P3c).
+# needs its own ADR (NetworkX is deferred, ADR-005).
 dependencies = []
 
 [project.optional-dependencies]
 # Later-phase groups: declared, never installed; re-verified and locked when
 # their phase starts (ADR-002). Pydantic and SQLAlchemy are not used in the
 # core (ADR-004).
-# P3c (dependency graph, ADR-005).
-# declared, never installed; re-verified and locked when phase P3c starts
-graph = [
-    "networkx==3.6.1",
-]
 # P5a (verification); Checkov is recorded as an advisory cross-check only (C-12).
 # declared, never installed; re-verified and locked when phase P5a starts
 verification = [

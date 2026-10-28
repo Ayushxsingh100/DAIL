@@ -64,8 +64,15 @@ class TestVocabularies(unittest.TestCase):
     def test_node_types_are_the_three_of_doc_05(self) -> None:
         self.assertEqual({n.value for n in NodeType}, {"RESOURCE", "INVARIANT", "SEMANTIC"})
 
-    def test_infrastructure_relationships_are_the_nine_of_doc_07_s16(self) -> None:
-        self.assertEqual({r.value for r in INFRASTRUCTURE_RELATIONSHIPS}, set(SUBNET_TYPES))
+    def test_infrastructure_relationships_are_the_nine_of_doc_07_s16_and_the_placement(
+        self,
+    ) -> None:
+        # C-136 adds DB_SUBNET_PLACEMENT, which is not a section 16 row
+        self.assertEqual(
+            {r.value for r in INFRASTRUCTURE_RELATIONSHIPS},
+            {*SUBNET_TYPES, "DB_SUBNET_PLACEMENT"},
+        )
+        self.assertEqual(len(INFRASTRUCTURE_RELATIONSHIPS), 10)
 
     def test_the_semantic_class_has_source_destination_port_and_binding(self) -> None:
         self.assertEqual(

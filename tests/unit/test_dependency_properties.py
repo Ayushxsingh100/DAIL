@@ -33,7 +33,7 @@ from tests.graph_builders import (
     sec_002,
     sec_003,
 )
-from tests.unit.test_dependency_infrastructure import SECTION_16
+from tests.unit.test_dependency_infrastructure import ALL_SLOTS
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 UC, UN = DependencyStatus.UNCERTAIN, DependencyStatus.UNSUPPORTED
@@ -330,11 +330,11 @@ KINDS = (
     ("aws_route_table_association", "a0"),
     ("aws_instance", "i0"),
     ("aws_instance", "i1"),
+    ("aws_db_subnet_group", "dg0"),
     ("aws_db_instance", "d0"),
     ("aws_security_group_rule", "r0"),
     ("aws_security_group_rule", "r1"),
     ("aws_network_acl", "n0"),
-    ("aws_db_subnet_group", "dg0"),
 )
 META = ("", "", "", "count = 2", 'for_each = toset(["a", "b"])', "count = var.n")
 SET_ARGS = {"vpc_security_group_ids", "security_groups"}
@@ -351,7 +351,10 @@ SLOT_ARGS = {
         ("vpc_security_group_ids", "aws_security_group"),
         ("security_groups", "aws_security_group"),
     ),
-    "aws_db_instance": (("vpc_security_group_ids", "aws_security_group"),),
+    "aws_db_instance": (
+        ("vpc_security_group_ids", "aws_security_group"),
+        ("db_subnet_group_name", "aws_db_subnet_group"),
+    ),
     "aws_security_group_rule": (
         ("security_group_id", "aws_security_group"),
         ("source_security_group_id", "aws_security_group"),
@@ -462,7 +465,7 @@ def check_no_silent_gap(resources: Sequence[Resource], seed: object) -> Counter[
     for resource in resources:  # every section 16 slot of a supported source has an edge
         if resource.support_status is ResourceSupport.UNSUPPORTED:
             continue
-        for source_type, _argument, _target, relationship in SECTION_16:
+        for source_type, _argument, _target, relationship in ALL_SLOTS:
             if resource.resource_type != source_type:
                 continue
             mine = [
@@ -472,6 +475,10 @@ def check_no_silent_gap(resources: Sequence[Resource], seed: object) -> Counter[
                 and e.relationship is relationship
             ]
             assert mine, f"{where}: {resource.address} has no {relationship.value} edge"
+
+    for edge in built.edges:  # C-136: the RDS placement is outside the model, whatever the value
+        if edge.relationship.value == "DB_SUBNET_PLACEMENT":
+            assert edge.status is UN, f"{where}: {edge.source_node_id} placement is {edge.status}"
 
     for edge in built.edges:  # status never improves on its inputs
         if edge.edge_type not in (EdgeType.TERRAFORM_REFERENCE, EdgeType.INFRASTRUCTURE):
