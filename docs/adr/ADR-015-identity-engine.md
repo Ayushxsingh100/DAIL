@@ -1,6 +1,6 @@
 # ADR-015: The identity engine is a pure function over domain resources
 
-**Status:** Proposed (C-121 to C-127, 28 Oct 2026, P3b). The authors decide.
+**Status:** Accepted (C-121 to C-127, authors, 28 Oct 2026, P3b).
 
 **Context.** Doc 07 asks "what changed between the trusted and the candidate state?" and
 requires the answer to be explainable evidence, never an opaque score, never dependent on

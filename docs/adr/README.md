@@ -21,4 +21,4 @@ project decisions (see `docs/DECISIONS_REGISTER.md`).
 | [012](ADR-012-state-indexed-verification.md) | Verification is state-indexed: `verify(trusted_state, candidate, work_item)` | Accepted (29 Sep 2026) |
 | [013](ADR-013-terrapreserve-separate-repository.md) | TerraPreserve benchmark lives in a separate repository | Accepted (N-01) |
 | [014](ADR-014-terraform-model-import-boundary.md) | `core.terraform_model` may import `core.domain` (rule R6 amended) | Accepted (C-27, 30 Sep 2026) |
-| [015](ADR-015-identity-engine.md) | The identity engine is a pure function over domain resources, with a strategy seam | Proposed (C-121 to C-127, 28 Oct 2026, P3b) |
+| [015](ADR-015-identity-engine.md) | The identity engine is a pure function over domain resources, with a strategy seam | Accepted (C-121 to C-127, 28 Oct 2026, P3b) |
