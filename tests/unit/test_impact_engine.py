@@ -10,7 +10,7 @@ from __future__ import annotations
 import dataclasses
 import unittest
 
-from core.domain.enums import ChangeType, ImpactStatus, InvariantCategory
+from core.domain.enums import ChangeType, ImpactStatus, InvariantCategory, ReferenceResolution
 from core.domain.evidence import EvidenceValidity
 from core.domain.graph import Relationship
 from core.domain.impact import (
@@ -21,10 +21,14 @@ from core.domain.impact import (
     StepDirection,
     WorkTargetType,
 )
+from core.domain.invariant import Invariant
+from core.domain.values import Reference
 from core.identity.engine import compare
+from core.impact.changes import TOLERATED_TYPES
 from core.impact.engine import compute_impact
 from core.impact.errors import ImpactInputError
 from core.impact.inputs import PriorProof
+from core.terraform_model.normalize import TOLERATED_TYPES as FRONT_END_TOLERATED
 from tests.graph_builders import hand_ref, hand_resource
 from tests.identity_builders import normalize
 from tests.impact_builders import (
@@ -606,6 +610,108 @@ class TestUnresolvedContent(unittest.TestCase):
 
 
 # --- merging ------------------------------------------------------------------------------------
+
+
+class TestToleratedTypes(unittest.TestCase):
+    """C-143, option A: a reference to a tolerated type is not unresolved content (registry 2.7,
+    C-15). Every other unresolved element still is."""
+
+    SUBNET_GROUP = (
+        'resource "aws_db_subnet_group" "g" {\n  name = "g"\n}\n'
+        'resource "aws_db_instance" "database" {\n  identifier = "d"\n'
+        "  db_subnet_group_name = aws_db_subnet_group.g.name\n"
+        "  vpc_security_group_ids = [aws_security_group.db.id]\n}\n"
+    )
+
+    @staticmethod
+    def narrow() -> Invariant:
+        func = registry()["INV-FUNC-001"]
+        return dataclasses.replace(
+            func,
+            category=InvariantCategory.SECURITY,
+            scope=dataclasses.replace(
+                func.scope, resources=("aws_instance.app",), relationships=()
+            ),
+        )
+
+    def unchanged_instance(self, *references: Reference) -> ImpactReport:
+        source = hand_resource("aws_instance.app", references=list(references))
+        return impact_of_outcomes((source,), (source,), [], invariants=[self.narrow()], bound=False)
+
+    def test_the_tolerated_type_table_is_the_front_ends(self) -> None:
+        self.assertEqual(TOLERATED_TYPES, FRONT_END_TOLERATED)
+
+    def test_an_unchanged_database_with_a_subnet_group_is_not_a_c117_source(self) -> None:
+        text = NET.replace(DB_BLOCK, self.SUBNET_GROUP)
+        self.assertNotEqual(text, NET)
+        report = impact_between(text, text)
+        self.assertEqual(report.affected_invariants, ())
+        self.assertEqual(report.changed_resources, ())
+
+    def test_the_same_database_still_reaches_its_invariants_when_it_changes(self) -> None:
+        text = NET.replace(DB_BLOCK, self.SUBNET_GROUP)
+        report = impact_between(text, text.replace('identifier = "d"', 'identifier = "e"'))
+        self.assertEqual(impacted_ids(report), {FUNC, SEC3})
+
+    def test_an_unsupported_or_unknown_reference_to_a_tolerated_type_is_exempt(self) -> None:
+        for status in (ReferenceResolution.UNSUPPORTED, ReferenceResolution.UNKNOWN):
+            with self.subTest(status=status):
+                report = self.unchanged_instance(
+                    hand_ref("aws_instance.app", "aws_db_subnet_group.g", "x", status)
+                )
+                self.assertEqual(report.affected_invariants, ())
+
+    def test_an_unsupported_reference_to_any_other_type_is_a_c117_source(self) -> None:
+        report = self.unchanged_instance(
+            hand_ref("aws_instance.app", "aws_network_acl.x", "x", ReferenceResolution.UNSUPPORTED)
+        )
+        (item,) = report.affected_invariants
+        self.assertIs(item.status, ImpactStatus.UNCERTAIN)
+        self.assertEqual(codes_of(item), {ReasonCode.UNRESOLVED_CONTENT})
+
+    def test_an_unknown_reference_to_a_data_source_is_a_c117_source(self) -> None:
+        report = self.unchanged_instance(
+            hand_ref("aws_instance.app", "data.aws_ami.x", "ami", ReferenceResolution.UNKNOWN)
+        )
+        self.assertEqual(len(report.affected_invariants), 1)
+
+    def test_a_supported_reference_is_not_a_c117_source(self) -> None:
+        report = self.unchanged_instance(hand_ref("aws_instance.app", "aws_subnet.s", "subnet_id"))
+        self.assertEqual(report.affected_invariants, ())
+
+    def test_an_unknown_value_next_to_a_tolerated_reference_is_still_a_source(self) -> None:
+        source = hand_resource(
+            "aws_instance.app",
+            attributes={"ami": {"form": "ATTRIBUTE", "value": {"$dail": "unknown", "reason": "x"}}},
+            references=[hand_ref("aws_instance.app", "aws_db_subnet_group.g", "x")],
+        )
+        report = impact_of_outcomes(
+            (source,), (source,), [], invariants=[self.narrow()], bound=False
+        )
+        self.assertEqual(len(report.affected_invariants), 1)
+
+    def test_a_security_group_with_a_dynamic_direction_is_a_c117_source(self) -> None:
+        view = {
+            "forms": {"ingress": "dynamic", "egress": "absent"},
+            "inline_rules": [],
+            "inline_indeterminate": [],
+        }
+        group = hand_resource("aws_security_group.g", security_attributes=view)
+        report = impact_of_outcomes((group,), (group,), [], bound=False)
+        self.assertEqual(impacted_ids(report) & SEC, SEC)
+        for invariant_id in SEC:
+            item = impacted(report)[invariant_id]
+            self.assertEqual(codes_of(item), {ReasonCode.UNRESOLVED_CONTENT})
+
+    def test_a_security_group_with_known_forms_is_not(self) -> None:
+        view = {
+            "forms": {"ingress": "explicit_empty", "egress": "absent"},
+            "inline_rules": [],
+            "inline_indeterminate": [],
+        }
+        group = hand_resource("aws_security_group.g", security_attributes=view)
+        report = impact_of_outcomes((group,), (group,), [], bound=False)
+        self.assertEqual(impacted_ids(report) & SEC, set())
 
 
 class TestMerging(unittest.TestCase):

@@ -1,4 +1,4 @@
-"""The changed set (Doc 08 §6; registry §2.9; C-117; C-140 item 1).
+"""The changed set (Doc 08 §6; registry §2.7, §2.9; C-117; C-140 item 1, C-143).
 
 Every identity match that is not UNCHANGED is a change source, with its change type and the flags
 the identity evidence carries (``UNRESOLVED_CONTENT``, ``UNSUPPORTED_TYPE``). An UNCHANGED match is
@@ -7,6 +7,14 @@ prove an unresolved element unchanged (registry §2.9 treats "unresolved on both
 C-117). Such a source is carried with change type UNCERTAIN and the flag ``UNRESOLVED_CONTENT``, and
 the engine uses it only for invariants whose footprint contains the resource. It can only add
 UNCERTAIN; it never removes anything.
+
+What counts as unresolved content (C-143, option A): an Unknown or Unsupported canonical value
+in the resource, a security-group direction in the form ``unresolved``, ``dynamic`` or ``mixed``,
+and a reference whose resolution is UNKNOWN or UNSUPPORTED **except** a reference to a tolerated
+type. ``aws_db_subnet_group`` is tolerated, not relevant (registry §2.7, C-15): the RDS placement is
+assumed away, and an UNSUPPORTED reference to it is a fact of every database that names a subnet
+group, not an unresolved footprint element. The test is made on the resources, not on the identity
+evidence flag, because that flag does not make the exception.
 """
 
 from __future__ import annotations
@@ -14,18 +22,25 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
+from typing import Any, Final
 
-from core.domain.enums import ChangeType
+from core.domain.enums import ChangeType, ReferenceResolution
 from core.domain.identity import EvidenceType, IdentityMatch, IdentityReport
 from core.domain.impact import ChangedResource, ChangeFlag
 from core.domain.jsonvalue import thaw_json
 from core.domain.resource import Resource
+from core.impact.addresses import type_of
 from core.impact.errors import ImpactInputError
 
 _TAG = "$dail"
-_UNRESOLVED_TAGS = frozenset({"unknown", "unsupported"})
-_FLAG_OF = {
+_UNRESOLVED_TAGS: Final = frozenset({"unknown", "unsupported"})
+_UNRESOLVED_FORMS: Final = frozenset({"unresolved", "dynamic", "mixed"})
+_UNRESOLVED_REFERENCES: Final = frozenset(
+    {ReferenceResolution.UNKNOWN, ReferenceResolution.UNSUPPORTED}
+)
+# Registry §2.7 "Tolerated type" and C-15. A test compares this with the front end's own table.
+TOLERATED_TYPES: Final = frozenset({"aws_db_subnet_group"})
+_FLAG_OF: Final = {
     EvidenceType.UNRESOLVED_CONTENT: ChangeFlag.UNRESOLVED_CONTENT,
     EvidenceType.UNSUPPORTED_TYPE: ChangeFlag.UNSUPPORTED_TYPE,
 }
@@ -54,16 +69,37 @@ def _contains_unresolved(value: Any) -> bool:
     return False
 
 
-def has_unresolved_content(resource: Resource) -> bool:
-    """Whether any canonical value of the resource is Unknown or Unsupported (C-112, C-117)."""
-    return any(
-        _contains_unresolved(thaw_json(part))
-        for part in (
-            resource.attributes,
-            resource.security_attributes,
-            resource.semantic_attributes,
+def unresolved_reasons(resource: Resource) -> list[str]:
+    """Why the resource has unresolved content (C-117, C-143); empty when it has none."""
+    reasons: list[str] = []
+    for name, part in (
+        ("attributes", resource.attributes),
+        ("security_attributes", resource.security_attributes),
+        ("semantic_attributes", resource.semantic_attributes),
+    ):
+        if _contains_unresolved(thaw_json(part)):
+            reasons.append(f"an unknown or unsupported value in {name}")
+    forms = resource.security_attributes.get("forms")
+    if isinstance(forms, Mapping):
+        reasons.extend(
+            f"the {name} rules are of form {form}"
+            for name, form in sorted(forms.items())
+            if form in _UNRESOLVED_FORMS
         )
-    )
+    for reference in resource.references:
+        if (
+            reference.resolution_status in _UNRESOLVED_REFERENCES
+            and type_of(reference.target_address) not in TOLERATED_TYPES
+        ):
+            reasons.append(
+                f"{reference.source_attribute} refers to {reference.target_address} "
+                f"({reference.resolution_status.value})"
+            )
+    return reasons
+
+
+def has_unresolved_content(resource: Resource) -> bool:
+    return bool(unresolved_reasons(resource))
 
 
 def _flags(identity: IdentityReport, match: IdentityMatch) -> tuple[ChangeFlag, ...]:
@@ -96,10 +132,11 @@ def change_sources(
             )
             if r is not None
         ]
-        resource_type = (sides[-1]).resource_type
+        resource_type = sides[-1].resource_type
         flags = _flags(identity, match)
         address = candidate_ref if candidate_ref is not None else trusted_ref
-        assert address is not None
+        if address is None:
+            raise ImpactInputError("an identity match has no ref")
         if match.change_type is not ChangeType.UNCHANGED:
             sources.append(
                 ChangeSource(
@@ -114,9 +151,7 @@ def change_sources(
                     Origin.IDENTITY,
                 )
             )
-        elif ChangeFlag.UNRESOLVED_CONTENT in flags or any(
-            has_unresolved_content(r) for r in sides
-        ):
+        elif any(has_unresolved_content(r) for r in sides):
             sources.append(
                 ChangeSource(
                     ChangedResource(
