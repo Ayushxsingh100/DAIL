@@ -12,6 +12,11 @@ Dependency (P3c; Doc 07, C-132): ``graph`` holds ``GraphNode``, ``GraphEdge``,
 ``DependencyEvidence`` and ``DependencyGraph``, the typed "what is connected to what" of one state,
 with UNCERTAIN and UNSUPPORTED edges as first-class values and a structural graph hash.
 
+Impact (P4; Doc 08, C-138, C-139): ``impact`` holds ``ImpactReport``, ``ImpactedInvariant``,
+``VerificationWorkItem`` and their closed vocabularies (reasons, impact types, priorities), and
+``carry_forward_ok``, the single query P6 needs; ``registry_v1`` builds the four registry-v1.0
+invariants, with the walk policy of INV-FUNC-001, as data.
+
 Lifecycles: explicit transition tables and functions (``lifecycle``, ``state``) that reject every
 transition the specification forbids, including SM-001 to SM-010. Lifecycle-bearing objects can
 be created only through those functions, so ``dataclasses.replace`` and direct constructor calls
