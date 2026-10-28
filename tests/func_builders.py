@@ -21,6 +21,51 @@ SOURCE = "aws_instance.app"
 DESTINATION = "aws_db_instance.database"
 
 
+APP_TO_DB = """resource "aws_security_group_rule" "app_to_db_5432" {
+  type                     = "ingress"
+  protocol                 = "tcp"
+  from_port                = 5432
+  to_port                  = 5432
+  source_security_group_id = aws_security_group.app.id
+  security_group_id        = aws_security_group.db.id
+}
+"""
+APP_EGRESS = """resource "aws_security_group_rule" "app_egress_all" {
+  type              = "egress"
+  protocol          = "-1"
+  from_port         = 0
+  to_port           = 0
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = aws_security_group.app.id
+}
+"""
+IGW_ROUTE = """
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.igw.id
+  }
+"""
+SOURCE_LINE = "  source_security_group_id = aws_security_group.app.id\n"
+SUBNET_LINE = "  subnet_id                   = aws_subnet.app.id\n"
+PUBLIC_IP_LINE = "  associate_public_ip_address = true\n}"
+DB_GROUP = """resource "aws_security_group" "db" {
+  name        = "db"
+  description = "Database security group"
+  vpc_id      = aws_vpc.main.id
+  egress      = []
+}
+"""
+APP_GROUP = """resource "aws_security_group" "app" {
+  name        = "app"
+  description = "Application security group"
+  vpc_id      = aws_vpc.main.id
+  ingress     = []
+}
+"""
+DB_SGS_LINE = "  vpc_security_group_ids      = [aws_security_group.db.id]\n"
+APP_SGS_LINE = "  vpc_security_group_ids      = [aws_security_group.app.id]\n"
+
+
 def canonical() -> str:
     """The canonical configuration text (a PASS for INV-FUNC-001, registry F1)."""
     return CANONICAL_PATH.read_text(encoding="utf-8")

@@ -19,6 +19,7 @@ from core.verification.cidr import (
     CidrError,
     Network,
     covers,
+    overlaps,
     parse_network,
 )
 from core.verification.ports import PortsError, may_permit_tcp, permits_tcp
@@ -225,6 +226,66 @@ class TestCoverageBoundaries(unittest.TestCase):
                 self.check_every_order(tiles, network, True)
                 self.check_every_order(tiles[:3], network, False)  # the fourth is missing
                 self.check_every_order([tiles[0], tiles[1], tiles[3]], network, False)
+
+
+class TestOverlaps(unittest.TestCase):
+    """``overlaps``: some member shares at least one address with the target (registry §6.4 row 8
+    asks whether a CIDR *partly* covers a target: it overlaps without covering)."""
+
+    def test_by_hand(self) -> None:
+        table = [
+            (["10.0.1.0/25"], "10.0.1.0/24", True),  # inside the target
+            (["10.0.1.0/24"], "10.0.1.0/25", True),  # around the target
+            (["10.0.2.0/24"], "10.0.1.0/24", False),  # next door
+            (["10.0.1.0/24"], "10.0.2.0/24", False),  # the other neighbour
+            (["10.0.0.255/32"], "10.0.0.0/24", True),  # shares only the last address
+            (["10.0.0.0/32"], "10.0.0.0/24", True),  # shares only the first address
+            (["10.0.1.0/32"], "10.0.0.0/24", False),  # one address beyond the last
+            (["9.255.255.255/32"], "10.0.0.0/24", False),  # one address before the first
+            ([], "10.0.0.0/24", False),
+            (["10.9.0.0/16", "10.0.0.128/25"], "10.0.0.0/24", True),  # one of several
+            (["2001:db8::/121"], "2001:db8::/120", True),
+            (["2001:db8::100/120"], "2001:db8::/120", False),
+            (["::/0"], "2001:db8::/120", True),
+        ]
+        for members, target, expected in table:
+            with self.subTest(members=members, target=target):
+                self.assertIs(overlaps(members, target), expected)
+
+    def test_a_family_mix_or_an_invalid_member_is_an_error(self) -> None:
+        with self.assertRaises(CidrError):
+            overlaps(["::/0"], "10.0.0.0/24")
+        with self.assertRaises(CidrError):
+            overlaps(["nonsense"], "10.0.0.0/24")
+
+    def test_covering_implies_overlapping_and_not_the_reverse(self) -> None:
+        self.assertTrue(
+            covers(["10.0.0.0/16"], "10.0.1.0/24") and overlaps(["10.0.0.0/16"], "10.0.1.0/24")
+        )
+        self.assertTrue(overlaps(["10.0.1.0/25"], "10.0.1.0/24"))
+        self.assertFalse(covers(["10.0.1.0/25"], "10.0.1.0/24"))
+
+    def test_agrees_with_the_block_oracle(self) -> None:
+        oracle = TestCoverageOracle()
+        for version, seed in ((4, 11), (6, 12)):
+            rng = random.Random(seed)
+            hits = misses = 0
+            for _ in range(600):
+                members, union = [], set()
+                for _ in range(rng.randint(0, 4)):
+                    prefix = rng.randint(1, 6)
+                    index = rng.randrange(2**prefix)
+                    members.append(oracle.text(version, prefix, index))
+                    union |= oracle.blocks(prefix, index)
+                prefix = rng.randint(1, 6)
+                index = rng.randrange(2**prefix)
+                wanted = oracle.blocks(prefix, index)
+                got = overlaps(members, oracle.text(version, prefix, index))
+                self.assertIs(got, bool(wanted & union), (members, prefix, index))
+                hits += bool(wanted & union)
+                misses += not (wanted & union)
+            self.assertGreater(hits, 40)
+            self.assertGreater(misses, 40)
 
 
 class TestCoverageOracle(unittest.TestCase):

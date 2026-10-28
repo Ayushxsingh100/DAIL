@@ -32,9 +32,8 @@ from core.domain.enums import ChangeType, ResourceSupport
 from core.domain.identity import IdentityMatch, IdentityReport
 from core.domain.resource import Resource
 from core.domain.verification import VerificationReason
-from core.verification.views import SECURITY_GROUP_TYPE, inline_form
+from core.verification.views import BLOCK_FORMS, SECURITY_GROUP_TYPE, inline_form
 
-BLOCK_FORMS = frozenset({"blocks", "dynamic", "mixed"})
 _KEPT_FORMS = BLOCK_FORMS | {"unresolved"}
 
 
@@ -71,14 +70,16 @@ def _unpaired_trusted(block: str, matches: tuple[IdentityMatch, ...]) -> list[st
     ]
 
 
-def ingress_retention(
+def inline_retention(
     address: str,
+    direction: str,
     *,
     parent: Mapping[str, Resource] | None,
     identity: IdentityReport | None,
 ) -> VerificationReason | None:
-    """``None`` when the group retains nothing, ``GROUP_RETAINED_INLINE`` when it keeps the parent's
-    inline ingress rules, ``IDENTITY_MISSING`` when that cannot be told."""
+    """``None`` when the group retains nothing in ``direction`` (``ingress`` or ``egress``),
+    ``GROUP_RETAINED_INLINE`` when it keeps the parent's inline rules of that direction,
+    ``IDENTITY_MISSING`` when that cannot be told (registry §2.6, C-84)."""
     if parent is None:
         return None
     if identity is None:
@@ -95,6 +96,16 @@ def ingress_retention(
             continue  # a conflicting pairing of two types: not a group, nothing inline to keep
         if resource.support_status is not ResourceSupport.SUPPORTED:
             retained = True  # a placeholder or unreadable group: cannot rule blocks out
-        elif inline_form(resource) in _KEPT_FORMS:
+        elif inline_form(resource, direction) in _KEPT_FORMS:
             retained = True
     return VerificationReason.GROUP_RETAINED_INLINE if retained else None
+
+
+def ingress_retention(
+    address: str,
+    *,
+    parent: Mapping[str, Resource] | None,
+    identity: IdentityReport | None,
+) -> VerificationReason | None:
+    """``inline_retention`` for the ingress direction (INV-SEC-001, INV-SEC-002)."""
+    return inline_retention(address, "ingress", parent=parent, identity=identity)
