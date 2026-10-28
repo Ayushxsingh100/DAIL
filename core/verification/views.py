@@ -413,3 +413,13 @@ def read_security(resources: Iterable[Resource]) -> SecurityConfig:
 def index_rules(resources: Iterable[Resource]) -> Mapping[str, GroupView]:
     """``core.terraform_model.security_rules.index_rules``, read by the verifier."""
     return read_security(resources).groups
+
+
+def inline_form(resource: Resource, direction: str = "ingress") -> str | None:
+    """The form of one direction of a readable, supported security group, else ``None``."""
+    if resource.resource_type != SECURITY_GROUP_TYPE:
+        return None
+    if resource.support_status is not ResourceSupport.SUPPORTED:
+        return None
+    forms = _group_parts(resource)[1]
+    return forms[direction]
