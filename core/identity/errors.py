@@ -5,6 +5,11 @@ from __future__ import annotations
 from core.domain.errors import DomainValidationError
 
 
+class IdentityStrategyError(DomainValidationError):
+    """A strategy returned an answer that does not cover its input: a resource in no match, or in
+    two (C-124 rule 11). ``compare`` checks this for every strategy and fails closed."""
+
+
 class IdentityInputError(DomainValidationError):
     """The input of the identity engine is not one it can compare (C-121).
 

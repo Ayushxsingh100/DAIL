@@ -23,12 +23,12 @@ from datetime import datetime
 from core.domain.identity import IdentityReport
 from core.domain.resource import Resource
 from core.identity.addresses import split_key
-from core.identity.errors import IdentityInputError
-from core.identity.findings import is_placeholder
+from core.identity.errors import IdentityInputError, IdentityStrategyError
+from core.identity.findings import Draft, is_placeholder
 from core.identity.moves import MoveStatement
 from core.identity.strategy import DEFAULT_STRATEGY, IdentityStrategy
 
-__all__ = ["IdentityInputError", "compare"]
+__all__ = ["IdentityInputError", "IdentityStrategyError", "compare"]
 
 
 def _checked_side(resources: Iterable[Resource], side: str) -> list[Resource]:
@@ -77,6 +77,20 @@ def _checked_moves(moves: Iterable[tuple[str, str]]) -> list[tuple[str, str]]:
     return found
 
 
+def _check_partition(
+    trusted: Sequence[Resource], candidate: Sequence[Resource], drafts: Sequence[Draft]
+) -> None:
+    """Every input resource is in exactly one match, whatever the strategy (C-124 rule 11)."""
+    seen_t = sorted(d.trusted_ref for d in drafts if d.trusted_ref is not None)
+    seen_c = sorted(d.candidate_ref for d in drafts if d.candidate_ref is not None)
+    if seen_t != sorted(r.address for r in trusted) or seen_c != sorted(
+        r.address for r in candidate
+    ):
+        raise IdentityStrategyError(
+            "the strategy's answer does not cover the input: a resource is in no match or in two"
+        )
+
+
 def compare(
     trusted: Iterable[Resource],
     candidate: Iterable[Resource],
@@ -99,6 +113,7 @@ def compare(
     _check_normalization(trusted_side, candidate_side)
     moves = _checked_moves(candidate_moves)
     drafts = strategy.decide(trusted_side, candidate_side, moves)
+    _check_partition(trusted_side, candidate_side, drafts)
     return IdentityReport.create(
         parent_state_id=parent_state_id,
         candidate_id=candidate_id,

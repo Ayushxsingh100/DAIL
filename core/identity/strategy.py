@@ -75,10 +75,11 @@ class Rules:
 FULL_RULES: Final = Rules(
     follow_moves=True, ambiguity=True, replace_triggers=True, indeterminate_leftovers=True
 )
-# The ablation (C-127): exact-address pairing only. Placeholders stay UNCERTAIN (rule 1); the
-# instances of an indeterminate block are not protected (rule 4 is evidence, not the placeholder).
+# The ablation (C-127): exact-address pairing only. It removes identity *evidence* (moves, AMB-1,
+# RT-1), not the rule that unknown is not a pass: placeholders stay UNCERTAIN, and so do the
+# unpaired instances of an indeterminate block (rule 4), which is the same rule.
 ADDRESS_ONLY_RULES: Final = Rules(
-    follow_moves=False, ambiguity=False, replace_triggers=False, indeterminate_leftovers=False
+    follow_moves=False, ambiguity=False, replace_triggers=False, indeterminate_leftovers=True
 )
 
 
@@ -131,7 +132,6 @@ class _Run:
         if self.rules.ambiguity:
             self.ambiguity()
         self.leftovers()
-        self.check_partition()
         return self.drafts
 
     def apply_moves(self) -> None:
@@ -335,13 +335,6 @@ class _Run:
                 )
             )
 
-    def check_partition(self) -> None:
-        """Every input resource is in exactly one match."""
-        seen_t = [d.trusted_ref for d in self.drafts if d.trusted_ref is not None]
-        seen_c = [d.candidate_ref for d in self.drafts if d.candidate_ref is not None]
-        if sorted(seen_t) != sorted(self.trusted) or sorted(seen_c) != sorted(self.candidate):
-            raise RuntimeError("identity partition broken: a resource is in no match or in two")
-
     # --- pieces ---------------------------------------------------------------------------------
 
     def indeterminate(self, side: str, address: str) -> _Reason:
@@ -477,6 +470,33 @@ class EvidenceIdentity:
         candidate_moves: Sequence[tuple[str, str]],
     ) -> list[Draft]:
         return _decide(self.algorithm_version, FULL_RULES, trusted, candidate, candidate_moves)
+
+
+@dataclass(frozen=True)
+class AddressOnlyIdentity:
+    """The ablation for the pre-declared condition "DAIL minus identity" (C-20, C-127, H3).
+
+    Exact-address pairing only: no moves, no implicit moves, no RT-1, no AMB-1. Equal fingerprint
+    is UNCHANGED, different is MODIFIED, unpaired is CREATED or DELETED. Placeholders and the
+    instances of an indeterminate block are still UNCERTAIN. It exists only so that the experiment
+    harness (P8) can run that condition; production code must not use it, no configuration key or
+    environment variable selects it, and its report says ``dail-identity-addr-1``. Whether it
+    changes any result is not known: it is hypothesis H3 until measured.
+    """
+
+    @property
+    def algorithm_version(self) -> str:
+        return ADDRESS_ONLY_ALGORITHM_VERSION
+
+    def decide(
+        self,
+        trusted: Sequence[Resource],
+        candidate: Sequence[Resource],
+        candidate_moves: Sequence[tuple[str, str]],
+    ) -> list[Draft]:
+        return _decide(
+            self.algorithm_version, ADDRESS_ONLY_RULES, trusted, candidate, candidate_moves
+        )
 
 
 DEFAULT_STRATEGY: Final[IdentityStrategy] = EvidenceIdentity()
