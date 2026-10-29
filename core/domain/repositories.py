@@ -36,6 +36,7 @@ from core.domain.evidence import (
 )
 from core.domain.invariant import Invariant, InvariantRef
 from core.domain.patch import Patch
+from core.domain.promotion import PromotionDecision
 from core.domain.state import CandidateState, TrustedState
 
 
@@ -182,6 +183,32 @@ class AuditRepository(Protocol):
     def list_for_candidate(self, candidate_id: str) -> tuple[AuditEvent, ...]: ...
 
 
+class DecisionRepository(Protocol):
+    """Promotion decisions (Doc 05 §15, §22; P6b, C-163, C-165). There is no ``update`` and no
+    ``delete``: a decision is stored uncommitted, and ``commit`` is the one change, from no state to
+    the state it created (DATA-INT-004)."""
+
+    def save(self, decision: PromotionDecision) -> None:
+        """Store an uncommitted decision. The same ``decision_id`` with identical content (also once
+        it is committed) changes nothing; with any other content it raises
+        ``ConflictingDuplicateError``. DATA-INT-003: the decision's parent is its candidate's
+        parent."""
+        ...
+
+    def get(self, decision_id: str) -> PromotionDecision | None:
+        """The decision, rebuilt with its hash recomputed (DATA-INT-010), or ``None``."""
+        ...
+
+    def for_candidate(self, candidate_id: str) -> tuple[PromotionDecision, ...]:
+        """The candidate's decisions in the order they were stored."""
+        ...
+
+    def commit(self, decision_id: str, state_id: str) -> PromotionDecision:
+        """Record that the PROMOTE decision created ``state_id``: ``committed_state_id`` goes from
+        null to the state, once (DATA-INT-004). Returns the committed decision."""
+        ...
+
+
 class UnitOfWork(Protocol):
     """One transaction over every repository (Doc 05 §32).
 
@@ -206,6 +233,9 @@ class UnitOfWork(Protocol):
 
     @property
     def audit(self) -> AuditRepository: ...
+
+    @property
+    def decisions(self) -> DecisionRepository: ...
 
     def __enter__(self) -> UnitOfWork: ...
 

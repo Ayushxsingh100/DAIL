@@ -1,6 +1,6 @@
-"""SQLite schema version 5: tables, constraints and triggers (Doc 05 §16, §20-§23, §32, §36;
-Doc 06 §5, §6, §20, §22, §30; Doc 11; C-42, C-44, C-46, C-47, C-51 to C-60; P1b step 4,
-P2-fix step 3).
+"""SQLite schema version 6: tables, constraints and triggers (Doc 05 §15, §16, §20-§23, §32, §36;
+Doc 06 §5, §6, §20, §22, §30; Doc 11; C-38, C-42, C-44, C-46, C-47, C-51 to C-60, C-163, C-165,
+C-168; P1b step 4, P2-fix step 3, P6b step 4).
 
 The database is the second line of defense. P1a enforces the SM rules in the domain; here the
 database refuses the same illegal moves when application code is wrong (Doc 05 §36: "Promotion
@@ -40,6 +40,12 @@ stay byte-identical: ``evidence_artifacts`` (content-addressed payloads), ``evid
 append-only (no UPDATE, DELETE or REPLACE, including from a plain connection), and the
 transition rules of C-52 and C-53 are triggers as well as domain functions.
 
+Schema 6 (P6b) appends the ``promotion_decisions`` table, its triggers (DATA-INT-003 and 004) and
+two unique partial indexes after the 92 schema-5 statements, which stay byte-identical. The
+schema-5 candidate-status trigger lacks PROMOTABLE -> ESCALATED (C-38), so it is dropped and
+created again in the appended statements. No trigger demands a decision row for a promoted state
+(C-168, decision (b)): that direction is enforced by ``commit_promotion``.
+
 There is no migration tooling before P8a (C-44): a database with any other schema version is
 refused with instructions to delete the local development database.
 """
@@ -60,8 +66,12 @@ from core.domain.evidence import (
     EvidenceValidity,
 )
 from core.domain.lifecycle import CANDIDATE_TRANSITIONS, TRUSTED_REF_STATUSES
+from core.domain.promotion import DecisionReason
 
-SCHEMA_VERSION = "5"
+SCHEMA_VERSION = "6"
+
+# The candidate transition that schema 6 adds to the schema-5 trigger (C-38).
+C38_PAIR = ("PROMOTABLE", "ESCALATED")
 
 # The evidence and audit tables of schema 5 (P2-fix; C-59).
 EVIDENCE_TABLES = (
@@ -84,6 +94,7 @@ DOMAIN_TABLES = (
     "invariants",
     "invariant_refs",
     *EVIDENCE_TABLES,
+    "promotion_decisions",
 )
 # The schema-3 names and the five tables of the interim evidence store (retired by P2-fix).
 LEGACY_TABLES = (
@@ -153,10 +164,15 @@ def candidate_status_pairs() -> tuple[tuple[str, str], ...]:
     )
 
 
-def _pair_condition() -> str:
-    return " OR ".join(
-        f"(OLD.status = '{old}' AND NEW.status = '{new}')" for old, new in candidate_status_pairs()
-    )
+def _pair_condition(pairs: tuple[tuple[str, str], ...] | None = None) -> str:
+    chosen = candidate_status_pairs() if pairs is None else pairs
+    return " OR ".join(f"(OLD.status = '{old}' AND NEW.status = '{new}')" for old, new in chosen)
+
+
+def _schema5_pairs() -> tuple[tuple[str, str], ...]:
+    """The pairs of the schema-5 trigger: every domain pair but the one schema 6 adds (C-38), so
+    that the schema-5 statements stay byte-identical."""
+    return tuple(pair for pair in candidate_status_pairs() if pair != C38_PAIR)
 
 
 def _trigger(name: str, timing_event: str, table: str, message: str, violation: str) -> str:
@@ -368,7 +384,7 @@ def _triggers() -> tuple[str, ...]:
             "BEFORE UPDATE",
             "candidates",
             "Doc 06 §5, SM-002: illegal candidate status transition",
-            f"NOT ({_pair_condition()})",
+            f"NOT ({_pair_condition(_schema5_pairs())})",
         )
     )
     triggers.append(
@@ -832,11 +848,125 @@ def _evidence_triggers() -> tuple[str, ...]:
     return tuple(triggers)
 
 
+# --- Schema 6: promotion decisions (P6b step 4; Doc 05 §15, §22, §32; DATA-INT-003 and 004;
+# C-38, C-163, C-165, C-168). Appended after the 92 schema-5 statements, which stay byte-identical
+# (the golden hash of ``DDL[:92]`` is pinned by a test).
+
+_DECISION_TYPES = _quoted(["PROMOTE", "REJECT", "RETRY", "ESCALATE"])
+_DECISION_REASONS = _quoted([reason.value for reason in DecisionReason])
+_DECISION_COLUMNS = (
+    "decision_id",
+    "candidate_id",
+    "parent_state_id",
+    "decision",
+    "reason",
+    "policy_version",
+    "attempt_number",
+    "required_checks_json",
+    "blocking_conditions_json",
+    "supporting_results_json",
+    "content_hash",
+    "created_at",
+)
+
+
+def _schema6() -> tuple[str, ...]:
+    changed = " OR ".join(f"NEW.{column} IS NOT OLD.{column}" for column in _DECISION_COLUMNS)
+    return (
+        f"""CREATE TABLE IF NOT EXISTS promotion_decisions (
+    decision_id               TEXT NOT NULL PRIMARY KEY {_uuid("decision_id")},
+    candidate_id              TEXT NOT NULL {_uuid("candidate_id")}
+                              REFERENCES candidates(candidate_id),
+    parent_state_id           TEXT NOT NULL {_uuid("parent_state_id")}
+                              REFERENCES trusted_states(state_id),
+    decision                  TEXT NOT NULL CHECK (decision IN ({_DECISION_TYPES})),
+    reason                    TEXT NOT NULL CHECK (reason IN ({_DECISION_REASONS})),
+    policy_version            TEXT NOT NULL CHECK (length(policy_version) > 0),
+    attempt_number            INTEGER NOT NULL CHECK (attempt_number >= 1),
+    required_checks_json      TEXT NOT NULL CHECK (json_valid(required_checks_json)),
+    blocking_conditions_json  TEXT NOT NULL CHECK (json_valid(blocking_conditions_json)),
+    supporting_results_json   TEXT NOT NULL CHECK (json_valid(supporting_results_json)),
+    content_hash              TEXT NOT NULL {_sha256("content_hash")},
+    created_at                TEXT NOT NULL,
+    committed_state_id        TEXT UNIQUE {_uuid("committed_state_id", null=True)}
+                              REFERENCES trusted_states(state_id),
+    CHECK (committed_state_id IS NULL OR decision = 'PROMOTE')
+)""",
+        "CREATE INDEX IF NOT EXISTS ix_promotion_decisions_candidate "
+        "ON promotion_decisions(candidate_id)",
+        # C-163: at most one committed decision per candidate, and one commit decision per state.
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_promotion_decisions_committed_candidate "
+        "ON promotion_decisions(candidate_id) WHERE committed_state_id IS NOT NULL",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_trusted_states_commit_decision "
+        "ON trusted_states(commit_decision_id) WHERE commit_decision_id IS NOT NULL",
+        _trigger(
+            "promotion_decisions_no_delete",
+            "BEFORE DELETE",
+            "promotion_decisions",
+            "DATA-INT-004: a promotion decision is never deleted (DATA-INT-006, Doc 09 §40)",
+            "1",
+        ),
+        _trigger(
+            "promotion_decisions_no_replace",
+            "BEFORE INSERT",
+            "promotion_decisions",
+            "DATA-INT-006: promotion_decisions row already exists; REPLACE would rewrite history",
+            "EXISTS (SELECT 1 FROM promotion_decisions WHERE decision_id = NEW.decision_id)",
+        ),
+        _trigger(
+            "promotion_decisions_insert_rules",
+            "BEFORE INSERT",
+            "promotion_decisions",
+            "DATA-INT-003: a decision's parent_state_id is its candidate's parent_state_id",
+            "NOT EXISTS (SELECT 1 FROM candidates c WHERE c.candidate_id = NEW.candidate_id "
+            "AND c.parent_state_id = NEW.parent_state_id)",
+        ),
+        _trigger(
+            "promotion_decisions_insert_uncommitted",
+            "BEFORE INSERT",
+            "promotion_decisions",
+            "DATA-INT-004: a decision is stored uncommitted; only the commit sets "
+            "committed_state_id",
+            "NEW.committed_state_id IS NOT NULL",
+        ),
+        _trigger(
+            "promotion_decisions_update_identity",
+            "BEFORE UPDATE",
+            "promotion_decisions",
+            "DATA-INT-004: only committed_state_id of a decision changes (DATA-INT-006)",
+            changed,
+        ),
+        _trigger(
+            "promotion_decisions_update_commit",
+            "BEFORE UPDATE",
+            "promotion_decisions",
+            "DATA-INT-004: committed_state_id is set once, from null, for a PROMOTE, to the state "
+            "that names this decision as its commit decision and has the decision's parent",
+            "NEW.committed_state_id IS NOT OLD.committed_state_id AND "
+            "NOT (OLD.committed_state_id IS NULL AND NEW.committed_state_id IS NOT NULL "
+            "AND NEW.decision = 'PROMOTE' AND EXISTS (SELECT 1 FROM trusted_states s "
+            "WHERE s.state_id = NEW.committed_state_id AND s.commit_decision_id = NEW.decision_id "
+            "AND s.parent_state_id = NEW.parent_state_id))",
+        ),
+        # C-38: the schema-5 trigger lacks PROMOTABLE -> ESCALATED. The schema-5 statements stay
+        # as they were, so it is dropped here and created again with every pair of the domain.
+        "DROP TRIGGER IF EXISTS candidates_update_status_pairs",
+        _trigger(
+            "candidates_update_status_pairs",
+            "BEFORE UPDATE",
+            "candidates",
+            "Doc 06 §5, SM-002: illegal candidate status transition",
+            f"NOT ({_pair_condition()})",
+        ),
+    )
+
+
 DDL: tuple[str, ...] = (
     *_TABLES,
     *_triggers(),
     *_EVIDENCE_TABLE_DDL,
     *_evidence_triggers(),
+    *_schema6(),
 )
 
 
@@ -868,14 +998,14 @@ def _refuse_other_versions(conn: sqlite3.Connection, path: Path) -> None:
 
 
 def initialize_database(path: str | Path) -> None:
-    """Create the schema-5 tables and triggers and record the version. Idempotent; creates the
-    parent directory. Refuses a database whose schema version is not 5 and changes nothing then."""
+    """Create the schema-6 tables and triggers and record the version. Idempotent; creates the
+    parent directory. Refuses a database whose schema version is not 6 and changes nothing then."""
     db_path = Path(path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     try:
         with closing(open_connection(db_path)) as conn:
             if conn.execute("SELECT json_valid('[]')").fetchone()[0] != 1:
-                raise PersistenceError("this SQLite build has no JSON1; schema 5 needs it")
+                raise PersistenceError("this SQLite build has no JSON1; schema 6 needs it")
             conn.execute("BEGIN IMMEDIATE")
             try:
                 _refuse_other_versions(conn, db_path)

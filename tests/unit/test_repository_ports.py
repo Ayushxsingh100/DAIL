@@ -49,6 +49,8 @@ EXPECTED: dict[str, set[str]] = {
         "supersedes",
     },
     "AuditRepository": {"append", "get", "list_for_correlation", "list_for_candidate"},
+    # P6b (C-163, C-165)
+    "DecisionRepository": {"save", "get", "for_candidate", "commit"},
     "UnitOfWork": {
         "trusted_states",
         "candidates",
@@ -56,6 +58,7 @@ EXPECTED: dict[str, set[str]] = {
         "invariants",
         "evidence",
         "audit",
+        "decisions",
     },
 }
 
@@ -68,7 +71,7 @@ CONVENIENCE_NAMES = {
     "upsert",
     "set_status",
     "update_status",
-    "save",  # allowed only on PatchRepository, checked below
+    "save",  # allowed only on PatchRepository and DecisionRepository, checked below
 }
 
 
@@ -87,7 +90,9 @@ class TestPortsExist(unittest.TestCase):
     def test_no_port_offers_a_lifecycle_bypass(self) -> None:
         for name in EXPECTED:
             names = public_names(getattr(repositories, name))
-            allowed_save = {"save"} if name == "PatchRepository" else set()
+            # a patch and a promotion decision are not lifecycle objects: a decision changes only
+            # through commit (DATA-INT-004)
+            allowed_save = {"save"} if name in ("PatchRepository", "DecisionRepository") else set()
             with self.subTest(port=name):
                 self.assertEqual((names & CONVENIENCE_NAMES) - allowed_save, set())
 

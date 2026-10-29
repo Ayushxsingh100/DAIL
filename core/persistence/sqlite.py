@@ -36,10 +36,14 @@ is a duplicate and any other difference raises (A6, Doc 11 §38); every read reb
 domain constructors and cross-checks the columns (A4). A validity transition is checked by
 ``check_transition`` (C-52) and appends its EVIDENCE_VALIDITY_CHANGED event in the same step.
 
-``checkpoint`` is a test-only fault-injection seam. If given, it is called with a name at four
-points of a state write and of the commit: ``"after_trusted_state_insert"``,
-``"after_invariant_refs_insert"``, ``"after_lineage_head_update"`` and ``"before_commit"``.
-Production code passes ``None``.
+``checkpoint`` is a test-only fault-injection seam. If given, it is called with a name at seven
+points of a promotion: ``"after_trusted_state_insert"``, ``"after_invariant_refs_insert"``,
+``"after_lineage_head_update"``, ``"before_commit"``, and (P6b) ``"after_decision_insert"``,
+``"after_candidate_update"`` and ``"after_decision_commit"``. Production code passes ``None``.
+
+Promotion decisions (P6b, schema 6) are stored uncommitted; ``commit`` is their one change, from no
+state to the state they created (DATA-INT-004), and a repeat of a stored decision with identical
+content changes nothing (C-163).
 """
 
 from __future__ import annotations
@@ -92,10 +96,12 @@ from core.domain.evidence import (
     validity_changed_payload,
 )
 from core.domain.hashing import canonical_json
+from core.domain.ids import require_uuid
 from core.domain.invariant import Invariant, InvariantRef
 from core.domain.jsonvalue import iso_utc, parse_enum, parse_utc
 from core.domain.lifecycle import check_candidate_transition
 from core.domain.patch import Patch
+from core.domain.promotion import ConflictingDuplicateError, PromotionDecision
 from core.domain.repositories import UnitOfWork
 from core.domain.resource import Resource
 from core.domain.state import CandidateState, TrustedState
@@ -107,6 +113,13 @@ CHECKPOINTS = (
     "after_lineage_head_update",
     "before_commit",
 )
+# P6b: the points of the decision repository and of a candidate update (next to the four above)
+DECISION_CHECKPOINTS = (
+    "after_decision_insert",
+    "after_candidate_update",
+    "after_decision_commit",
+)
+ALL_CHECKPOINTS = (*CHECKPOINTS, *DECISION_CHECKPOINTS)
 
 _CANDIDATE_IDENTITY = (
     "candidate_id",
@@ -644,6 +657,7 @@ class _Candidates:
                 raise PersistenceError(
                     f"save_transition: candidate {new.candidate_id} is no longer {old.status}"
                 )
+            self._s.hit("after_candidate_update")
             if building_to_ready:
                 for resource in new.resources:
                     _store_resource(conn, resource)
@@ -685,6 +699,146 @@ class _Candidates:
                     "the lineage's current state was not promoted from this candidate's parent "
                     "with its resources; run save_promoted first in the same unit of work",
                 )
+
+
+# --- promotion decisions -----------------------------------------------------------------------
+
+_DECISION_COLUMNS = (
+    "decision_id, candidate_id, parent_state_id, decision, reason, policy_version, attempt_number, "
+    "required_checks_json, blocking_conditions_json, supporting_results_json, content_hash, "
+    "created_at, committed_state_id"
+)
+
+
+def _decision_from_row(row: sqlite3.Row) -> PromotionDecision:
+    """The column ``content_hash`` is the hash of the decision as it was stored, uncommitted; the
+    commit changes only ``committed_state_id``, so a committed decision is rebuilt from the stored
+    one and then committed again in the domain, which recomputes its own hash."""
+    what = f"promotion decision {row['decision_id']}"
+    data = {
+        "decision_id": row["decision_id"],
+        "candidate_id": row["candidate_id"],
+        "parent_state_id": row["parent_state_id"],
+        "decision": row["decision"],
+        "reason": row["reason"],
+        "policy_version": row["policy_version"],
+        "attempt_number": row["attempt_number"],
+        "required_checks": _loads(row["required_checks_json"], what),
+        "blocking_conditions": _loads(row["blocking_conditions_json"], what),
+        "supporting_results": _loads(row["supporting_results_json"], what),
+        "created_at": row["created_at"],
+        "committed_state_id": None,
+        "content_hash": row["content_hash"],
+    }
+    decision = _rebuild(what, PromotionDecision.from_dict, data)
+    if row["committed_state_id"] is not None:
+        stored = decision
+        decision = _rebuild(what, lambda _: stored.committed(row["committed_state_id"]), None)
+    _require_equal(
+        what,
+        dict(row),
+        {
+            "candidate_id": decision.candidate_id,
+            "parent_state_id": decision.parent_state_id,
+            "decision": decision.decision.value,
+            "reason": decision.reason.value,
+            "policy_version": decision.policy_version,
+            "attempt_number": decision.attempt_number,
+            "committed_state_id": decision.committed_state_id,
+        },
+    )
+    return decision
+
+
+def _same_decision(stored: PromotionDecision, incoming: PromotionDecision) -> bool:
+    """Identical in content (the hash excludes the id and the clock): an uncommitted repeat of a
+    decision that has since been committed is the same decision (C-163)."""
+    if stored.content_hash == incoming.content_hash:
+        return True
+    return (
+        stored.committed_state_id is not None
+        and incoming.committed_state_id is None
+        and incoming.committed(stored.committed_state_id).content_hash == stored.content_hash
+    )
+
+
+class _Decisions:
+    def __init__(self, session: _Session) -> None:
+        self._s = session
+
+    def save(self, decision: PromotionDecision) -> None:
+        if not isinstance(decision, PromotionDecision):
+            raise DomainValidationError("save: expected a PromotionDecision")
+        if decision.committed_state_id is not None:
+            raise DomainValidationError(
+                "save: a decision is stored uncommitted; only commit sets its state (DATA-INT-004)"
+            )
+        with _guard("save promotion decision"), self._s.atomic():
+            existing = self.get(decision.decision_id)
+            if existing is not None:
+                if _same_decision(existing, decision):
+                    return
+                raise ConflictingDuplicateError(
+                    f"decision {decision.decision_id} was already stored with different content "
+                    "(C-163, Doc 09 §38)"
+                )
+            self._s.conn.execute(
+                f"INSERT INTO promotion_decisions ({_DECISION_COLUMNS}) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)",
+                (
+                    decision.decision_id,
+                    decision.candidate_id,
+                    decision.parent_state_id,
+                    decision.decision.value,
+                    decision.reason.value,
+                    decision.policy_version,
+                    decision.attempt_number,
+                    canonical_json([c.to_dict() for c in decision.required_checks]),
+                    canonical_json([c.to_dict() for c in decision.blocking_conditions]),
+                    canonical_json(list(decision.supporting_results)),
+                    decision.content_hash,
+                    iso_utc(decision.created_at),
+                ),
+            )
+            self._s.hit("after_decision_insert")
+
+    def get(self, decision_id: str) -> PromotionDecision | None:
+        with _guard("read promotion decision"):
+            row = self._s.conn.execute(
+                f"SELECT {_DECISION_COLUMNS} FROM promotion_decisions WHERE decision_id = ?",
+                (decision_id,),
+            ).fetchone()
+        return None if row is None else _decision_from_row(row)
+
+    def for_candidate(self, candidate_id: str) -> tuple[PromotionDecision, ...]:
+        with _guard("list promotion decisions"):
+            rows = self._s.conn.execute(
+                f"SELECT {_DECISION_COLUMNS} FROM promotion_decisions WHERE candidate_id = ? "
+                "ORDER BY rowid",
+                (candidate_id,),
+            ).fetchall()
+        return tuple(_decision_from_row(row) for row in rows)
+
+    def commit(self, decision_id: str, state_id: str) -> PromotionDecision:
+        require_uuid(decision_id, "commit.decision_id")
+        require_uuid(state_id, "commit.state_id")
+        with _guard("commit promotion decision"), self._s.atomic():
+            stored = self.get(decision_id)
+            if stored is None:
+                raise PersistenceError(f"commit: decision {decision_id} not found")
+            expected = stored.committed(state_id)  # DomainValidationError: not a fresh PROMOTE
+            moved = self._s.conn.execute(
+                "UPDATE promotion_decisions SET committed_state_id = ? "
+                "WHERE decision_id = ? AND committed_state_id IS NULL",
+                (state_id, decision_id),
+            )
+            if moved.rowcount != 1:
+                raise PersistenceError(f"commit: decision {decision_id} is no longer uncommitted")
+            self._s.hit("after_decision_commit")
+            done = self.get(decision_id)
+        if done != expected:
+            raise PersistenceError(f"commit: decision {decision_id} reads back differently")
+        return done
 
 
 # --- patches and invariants --------------------------------------------------------------------
@@ -1339,6 +1493,7 @@ class SqliteUnitOfWork:
         self._invariants: _Invariants | None = None
         self._evidence: _Evidence | None = None
         self._audit: _Audit | None = None
+        self._decisions: _Decisions | None = None
 
     def __enter__(self) -> SqliteUnitOfWork:
         if self._session is not None:
@@ -1376,6 +1531,7 @@ class SqliteUnitOfWork:
         audit = _Audit(session)
         self._audit = audit
         self._evidence = _Evidence(session, audit)
+        self._decisions = _Decisions(session)
         return self
 
     def __exit__(
@@ -1409,6 +1565,7 @@ class SqliteUnitOfWork:
             self._invariants = None
             self._evidence = None
             self._audit = None
+            self._decisions = None
 
     @staticmethod
     def _rollback(conn: sqlite3.Connection) -> None:
@@ -1443,6 +1600,10 @@ class SqliteUnitOfWork:
     @property
     def audit(self) -> _Audit:
         return self._open(self._audit)
+
+    @property
+    def decisions(self) -> _Decisions:
+        return self._open(self._decisions)
 
 
 def _as_port(uow: SqliteUnitOfWork) -> UnitOfWork:

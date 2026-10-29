@@ -20,7 +20,7 @@ PASS = "PASS"
 FAIL = "FAIL"
 SKIPPED = "SKIPPED"
 
-# Every table created by initialize_database() (core/persistence/schema.py, schema version 5).
+# Every table created by initialize_database() (core/persistence/schema.py, schema version 6).
 # tests/unit/test_health.py checks this constant against the real DDL.
 EXPECTED_TABLES: frozenset[str] = frozenset(
     {
@@ -41,6 +41,8 @@ EXPECTED_TABLES: frozenset[str] = frozenset(
         "evidence_validity_transitions",
         "evidence_supersessions",
         "audit_events",
+        # core/persistence/schema.py, schema 6 (P6b)
+        "promotion_decisions",
     }
 )
 
