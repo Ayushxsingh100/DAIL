@@ -324,6 +324,30 @@ class TestDecisionTriggers(DecisionCase):
             "DATA-INT-004",
         )
 
+    def test_at_most_one_committed_decision_per_candidate(self) -> None:
+        # C-163: two decisions of one candidate cannot both be committed. The triggers are dropped
+        # (an attacker with file access can), so only the unique partial index is left to refuse.
+        first = make_decision(self.promotable)  # uid(4001), the id the helper promotes with
+        second = make_decision(self.promotable, decision_id=uid(4002), n=2)
+        self.insert_raw(first)
+        self.insert_raw(second)
+        state = self.commit_state()
+        self.tamper(
+            "UPDATE promotion_decisions SET committed_state_id = ? WHERE decision_id = ?",
+            (state.state_id, first.decision_id),
+        )
+        self.tamper(
+            "INSERT INTO trusted_states (state_id, lineage_id, version, parent_state_id, "
+            "state_hash, commit_decision_id, content_json) SELECT ?, lineage_id, 7, "
+            "parent_state_id, state_hash, ?, content_json FROM trusted_states WHERE state_id = ?",
+            (uid(4300), second.decision_id, state.state_id),
+        )
+        self.abort(
+            "UPDATE promotion_decisions SET committed_state_id = ? WHERE decision_id = ?",
+            (uid(4300), second.decision_id),
+            "UNIQUE constraint failed: promotion_decisions.candidate_id",
+        )
+
     def test_a_promoted_state_needs_no_decision_row_at_the_database(self) -> None:
         # C-168, decision (b): the reverse direction is enforced by commit_promotion, not here
         self.commit_state()
