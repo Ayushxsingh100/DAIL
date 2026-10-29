@@ -383,12 +383,21 @@ class InvariantProof:
         )
 
     @classmethod
-    def carry_forward(cls, parent_ref: InvariantRef, candidate: object) -> InvariantProof:
+    def carry_forward(
+        cls, parent_ref: InvariantRef, candidate: object, impact: object
+    ) -> InvariantProof:
         """The proof of an invariant that the candidate leaves as the current state has it
         (origin CARRIED_FORWARD). Status, evidence and verification time are copied unchanged, so a
         VIOLATED or UNCERTAIN reference stays that way. A PROTECTED reference must still satisfy
-        proof, i.e. must not be invalidated (C-40). Whether carrying forward is permitted for an
-        invariant the candidate affects is P6 policy (C-22)."""
+        proof, i.e. must not be invalidated (C-40).
+
+        C-45: the impact report of exactly this candidate and parent must say that the invariant is
+        unaffected and that its prior evidence is eligible (``carry_forward_ok``, C-141). An
+        affected, uncertain or unmentioned invariant, or a report that is for another candidate or
+        parent, is for another version, or no longer recomputes its hash, is refused: a regression
+        cannot hide behind the parent's old evidence. Whether the policy permits carrying forward at
+        all is decided by the Promotion Controller (C-22, C-159)."""
+        from core.domain.impact import ImpactReport
         from core.domain.state import CandidateState
 
         if not isinstance(parent_ref, InvariantRef):
@@ -401,6 +410,22 @@ class InvariantProof:
             raise DomainValidationError(
                 "C-40: the reference belongs to state "
                 f"{parent_ref.state_id}, not the candidate's parent {candidate.parent_state_id}"
+            )
+        if not isinstance(impact, ImpactReport):
+            raise DomainValidationError(
+                "C-45: carry_forward needs the ImpactReport of this candidate and parent"
+            )
+        if not impact.carry_forward_ok(
+            parent_ref.invariant_id,
+            parent_ref.invariant_version,
+            candidate_id=candidate.candidate_id,
+            parent_state_id=candidate.parent_state_id,
+        ):
+            raise DomainValidationError(
+                f"C-45: the impact report does not allow carrying {parent_ref.invariant_id} "
+                f"(version {parent_ref.invariant_version}) forward: it is affected, uncertain, "
+                "unmentioned or without eligible evidence, or the report is not for this "
+                "candidate and parent, or its hash no longer recomputes"
             )
         if parent_ref.status is InvariantStatus.PROTECTED and not parent_ref.can_satisfy_proof():
             raise DomainValidationError(
