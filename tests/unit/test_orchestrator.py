@@ -470,6 +470,41 @@ class TestTheStaleRoute(OrchestratorCase):
         self.assertEqual(chain.evidence_kinds()[:4], ["STATE", "IDENTITY", "DEPENDENCY", "IMPACT"])
 
 
+class TestTheParentMovesWhileDeciding(OrchestratorCase):
+    """The window between ``decide`` and ``record_decision``: another promotion lands there, and
+    ``record_decision`` refuses a PROMOTE for a candidate whose parent is no longer current
+    (SM-010).
+    The orchestrator turns that refusal into what Doc 09 §25 and Doc 06 §27 require: a stale
+    rejection, with the state unchanged; it does not let the refusal escape."""
+
+    def test_a_promotion_that_lands_between_decide_and_record_decision(self) -> None:
+        import core.application.orchestrator as module
+
+        v0 = self.baseline().state
+        late = self.request(v0, PATCH_SAFE_DIR, n=2)
+        real = module.decide
+        landed: list[Any] = []
+
+        def decide_then_let_another_promotion_land(*args: Any, **kwargs: Any) -> Any:
+            outcome = real(*args, **kwargs)
+            if not landed:
+                landed.append(None)  # first: the nested evaluation passes through here as well
+                landed[0] = self.orchestrator().evaluate(self.request(v0, PATCH_SAFE_DIR, n=1))
+            return outcome
+
+        with mock.patch.object(module, "decide", decide_then_let_another_promotion_land):
+            result = self.evaluate(late)
+        self.assertEqual(landed[0].kind, ResultKind.PROMOTED)
+        self.assertIs(result.kind, ResultKind.STALE)
+        assert result.decision is not None
+        self.assertIs(result.decision.reason, DecisionReason.STALE_PARENT)
+        self.assertEqual(self.current(), landed[0].state)
+        self.assertEqual(self.count("trusted_states"), 2)
+        self.assertIs(result.candidate.status, CandidateStatus.REJECTED)
+        with self.uow() as u:
+            self.assertEqual(describe_chain(u, late.candidate_id).problems(), [])
+
+
 class TestIdempotency(OrchestratorCase):
     def test_the_same_request_again_writes_nothing(self) -> None:
         v0 = self.baseline().state

@@ -49,7 +49,7 @@ from core.dependency.build import build_graph
 from core.dependency.invariants import SemanticBinding
 from core.domain.audit import AuditEventType
 from core.domain.enums import CandidateSource, CandidateStatus, DecisionType
-from core.domain.errors import DomainValidationError
+from core.domain.errors import DomainValidationError, StaleParentError
 from core.domain.hashing import content_hash
 from core.domain.ids import require_uuid
 from core.domain.impact import ImpactReport
@@ -395,7 +395,7 @@ class _Run:
         )
         self._passed("after_verification")
         self.stage = "decision"
-        return self._decide(current, impact, report, evidence_ids, at)
+        return self._decide(impact, report, evidence_ids, at)
 
     # --- the candidate -------------------------------------------------------------------------
 
@@ -570,9 +570,43 @@ class _Run:
 
     # --- decide, record, commit ----------------------------------------------------------------
 
+    def _current(self) -> TrustedState:
+        with self.o._factory() as uow:
+            current = uow.trusted_states.get_current(self.r.lineage_id)
+        if current is None:
+            raise EvaluationInputError(f"lineage {self.r.lineage_id} has no current state")
+        return current
+
+    def _decision(
+        self,
+        candidate: CandidateState,
+        impact: ImpactReport,
+        report: VerificationReport,
+        policy: PromotionPolicy,
+        at: datetime,
+    ) -> tuple[DecisionOutcome, bool]:
+        """``decide`` against the current state as it is now. When the candidate's parent is not
+        that state it is stale and ``decide`` says so (Doc 09 §25) under the derived id of the
+        stale rejection, the one P6b gives the loser of a race (C-166)."""
+        r = self.r
+        current = self._current()
+        stale = current.state_id != candidate.parent_state_id
+        base_id = oids.decision_id_for(self._cid, r.attempt_number)
+        outcome = decide(
+            candidate,
+            current,
+            impact,
+            report,
+            policy,
+            decision_id=pids.rejection_decision_id_for(base_id) if stale else base_id,
+            now=at,
+            attempt_number=r.attempt_number,
+            oracle_verdicts=r.oracle_verdicts,
+        )
+        return outcome, stale
+
     def _decide(
         self,
-        current: TrustedState,
         impact: ImpactReport,
         report: VerificationReport,
         evidence_ids: Mapping[str, str],
@@ -580,29 +614,23 @@ class _Run:
     ) -> EvaluationResult:
         r, o = self.r, self.o
         candidate = self._stored()
-        base_id = oids.decision_id_for(self._cid, r.attempt_number)
-        stale_id = pids.rejection_decision_id_for(base_id)
         if candidate.status in _TERMINAL:
             return self._stored_result(candidate, impact, report, evidence_ids)
-        stale = current.state_id != candidate.parent_state_id
         policy = o._policy_factory(
             policy_version=o._policy_version,
             invariants=r.definitions,
             automatic_enabled=o._automatic,
         )
-        outcome = decide(
-            candidate,
-            current,
-            impact,
-            report,
-            policy,
-            decision_id=stale_id if stale else base_id,
-            now=at,
-            attempt_number=r.attempt_number,
-            oracle_verdicts=r.oracle_verdicts,
-        )
-        with o._factory() as uow:
-            moved = record_decision(uow, outcome, candidate, r.context, now=at)
+        outcome, stale = self._decision(candidate, impact, report, policy, at)
+        try:
+            with o._factory() as uow:
+                moved = record_decision(uow, outcome, candidate, r.context, now=at)
+        except StaleParentError:
+            # Another promotion landed between decide and record_decision: the head only moves
+            # forward, so deciding again can only give the stale rejection (Doc 06 §27).
+            outcome, stale = self._decision(candidate, impact, report, policy, at)
+            with o._factory() as uow:
+                moved = record_decision(uow, outcome, candidate, r.context, now=at)
         self.candidate = moved
         self._passed("after_decision")
         kind = _KIND_OF_DECISION[outcome.decision.decision]
