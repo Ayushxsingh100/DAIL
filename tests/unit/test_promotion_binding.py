@@ -78,14 +78,30 @@ class BindingCase(CommitCase):
 
     def store_variant(self, which: str, **payload_changes: Any) -> str:
         """A second VERIFICATION record for the same result, with some payload keys changed."""
-        original = self.evidence_of(which)
+        return self.forged_copy(
+            self.evidence_of(which), uid(8950 + len(payload_changes)), **payload_changes
+        )
+
+    def forged_copy(
+        self,
+        original: str,
+        new_id: str,
+        *,
+        state_hash: str | None = None,
+        **payload_changes: Any,
+    ) -> str:
+        """A readable copy of a stored record under a new id, with some payload keys and perhaps
+        its ``state_hash`` changed. It is built whole (the columns agree with the content), so the
+        adapter reads it; the triggers that would refuse it are dropped first, the way an attacker
+        with file access would."""
+        self.tamper("SELECT 1")
         with self.uow() as u:
             event = u.evidence.get(original)
             assert event is not None
             payload = dict(u.evidence.resolve(ArtifactRef.parse(event.payload_ref)))
             variant = EvidenceSubmission.create(
                 payload={**payload, **payload_changes},
-                evidence_id=uid(8950 + len(payload_changes)),
+                evidence_id=new_id,
                 run_id=event.run_id,
                 attempt_id=event.attempt_id,
                 correlation_id=event.correlation_id,
@@ -94,9 +110,10 @@ class BindingCase(CommitCase):
                 event_name=event.event_name,
                 provenance=event.provenance,
                 created_at=event.created_at,
+                state_id=event.state_id,
                 candidate_id=event.candidate_id,
                 parent_state_id=event.parent_state_id,
-                state_hash=event.state_hash,
+                state_hash=state_hash or event.state_hash,
             )
             u.evidence.append(variant)
         return variant.event.evidence_id
@@ -213,6 +230,15 @@ class TestVerifiedSources(BindingCase):
         found = self.with_variant(FUNC1, result="FAIL")
         self.assertTrue(any("'result'" in p or "result is not" in p for p in found), found)
 
+    def test_a_readable_record_with_another_state_hash_is_not_proof(self) -> None:
+        # P6 of evaluate_proof: the record is whole and readable; only its hash is not the
+        # candidate's
+        original = self.evidence_of(SEC1)
+        forged = self.forged_copy(original, uid(8960), state_hash="7" * 64)
+        mapped = {**self.evidence_ids, self.entry(SEC1).verification_id or "": forged}
+        found = self.problems(evidence_ids=mapped)
+        self.assertTrue(any("P6" in p for p in found), found)
+
     def test_a_record_of_another_candidate_hash(self) -> None:
         found = self.with_variant(SEC1, candidate_hash="0" * 64)
         self.assertTrue(any("candidate_hash" in p for p in found), found)
@@ -274,6 +300,20 @@ class TestCarriedSources(BindingCase):
         )
         found = self.problems()
         self.assertGreaterEqual(len(found), 1)
+
+    def test_a_readable_baseline_record_with_another_state_hash_is_not_proof(self) -> None:
+        carried = self.entry(SEC2)
+        forged = self.forged_copy(carried.evidence_ids[0], uid(8961), state_hash="7" * 64)
+        data = self.world.trusted.to_dict()
+        for ref in data["invariant_refs"]:
+            if ref["invariant_id"] == SEC2:
+                ref["evidence_ids"] = [forged]
+        data["evidence_refs"] = sorted({*data["evidence_refs"], forged})
+        parent = TrustedState.from_dict(data)
+        swapped = dataclasses.replace(carried, evidence_ids=(forged,))
+        plan = tuple(swapped if e is carried else e for e in self.plan)
+        found = self.problems(plan=plan, parent=parent)
+        self.assertTrue(any("P6" in p for p in found), found)
 
     def test_a_baseline_record_with_another_state_hash(self) -> None:
         evidence_id = self.entry(SEC3).evidence_ids[0]

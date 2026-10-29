@@ -42,6 +42,7 @@ from core.domain.enums import DecisionType, InvariantStatus, ProofOrigin
 from core.domain.errors import DomainValidationError
 from core.domain.evidence import ArtifactRef, EvidenceKind
 from core.domain.promotion import ConflictingDuplicateError, DecisionReason, ProofSource
+from core.persistence.sqlite import SqliteUnitOfWork
 from core.promotion import ids
 from core.promotion.commit import (
     PromotionCommitError,
@@ -497,6 +498,78 @@ class TestInfrastructureFailure(CommitCase):
             ]
         self.assertEqual(len(failed), 1)
         self.assertEqual(failed[0].event_id, ids.failure_event_id_for(DECISION, "INFRASTRUCTURE"))
+
+
+class _Spy:
+    """A repository that logs each write call before it makes it."""
+
+    WRITES = frozenset({"save", "append", "save_promoted", "save_transition", "commit"})
+
+    def __init__(self, name: str, real: Any, log: list[str]) -> None:
+        self._name = name
+        self._real = real
+        self._log = log
+
+    def __getattr__(self, attr: str) -> Any:
+        member = getattr(self._real, attr)
+        if attr not in self.WRITES:
+            return member
+
+        def logged(*args: Any, **kwargs: Any) -> Any:
+            detail = ""
+            if self._name == "audit":
+                detail = ":" + args[0].event_type.value
+            elif self._name == "evidence":
+                detail = ":" + args[0].event.event_name
+            self._log.append(f"{self._name}.{attr}{detail}")
+            return member(*args, **kwargs)
+
+        return logged
+
+
+class TestOrderOfWrites(CommitCase):
+    """Appendix B, in the order of the commit: the decision, then its event, the binding record,
+    the state with the lineage head, the decision committed to the state, the candidate PROMOTED,
+    and last the STATE_PROMOTED event (nothing says the state is promoted before it is)."""
+
+    def test_the_writes_are_made_in_the_order_of_the_commit(self) -> None:
+        log: list[str] = []
+        path = self.path
+
+        class Watching(SqliteUnitOfWork):
+            @property
+            def trusted_states(self) -> Any:
+                return _Spy("trusted_states", super().trusted_states, log)
+
+            @property
+            def candidates(self) -> Any:
+                return _Spy("candidates", super().candidates, log)
+
+            @property
+            def decisions(self) -> Any:
+                return _Spy("decisions", super().decisions, log)
+
+            @property
+            def evidence(self) -> Any:
+                return _Spy("evidence", super().evidence, log)
+
+            @property
+            def audit(self) -> Any:
+                return _Spy("audit", super().audit, log)
+
+        self.commit(outcome=run(self.world), opener=lambda: Watching(path))
+        self.assertEqual(
+            log,
+            [
+                "decisions.save",
+                "audit.append:PROMOTION_DECIDED",
+                "evidence.append:promotion.committed",
+                "trusted_states.save_promoted",
+                "decisions.commit",
+                "candidates.save_transition",
+                "audit.append:STATE_PROMOTED",
+            ],
+        )
 
 
 class TestChainOfCarryForward(CommitCase):
