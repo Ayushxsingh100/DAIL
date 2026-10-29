@@ -42,6 +42,7 @@ from core.domain.enums import DecisionType, InvariantStatus, ProofOrigin
 from core.domain.errors import DomainValidationError
 from core.domain.evidence import ArtifactRef, EvidenceKind
 from core.domain.promotion import ConflictingDuplicateError, DecisionReason, ProofSource
+from core.domain.state import TrustedState
 from core.persistence.sqlite import SqliteUnitOfWork
 from core.promotion import ids
 from core.promotion.commit import (
@@ -443,6 +444,24 @@ class TestRevalidation(CommitCase):
             ("2" * 64, evidence_id),
         )
         self.assert_escalated(self.commit(outcome=self.outcome))
+
+    def test_a_carried_reference_whose_evidence_is_not_the_one_decided_on(self) -> None:
+        # The decision was made against a copy of v0 whose INV-SEC-002 reference named other
+        # evidence (the state hash does not depend on evidence ids, C-33). The database's v0 names
+        # the stored seed evidence, so deciding again gives the same decision on a different proof
+        # plan: what was decided is not what would be committed (C-167).
+        data = self.world.trusted.to_dict()
+        for ref in data["invariant_refs"]:
+            if ref["invariant_id"] == SEC2:
+                ref["evidence_ids"] = [uid(4300)]
+        data["evidence_refs"] = sorted({*data["evidence_refs"], uid(4300)})
+        decided_on = TrustedState.from_dict(data)
+        outcome = run(dataclasses.replace(self.world, trusted=decided_on))
+        self.assertIs(outcome.decision.decision, D.PROMOTE)
+        again = run(self.world, decision_id=outcome.decision.decision_id)
+        self.assertEqual(outcome.decision.content_hash, again.decision.content_hash)
+        self.assertNotEqual(outcome.proof_plan, again.proof_plan)
+        self.assert_escalated(self.commit(outcome=outcome))
 
     def test_the_candidate_must_still_be_promotable(self) -> None:
         self.tamper(
