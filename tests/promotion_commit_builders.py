@@ -19,7 +19,7 @@ from contextlib import closing
 from pathlib import Path
 from typing import Any
 
-from core.domain.enums import CandidateStatus
+from core.domain.enums import CandidateStatus, VerificationResult
 from core.domain.repositories import UnitOfWork
 from core.domain.state import CandidateState, TrustedState, transition_candidate
 from core.promotion import ids
@@ -30,6 +30,7 @@ from tests.persistence_builders import RepoCase, seed_evidence, stages
 from tests.promotion_builders import (
     BASELINE_ITEM,
     FUNC1,
+    PASS,
     SEC1,
     SEC2,
     SEC3,
@@ -154,7 +155,14 @@ class CommitCase(RepoCase):
             events = u.audit.list_for_candidate(self.world.candidate.candidate_id)
         return [e.event_type.value for e in events]
 
-    def next_world(self, state: TrustedState, *, sequence: int = 2, n: int = 2) -> World:
+    def next_world(
+        self,
+        state: TrustedState,
+        *,
+        sequence: int = 2,
+        n: int = 2,
+        func_result: VerificationResult = PASS,
+    ) -> World:
         """A second candidate from ``state`` (a promoted state): INV-FUNC-001 is affected, the other
         three are unaffected with eligible evidence."""
         from tests.domain_builders import analyzing_candidate, canonical_resources
@@ -171,7 +179,7 @@ class CommitCase(RepoCase):
         records = [
             record(candidate, "STRUCTURAL", n=1),
             record(candidate, "CONSISTENCY", n=2),
-            record(candidate, target(FUNC1), definition=definition, n=3),
+            record(candidate, target(FUNC1), func_result, definition=definition, n=3),
             record(candidate, BASELINE_ITEM, n=4),
         ]
         return dataclasses.replace(
@@ -279,7 +287,8 @@ class Runner(threading.Thread):
 def check_database(path: str | Path) -> list[str]:
     """The structural rules of promoted history, read from the file with plain SQL: every problem
     found (an empty list means none). Used by the concurrency, fault and property tests; each rule
-    is shown to fire on a database that breaks it (``test_promotion_checker``)."""
+    is shown to fire on a database that breaks it
+    (``test_promotion_properties6.TestTheCheckerFires``)."""
     problems: list[str] = []
     with closing(sqlite3.connect(path)) as conn:
         states = {
@@ -325,6 +334,9 @@ def check_database(path: str | Path) -> list[str]:
         ).fetchall()
         for state_id, _ in owners:
             decision = states[state_id][4]
+            if decision is None:
+                problems.append(f"{state_id}: a promoted state without a decision")
+                continue
             binding = ids.evidence_id_for(decision)
             rows = conn.execute(
                 "SELECT state_id, event_name FROM evidence_events WHERE evidence_id = ?",
@@ -391,3 +403,19 @@ def check_database(path: str | Path) -> list[str]:
         if promoted != has_commit:
             problems.append("a candidate is PROMOTED without a committed decision, or the reverse")
     return problems
+
+
+def dump(path: str | Path) -> dict[str, list[tuple[Any, ...]]]:
+    """Every row of every table of the file, in insertion order: two dumps are equal exactly when
+    nothing was written in between."""
+    with closing(sqlite3.connect(path)) as conn:
+        tables = [
+            r[0]
+            for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name"
+            )
+        ]
+        return {
+            name: [tuple(row) for row in conn.execute(f"SELECT * FROM {name} ORDER BY rowid")]
+            for name in tables
+        }
