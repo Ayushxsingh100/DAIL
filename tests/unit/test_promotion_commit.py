@@ -51,7 +51,6 @@ from core.promotion.commit import (
 )
 from tests.domain_builders import uid
 from tests.promotion_builders import (
-    BASELINE_ITEM,
     ERROR,
     FAIL,
     FUNC1,
@@ -324,9 +323,10 @@ class TestStaleParent(CommitCase):
         # candidate A promotes; candidate B, built from the same parent, then tries
         winner = self.commit(outcome=run(self.world))
         assert winner.state is not None
-        rival_world = make_world(candidate_status=CS.PROMOTABLE)  # same ids: not usable as B
-        other = self.rival_candidate()
-        result = self.commit(other, outcome=run(other, decision_id=uid(9200)))
+        other, evidence = self.rival()
+        result = self.commit(
+            other, outcome=run(other, decision_id=uid(9200)), evidence_ids=evidence
+        )
         self.assertTrue(result.stale)
         self.assertIsNone(result.state)
         self.assertIs(result.decision.decision, D.REJECT)
@@ -336,53 +336,13 @@ class TestStaleParent(CommitCase):
         self.assertEqual(self.current().state_id, winner.state.state_id)
         self.assertEqual(self.count("trusted_states"), 2)
         self.assertEqual(self.count("promotion_decisions", "committed_state_id IS NOT NULL"), 1)
-        self.assertIsNotNone(rival_world)
-
-    def rival_candidate(self) -> Any:
-        """A second PROMOTABLE candidate of v0 (sequence 2), stored beside the first."""
-        from tests.domain_builders import analyzing_candidate, canonical_resources
-
-        candidate = analyzing_candidate(
-            self.world.trusted,
-            canonical_resources(ssh_open=False, db_path=True),
-            sequence=2,
-            n=2,
-        )
-        other = make_world(candidate_status=CS.PROMOTABLE)
-        other = dataclasses.replace(other, trusted=self.world.trusted, candidate=candidate)
-        from core.domain.state import transition_candidate
-        from tests.promotion_builders import impact_for, record, report_of
-
-        promotable = transition_candidate(candidate, CS.PROMOTABLE)
-        records = [
-            record(promotable, "STRUCTURAL", n=1),
-            record(promotable, "CONSISTENCY", n=2),
-            record(promotable, target(SEC1), definition=self.world.definitions[SEC1], n=3),
-            record(promotable, target(FUNC1), definition=self.world.definitions[FUNC1], n=4),
-            record(promotable, BASELINE_ITEM, n=5),
-        ]
-        other = dataclasses.replace(
-            other,
-            candidate=promotable,
-            impact=impact_for(
-                self.world.trusted,
-                promotable,
-                affected=(SEC1, FUNC1),
-                carry=(SEC2, SEC3),
-            ),
-            verification=report_of(promotable, records),
-            records={r.target_id: r for r in records},
-        )
-        self.store_candidate(other, n=2, sequence=2)
-        self.evidence_ids = {**self.evidence_ids, **self.store_results(other, first=40)}
-        return other
 
     def test_a_loser_is_not_committed_twice(self) -> None:
         self.commit(outcome=run(self.world))
-        other = self.rival_candidate()
+        other, evidence = self.rival()
         outcome = run(other, decision_id=uid(9200))
-        first = self.commit(other, outcome=outcome)
-        again = self.commit(other, outcome=outcome)
+        first = self.commit(other, outcome=outcome, evidence_ids=evidence)
+        again = self.commit(other, outcome=outcome, evidence_ids=evidence)
         self.assertTrue(first.stale and again.stale)
         self.assertEqual(self.count("promotion_decisions", "decision = 'REJECT'"), 1)
         self.assertEqual(self.candidate_status(other.candidate.candidate_id), "REJECTED")

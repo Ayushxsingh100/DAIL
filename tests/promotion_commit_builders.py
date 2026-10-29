@@ -11,12 +11,18 @@ work on the file (with an optional fault-injection checkpoint).
 from __future__ import annotations
 
 import dataclasses
+import sqlite3
+import threading
+from collections import Counter
 from collections.abc import Callable
+from contextlib import closing
+from pathlib import Path
 from typing import Any
 
 from core.domain.enums import CandidateStatus
 from core.domain.repositories import UnitOfWork
-from core.domain.state import CandidateState, TrustedState
+from core.domain.state import CandidateState, TrustedState, transition_candidate
+from core.promotion import ids
 from core.promotion.commit import CommitResult, PromotionContext, commit_promotion
 from core.verification.engine import to_evidence_submission
 from tests.domain_builders import at, patch_for, uid
@@ -175,3 +181,212 @@ class CommitCase(RepoCase):
             verification=report_of(candidate, records),
             records={r.target_id: r for r in records},
         )
+
+    def rival(
+        self, *, sequence: int = 2, n: int = 2, first: int = 40
+    ) -> tuple[World, dict[str, str]]:
+        """A second PROMOTABLE candidate of the same parent, stored beside the first, with its
+        verification evidence; returns its world and its own ``verification_id -> evidence_id``
+        map (kept apart from ``self.evidence_ids``, because two candidates' results can share a
+        verification id)."""
+        from tests.domain_builders import analyzing_candidate, canonical_resources
+
+        trusted = self.world.trusted
+        analyzing = analyzing_candidate(
+            trusted, canonical_resources(ssh_open=False, db_path=True), sequence=sequence, n=n
+        )
+        promotable = transition_candidate(analyzing, CandidateStatus.PROMOTABLE)
+        definitions = self.world.definitions
+        records = [
+            record(promotable, "STRUCTURAL", n=1),
+            record(promotable, "CONSISTENCY", n=2),
+            record(promotable, target(SEC1), definition=definitions[SEC1], n=3),
+            record(promotable, target(FUNC1), definition=definitions[FUNC1], n=4),
+            record(promotable, BASELINE_ITEM, n=5),
+        ]
+        world = dataclasses.replace(
+            self.world,
+            candidate=promotable,
+            impact=impact_for(trusted, promotable, affected=(SEC1, FUNC1), carry=(SEC2, SEC3)),
+            verification=report_of(promotable, records),
+            records={r.target_id: r for r in records},
+        )
+        self.store_candidate(world, n=n, sequence=sequence)
+        return world, self.store_results(world, first=first)
+
+
+# --- threads that meet at a checkpoint ----------------------------------------------------------
+
+
+class InjectedFault(RuntimeError):
+    """A failure put into a commit on purpose."""
+
+
+class Gate:
+    """A checkpoint hook that stops its thread the first time it reaches one named checkpoint,
+    until released, and then either goes on or raises ``InjectedFault``. It acts once: later
+    transactions of the same commit (the failure event) pass through. Nothing sleeps: the thread
+    waits on an event."""
+
+    def __init__(self, point: str | None, *, fail: bool = False, wait: float = 60.0) -> None:
+        self.point = point
+        self.fail = fail
+        self.wait = wait
+        self.fired = False
+        self.reached = threading.Event()
+        self.release = threading.Event()
+
+    def __call__(self, name: str) -> None:
+        if name != self.point or self.fired:
+            return
+        self.fired = True
+        self.reached.set()
+        if not self.release.wait(self.wait):
+            raise TimeoutError(f"the gate at {name} was never released")
+        if self.fail:
+            raise InjectedFault(name)
+
+
+class Runner(threading.Thread):
+    """Runs one callable on its own thread and keeps its result or its exception."""
+
+    def __init__(self, work: Callable[[], Any]) -> None:
+        super().__init__(daemon=True)
+        self.work = work
+        self.started_running = threading.Event()
+        self.result: Any = None
+        self.error: BaseException | None = None
+
+    def run(self) -> None:
+        self.started_running.set()
+        try:
+            self.result = self.work()
+        except BaseException as failure:  # kept for the test to inspect
+            self.error = failure
+
+    def wait_for(self, gate: Gate) -> bool:
+        """True once ``gate`` was reached, False if the thread ended without reaching it."""
+        while not gate.reached.wait(0.02):
+            if not self.is_alive():
+                return gate.reached.is_set()
+        return True
+
+
+# --- the rules every database of promotions must satisfy -----------------------------------------
+
+
+def check_database(path: str | Path) -> list[str]:
+    """The structural rules of promoted history, read from the file with plain SQL: every problem
+    found (an empty list means none). Used by the concurrency, fault and property tests; each rule
+    is shown to fire on a database that breaks it (``test_promotion_checker``)."""
+    problems: list[str] = []
+    with closing(sqlite3.connect(path)) as conn:
+        states = {
+            r[0]: r
+            for r in conn.execute(
+                "SELECT state_id, lineage_id, version, parent_state_id, commit_decision_id "
+                "FROM trusted_states"
+            )
+        }
+        for state_id, lineage, version, parent, decision in states.values():
+            if version == 0:
+                if parent is not None or decision is not None:
+                    problems.append(f"{state_id}: a baseline with a parent or a decision")
+                continue
+            if parent not in states:
+                problems.append(f"{state_id}: its parent {parent} is not stored")
+            elif states[parent][2] != version - 1 or states[parent][1] != lineage:
+                problems.append(f"{state_id}: version {version} is not its parent's plus one")
+        for state, count in Counter(r[3] for r in states.values() if r[3] is not None).items():
+            if count > 1:
+                problems.append(f"{state}: {count} children (one parent, two futures)")
+        used = Counter(r[4] for r in states.values() if r[4] is not None)
+        problems += [f"decision {d}: commits {n} states" for d, n in used.items() if n > 1]
+        for lineage, head in conn.execute("SELECT lineage_id, current_state_id FROM lineage_heads"):
+            top = max(r[2] for r in states.values() if r[1] == lineage)
+            if head not in states or states[head][2] != top:
+                problems.append(f"lineage {lineage}: the head is not its newest state")
+        committed = {
+            r[0]: r[1]
+            for r in conn.execute(
+                "SELECT decision_id, committed_state_id FROM promotion_decisions "
+                "WHERE committed_state_id IS NOT NULL"
+            )
+        }
+        for state_id, (_, _, version, _, decision) in states.items():
+            if version > 0 and committed.get(decision) != state_id:
+                problems.append(f"{state_id}: no committed decision {decision} names it")
+        for decision, state_id in committed.items():
+            if state_id not in states or states[state_id][4] != decision:
+                problems.append(f"decision {decision}: committed to a state that is not its own")
+        owners = conn.execute(
+            "SELECT s.state_id, s.version FROM trusted_states s WHERE s.version > 0"
+        ).fetchall()
+        for state_id, _ in owners:
+            decision = states[state_id][4]
+            binding = ids.evidence_id_for(decision)
+            rows = conn.execute(
+                "SELECT state_id, event_name FROM evidence_events WHERE evidence_id = ?",
+                (binding,),
+            ).fetchall()
+            if rows != [(state_id, "promotion.committed")]:
+                problems.append(f"{state_id}: its binding record is {rows}")
+            for (evidence_ids_json,) in conn.execute(
+                "SELECT evidence_ids FROM invariant_refs WHERE state_id = ?", (state_id,)
+            ):
+                if binding not in evidence_ids_json:
+                    problems.append(f"{state_id}: a reference without the binding record")
+            events = conn.execute(
+                "SELECT COUNT(*) FROM audit_events WHERE event_type = 'STATE_PROMOTED' "
+                "AND state_id = ?",
+                (state_id,),
+            ).fetchone()[0]
+            if events != 1:
+                problems.append(f"{state_id}: {events} STATE_PROMOTED events")
+            parents = {
+                r[0]: r[1]
+                for r in conn.execute(
+                    "SELECT invariant_id, invariant_version FROM invariant_refs WHERE state_id = ?",
+                    (states[state_id][3],),
+                )
+            }
+            mine = {
+                r[0]: r[1]
+                for r in conn.execute(
+                    "SELECT invariant_id, invariant_version FROM invariant_refs WHERE state_id = ?",
+                    (state_id,),
+                )
+            }
+            for invariant, version in parents.items():
+                if mine.get(invariant, 0) < version:
+                    problems.append(f"{state_id}: {invariant} dropped or lowered")
+        for table in ("invariant_refs", "state_resources"):
+            orphans = conn.execute(
+                f"SELECT COUNT(*) FROM {table} WHERE state_id NOT IN "
+                "(SELECT state_id FROM trusted_states)"
+            ).fetchone()[0]
+            if orphans:
+                problems.append(f"{orphans} orphan rows in {table}")
+        for table, column in (
+            ("evidence_events", "state_id"),
+            ("audit_events", "state_id"),
+        ):
+            orphans = conn.execute(
+                f"SELECT COUNT(*) FROM {table} WHERE {column} IS NOT NULL AND {column} NOT IN "
+                "(SELECT state_id FROM trusted_states)"
+            ).fetchone()[0]
+            if orphans:
+                problems.append(f"{orphans} orphan rows in {table}")
+        promoted = {
+            r[0]
+            for r in conn.execute("SELECT candidate_id FROM candidates WHERE status = 'PROMOTED'")
+        }
+        has_commit = {
+            r[0]
+            for r in conn.execute(
+                "SELECT candidate_id FROM promotion_decisions WHERE committed_state_id IS NOT NULL"
+            )
+        }
+        if promoted != has_commit:
+            problems.append("a candidate is PROMOTED without a committed decision, or the reverse")
+    return problems
