@@ -153,7 +153,23 @@ Carry-forward: C-150 and C-155 for registry v1.1 before D4; index_rules placehol
 C-143 option B before D4; C-148 NOT_APPLICABLE question goes to the authors.
 ```
 
-## P5b–P10 — NOT STARTED
+## P5 — Verification
+
+```text
+P5 gate: PASSED (external review, 29 Oct 2026; PR #23 at c3524ef, merged before the verdict, C-28
+process lapse recorded a sixth time). Milestone M2 reached. Suite passes on Python 3.12 and 3.13
+(skipped=1); black, ruff and mypy clean. The P5b defect (an unresolved vpc_security_group_ids
+entry gave PASS) is fixed (C-156); reviewer reproductions, about 100 FUNC probes and 3 mutations
+of the fix all as the registry says. CIDR boundary mutants of covers() killed. Limits: the
+20-fixture FUNC table and F4/F8 were not independently re-run by the reviewer.
+Carry-forward: registry v1.1 amendment before D4 for C-150 and C-155 (including item 13 and engine
+casing); index_rules placeholder hazard with C-143 option B before D4; C-148 NOT_APPLICABLE
+question to the authors; the unused row 7 branch of sg_s.unresolved in _possible is dead code,
+clean up later. C-45 enforcement in P6 (blocker). C-144 to C-148, C-151 to C-156 Proposed;
+C-149, C-150, C-155 Open.
+```
+
+## P6a–P10 — NOT STARTED
 
 ## Temporary exceptions
 
