@@ -282,6 +282,7 @@ def make_world(
     affected: Iterable[str] = (SEC1, FUNC1),
     uncertain: Iterable[str] = (),
     carry: Iterable[str] | None = None,
+    ineligible: Iterable[str] = (),
     statuses: Mapping[str, InvariantStatus] | None = None,
     registry_version: int = 1,
     candidate_status: CandidateStatus = CandidateStatus.ANALYZING,
@@ -303,12 +304,14 @@ def make_world(
         if carry is None
         else tuple(carry)
     )
+    unmatched = tuple(ineligible)
     impact = impact_for(
         trusted,
         candidate,
         carry=kept,
         affected=impacted,
         uncertain=unsure,
+        ineligible=unmatched,
         with_baseline_work=with_baseline_work,
     )
     wanted: dict[str, Any] = {g: PASS for g in GATES}

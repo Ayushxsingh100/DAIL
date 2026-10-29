@@ -2,8 +2,9 @@
 Doc 06 §25-§26; C-22, C-45, C-159).
 
 The trusted state ``v0`` is built from the parent fixture directory with the statuses of the
-parent's own hand-written ``expected.json`` (C-89). Then the real pipeline runs: normalisation, identity,
-graphs, impact with the prior proofs, the DAIL scope policy, the verification engine, ``decide``.
+parent's own hand-written ``expected.json`` (C-89). Then the real pipeline runs: normalisation,
+identity, graphs, impact with the prior proofs, the DAIL scope policy, the verification engine,
+``decide``.
 
 HAND EXPECTATIONS (written before the first run, from the canonical scenario of CLAUDE.md and the
 ``expected.json`` of the three canonical fixtures):
