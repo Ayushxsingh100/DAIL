@@ -21,7 +21,8 @@ The build is split into 18 work packages (N-06 in `DECISIONS_REGISTER.md`). Ever
 | 11 | Oct 28–30 | P5a structural/security/baseline verifiers |
 | 12 | Oct 31–Nov 3 | P5b functional verifier → P5 gate, M2 |
 | 13 | Nov 4–5 | P6a promotion decision |
-| 14 | Nov 6–9 | P6b promotion transaction → P6 gate, M3 |
+| 14 | Nov 6–9 | P6b promotion commit (done) |
+| 14b | Nov 6–9 | P6c orchestrator, baseline flow, fixed-patch loop → P6 gate, M3 |
 | 15 | Nov 10–13 | D3 real-world pool |
 | 16 | Nov 14–20 | D4 scenario generator |
 | 17 | Nov 21–28 | D5 oracle labels + calibration (free route, N-08) |

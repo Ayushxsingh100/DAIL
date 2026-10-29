@@ -184,7 +184,24 @@ budget in the core and violated-baseline INSUFFICIENT_EVIDENCE for the authors. 
 Proposed; C-37 and C-41 Decided. C-45 enforced in carry_forward and in decide.
 ```
 
-## P6b–P10 — NOT STARTED
+## P6b — Promotion commit
+
+```text
+P6b mini-gate: PASSED (external review, 29 Oct 2026; PR #25 at b9b270a, merged before the
+verdict, C-28 process lapse recorded an eighth time). Suite passes on Python 3.12 and 3.13 (3941
+tests); black, ruff and mypy clean. C-162 fixed (the P6a blocking condition). Reviewer probes: forged
+evidence and a candidate that is not PROMOTABLE are refused and escalated, nothing committed;
+15 of 18 reviewer mutations of commit.py and binding.py killed, the 3 survivors are redundant
+checks. Limits: concurrency schedules and the fault table were not re-run by the reviewer beyond
+the suite; most P6b tests were written after the code (author's disclosure).
+Carry-forward: "no promoted state without its decision" is enforced in commit_promotion and
+check_database, not by a trigger (C-168 b): P6c adds a test that only the commit module calls
+save_promoted. C-169 (one PROMOTION_FAILED event per decision and kind) Open for the authors;
+decision reports are not persisted (recorded limit for P8). C-162 to C-167 Proposed; C-38 and C-168
+Decided.
+```
+
+## P6c–P10 — NOT STARTED
 
 ## Temporary exceptions
 
