@@ -23,6 +23,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any, Final
 
+from core.domain import hashing
 from core.domain.enums import VerificationResult
 from core.domain.errors import DomainValidationError
 from core.domain.evidence import (
@@ -45,12 +46,16 @@ BINDING_EVENT_NAME: Final = "promotion.committed"
 
 
 def integrity_of(evidence: EvidenceRepository, event: EvidenceEvent) -> IntegrityStatus:
-    """Doc 11 §45: does the payload the record names resolve, and is it the text that was hashed?"""
+    """Doc 11 §45: does the payload the record names resolve, and is it the text that was hashed?
+    The same answer as ``EvidenceService.verify_integrity`` (a test shows they agree), computed from
+    the repository port so that this package never imports ``evidence/``."""
     try:
-        evidence.resolve(ArtifactRef.parse(event.payload_ref))
+        payload = evidence.resolve(ArtifactRef.parse(event.payload_ref))
     except BrokenReferenceError:
         return IntegrityStatus.MISSING_PAYLOAD
-    except DomainValidationError:
+    except DomainValidationError:  # the stored text is not valid JSON, or not canonical
+        return IntegrityStatus.TAMPERED
+    if hashing.content_hash(payload) != event.content_hash:
         return IntegrityStatus.TAMPERED
     return IntegrityStatus.VALID
 
