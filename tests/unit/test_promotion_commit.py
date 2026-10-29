@@ -548,8 +548,9 @@ class _Spy:
 
 class TestOrderOfWrites(CommitCase):
     """Appendix B, in the order of the commit: the decision, then its event, the binding record,
-    the state with the lineage head, the decision committed to the state, the candidate PROMOTED,
-    and last the STATE_PROMOTED event (nothing says the state is promoted before it is)."""
+    the state with the lineage head, the candidate PROMOTED, the decision committed to the state,
+    and last the STATE_PROMOTED event (nothing says the state is promoted before it is). The order
+    is the one the P6b prompt gives for Appendix B."""
 
     def test_the_writes_are_made_in_the_order_of_the_commit(self) -> None:
         log: list[str] = []
@@ -584,8 +585,8 @@ class TestOrderOfWrites(CommitCase):
                 "audit.append:PROMOTION_DECIDED",
                 "evidence.append:promotion.committed",
                 "trusted_states.save_promoted",
-                "decisions.commit",
                 "candidates.save_transition",
+                "decisions.commit",
                 "audit.append:STATE_PROMOTED",
             ],
         )

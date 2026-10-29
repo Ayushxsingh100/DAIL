@@ -20,9 +20,9 @@ only. In one unit of work (``BEGIN IMMEDIATE``, so the write lock is taken first
     6. writes, in this order, each a seam for a fault (``core.persistence.sqlite`` checkpoints):
        the decision (``after_decision_insert``), the binding record, the state and its references
        and the lineage head (``after_trusted_state_insert``, ``after_invariant_refs_insert``,
-       ``after_lineage_head_update``), the decision committed to the state
-       (``after_decision_commit``), the candidate PROMOTED (``after_candidate_update``), the
-       STATE_PROMOTED event, ``before_commit``.
+       ``after_lineage_head_update``), the candidate PROMOTED (``after_candidate_update``), the
+       decision committed to the state (``after_decision_commit``), the STATE_PROMOTED event,
+       ``before_commit``.
 
 A refusal in 3 to 5 rolls everything back and escalates the candidate in a transaction of its own
 (C-38 case 2); a lost race stores a REJECT decision and rejects the candidate in its own
@@ -492,10 +492,10 @@ def _attempt(
         uow.trusted_states.save_promoted(state)
     except StaleParentError as moved:
         raise _Lost(str(moved)) from moved
+    uow.candidates.save_transition(marked)
     done = uow.decisions.commit(decision.decision_id, state.state_id)
     if done != committed:
         raise PersistenceError(f"decision {decision.decision_id} reads back differently")
-    uow.candidates.save_transition(marked)
     _append_once(
         uow,
         _event(
