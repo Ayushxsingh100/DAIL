@@ -181,7 +181,10 @@ class EvidenceChain:
                 decided = True
             if kind is T.PROMOTION_FAILED and not decided:
                 found.append("ORDER: PROMOTION_FAILED comes before any decision")
-        kept = self._compress([t.value for t in types if t not in _IGNORED])
+        # A stage that failed and was rerun leaves its ERROR_OCCURRED in the history (an error is
+        # not erased by a recovery); only a FAILED candidate's chain is built around it.
+        skipped = _IGNORED if candidate.status is S.FAILED else _IGNORED | {T.ERROR_OCCURRED}
+        kept = self._compress([t.value for t in types if t not in skipped])
         if candidate.status not in _TAILS and candidate.status is not S.FAILED:
             if finished or kept[: len(_HEAD)] != [e.value for e in _HEAD][: len(kept)]:
                 found.append(
@@ -196,11 +199,9 @@ class EvidenceChain:
                     f"{candidate.status.value} candidate"
                 )
             return found
-        # an unfinished chain: any prefix of an ending, or a prefix of the head, then at most an
-        # error that stopped it
-        stem = kept[:-1] if kept and kept[-1] == T.ERROR_OCCURRED.value else kept
+        # an unfinished chain: any prefix of an ending
         every = [*allowed, *self._all_prefix_targets()]
-        if not any(stem == seq[: len(stem)] for seq in every):
+        if not any(kept == seq[: len(kept)] for seq in every):
             found.append(f"ORDER: events are {kept}, which is not a prefix of {every}")
         return found
 
@@ -211,12 +212,13 @@ class EvidenceChain:
     def _evidence_order(self, finished: bool) -> list[str]:
         candidate = self.candidate
         assert candidate is not None
-        kinds = self._compress_kinds([e.kind for e in self.evidence])
+        kinds = self._compress_kinds(
+            [e.kind for e in self.evidence if e.kind is not K.ERROR or candidate.status is S.FAILED]
+        )
         if candidate.status is S.FAILED:
             return [] if not kinds else [f"EVIDENCE-ORDER: a FAILED candidate is bound to {kinds}"]
         expected = [k.value for k in _EVIDENCE_HEAD] + ["VERIFICATION+"]
-        stem = kinds[:-1] if kinds and kinds[-1] == K.ERROR.value and not finished else kinds
-        if (finished and kinds != expected) or stem != expected[: len(stem)]:
+        if (finished and kinds != expected) or kinds != expected[: len(kinds)]:
             return [f"EVIDENCE-ORDER: records are {kinds}, expected {expected}"]
         return []
 

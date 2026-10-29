@@ -1273,6 +1273,13 @@ class TestArchitectureBoundaries(unittest.TestCase):
             found = orchestrator_violations(path.read_text(encoding="utf-8"))
             self.assertEqual(found, [], "\n".join(str(v) for v in found))
 
+    def test_the_orchestrator_exists_and_is_among_the_checked_modules(self) -> None:
+        path = REPO_ROOT / "core" / "application" / "orchestrator.py"
+        self.assertTrue(path.is_file())
+        self.assertIn(
+            ORCHESTRATOR_MODULE, {module_name(p)[0] for p in iter_python_files(CHECKED_ROOTS)}
+        )
+
     def test_the_orchestrator_check_can_fail(self) -> None:
         late_decide = "decide after commit_promotion"
         broken = {
