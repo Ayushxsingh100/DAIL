@@ -30,8 +30,9 @@ CANDIDATE_TRANSITIONS: MappingProxyType[CandidateStatus, frozenset[CandidateStat
             _C.BUILDING: frozenset({_C.READY, _C.FAILED}),
             _C.READY: frozenset({_C.ANALYZING}),
             _C.ANALYZING: frozenset({_C.REJECTED, _C.RETRY_REQUIRED, _C.ESCALATED, _C.PROMOTABLE}),
-            # PROMOTED only via mark_promoted; REJECTED only via reject_stale_candidate (C-29).
-            _C.PROMOTABLE: frozenset({_C.PROMOTED, _C.REJECTED}),
+            # PROMOTED only via mark_promoted; REJECTED only via reject_stale_candidate (C-29);
+            # ESCALATED when the commit-time revalidation fails (C-38, P6b).
+            _C.PROMOTABLE: frozenset({_C.PROMOTED, _C.REJECTED, _C.ESCALATED}),
             _C.FAILED: frozenset(),
             _C.REJECTED: frozenset(),
             _C.RETRY_REQUIRED: frozenset(),

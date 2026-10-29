@@ -15,14 +15,19 @@ proof (ADR-010, C-54).
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import InitVar, dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from typing import Any, Final
 
 from core.domain.enums import DecisionType, VerificationResult
-from core.domain.errors import DomainValidationError, HashMismatchError
+from core.domain.errors import (
+    DomainValidationError,
+    HashMismatchError,
+    UnauthorizedConstructionError,
+)
 from core.domain.hashing import content_hash
 from core.domain.ids import require_uuid
 from core.domain.invariant import Invariant
@@ -50,6 +55,16 @@ NON_SUCCESS_RESULTS: Final = (
 )
 NON_PROMOTE: Final = (DecisionType.ESCALATE, DecisionType.REJECT, DecisionType.RETRY)
 MAX_ATTEMPTS_LIMIT: Final = 10
+
+
+# Only ``committed`` and ``with_new_state`` (and ``from_dict``, which rebuilds what they stored) may
+# put a state id into a decision or its evidence (DATA-INT-004): the commit of P6b is the one place
+# that does. The token is private to this module (R9).
+_COMMIT_TOKEN: Final = object()
+
+
+class ConflictingDuplicateError(DomainValidationError):
+    """A ``decision_id`` was submitted again with different content (C-163, Doc 09 §38)."""
 
 
 class PromotionInputError(DomainValidationError):
@@ -273,8 +288,9 @@ class PromotionDecision:
     created_at: datetime
     committed_state_id: str | None
     content_hash: str
+    _token: InitVar[object | None] = None
 
-    def __post_init__(self) -> None:
+    def __post_init__(self, _token: object | None) -> None:
         name = "PromotionDecision"
         require_uuid(self.decision_id, f"{name}.decision_id")
         require_uuid(self.candidate_id, f"{name}.candidate_id")
@@ -284,9 +300,17 @@ class PromotionDecision:
         require_text(self.policy_version, f"{name}.policy_version")
         require_int(self.attempt_number, f"{name}.attempt_number", 1)
         if self.committed_state_id is not None:
-            raise DomainValidationError(
-                f"{name}.committed_state_id: null until the commit of P6b (DATA-INT-004)"
-            )
+            if _token is not _COMMIT_TOKEN:
+                raise UnauthorizedConstructionError(
+                    f"{name}.committed_state_id: only PromotionDecision.committed sets it, at the "
+                    "commit (DATA-INT-004)"
+                )
+            if self.decision is not DecisionType.PROMOTE:
+                raise DomainValidationError(
+                    f"{name}.committed_state_id: only a committed PROMOTE names a state "
+                    "(DATA-INT-004)"
+                )
+            require_uuid(self.committed_state_id, f"{name}.committed_state_id")
         object.__setattr__(self, "created_at", utc(self.created_at, f"{name}.created_at"))
         checks = _checks(self.required_checks)
         conditions = _objects(self.blocking_conditions, BlockingCondition, "blocking_conditions")
@@ -337,6 +361,20 @@ class PromotionDecision:
 
     def compute_hash(self) -> str:
         return content_hash(self._payload())
+
+    def committed(self, state_id: str) -> PromotionDecision:
+        """The same PROMOTE once it is committed to ``state_id`` (DATA-INT-004). Returned as a new
+        object with its hash recomputed; allowed once, and only for a PROMOTE."""
+        if self.decision is not DecisionType.PROMOTE or self.committed_state_id is not None:
+            raise DomainValidationError(
+                "PromotionDecision.committed: only a PROMOTE that is not yet committed can be "
+                "committed (DATA-INT-004)"
+            )
+        require_uuid(state_id, "PromotionDecision.committed.state_id")
+        digest = content_hash({**self._payload(), "committed_state_id": state_id})
+        return dataclasses.replace(
+            self, committed_state_id=state_id, content_hash=digest, _token=_COMMIT_TOKEN
+        )
 
     @classmethod
     def create(
@@ -423,6 +461,7 @@ class PromotionDecision:
             created_at=parse_utc(fields["created_at"], "PromotionDecision.created_at"),
             committed_state_id=fields["committed_state_id"],
             content_hash=fields["content_hash"],
+            _token=_COMMIT_TOKEN,
         )
 
 
@@ -460,8 +499,9 @@ class PromotionEvidence:
     reason: DecisionReason
     new_state_id: str | None
     content_hash: str
+    _token: InitVar[object | None] = None
 
-    def __post_init__(self) -> None:
+    def __post_init__(self, _token: object | None) -> None:
         name = "PromotionEvidence"
         require_uuid(self.decision_id, f"{name}.decision_id")
         require_uuid(self.candidate_id, f"{name}.candidate_id")
@@ -474,7 +514,16 @@ class PromotionEvidence:
                 f"{name}.evidence_sufficiency: must be one of {SUFFICIENCY_VALUES}"
             )
         if self.new_state_id is not None:
-            raise DomainValidationError(f"{name}.new_state_id: null until the commit of P6b")
+            if _token is not _COMMIT_TOKEN:
+                raise UnauthorizedConstructionError(
+                    f"{name}.new_state_id: only PromotionEvidence.with_new_state sets it, at the "
+                    "commit (DATA-INT-004)"
+                )
+            if self.decision is not DecisionType.PROMOTE:
+                raise DomainValidationError(
+                    f"{name}.new_state_id: only a PROMOTE names a new state (DATA-INT-004)"
+                )
+            require_uuid(self.new_state_id, f"{name}.new_state_id")
         checks = _checks(self.required_checks)
         refs = _uuids(self.verification_refs, f"{name}.verification_refs")
         if self.decision is DecisionType.PROMOTE and (
@@ -500,6 +549,19 @@ class PromotionEvidence:
 
     def compute_hash(self) -> str:
         return content_hash(self._payload())
+
+    def with_new_state(self, state_id: str) -> PromotionEvidence:
+        """The same evidence once the state exists (DATA-INT-004); allowed once, for a PROMOTE."""
+        if self.decision is not DecisionType.PROMOTE or self.new_state_id is not None:
+            raise DomainValidationError(
+                "PromotionEvidence.with_new_state: only the evidence of a PROMOTE that names no "
+                "state yet can name one (DATA-INT-004)"
+            )
+        require_uuid(state_id, "PromotionEvidence.with_new_state.state_id")
+        digest = content_hash({**self._payload(), "new_state_id": state_id})
+        return dataclasses.replace(
+            self, new_state_id=state_id, content_hash=digest, _token=_COMMIT_TOKEN
+        )
 
     @classmethod
     def create(
@@ -573,6 +635,7 @@ class PromotionEvidence:
             reason=parse_enum(fields["reason"], DecisionReason, "reason"),
             new_state_id=fields["new_state_id"],
             content_hash=fields["content_hash"],
+            _token=_COMMIT_TOKEN,
         )
 
 

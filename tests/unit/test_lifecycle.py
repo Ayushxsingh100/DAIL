@@ -54,7 +54,7 @@ C = CandidateStatus
 I = InvariantStatus  # noqa: E741
 R = VerificationResult
 
-# Doc 06 §5 as amended by C-29.
+# Doc 06 §5 as amended by C-29 and C-38.
 LEGAL_CANDIDATE: set[tuple[C, C]] = {
     (C.CREATED, C.BUILDING),
     (C.BUILDING, C.READY),
@@ -66,6 +66,7 @@ LEGAL_CANDIDATE: set[tuple[C, C]] = {
     (C.ANALYZING, C.PROMOTABLE),
     (C.PROMOTABLE, C.PROMOTED),
     (C.PROMOTABLE, C.REJECTED),
+    (C.PROMOTABLE, C.ESCALATED),  # C-38 (P6b)
 }
 
 # Doc 06 §9, plain (result-free) transitions only.

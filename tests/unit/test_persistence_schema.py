@@ -55,7 +55,7 @@ LEGAL: dict[str, set[str]] = {
     "BUILDING": {"READY", "FAILED"},
     "READY": {"ANALYZING"},
     "ANALYZING": {"REJECTED", "RETRY_REQUIRED", "ESCALATED", "PROMOTABLE"},
-    "PROMOTABLE": {"PROMOTED", "REJECTED"},
+    "PROMOTABLE": {"PROMOTED", "REJECTED", "ESCALATED"},  # ESCALATED: C-38 (P6b)
     "FAILED": set(),
     "REJECTED": set(),
     "RETRY_REQUIRED": set(),
@@ -162,6 +162,18 @@ SCHEMA_5_TRIGGERS = {
     "invariant_refs_insert_evidence_ids",
 }
 SCHEMA_5_INDEXES = 8
+# Schema 6 (P6b, C-165): the decision table, three indexes, six triggers, and the candidate trigger
+# dropped and created again (C-38).
+SCHEMA_6_TABLES = {"promotion_decisions"}
+SCHEMA_6_TRIGGERS = {
+    "promotion_decisions_no_delete",
+    "promotion_decisions_no_replace",
+    "promotion_decisions_insert_rules",
+    "promotion_decisions_insert_uncommitted",
+    "promotion_decisions_update_identity",
+    "promotion_decisions_update_commit",
+}
+SCHEMA_6_STATEMENTS = 12
 
 
 class DbCase(unittest.TestCase):
@@ -347,8 +359,8 @@ class TestInitialization(unittest.TestCase):
         self.assertFalse(self.path.exists())
         initialize_database(self.path)
         self.assertTrue(self.path.exists())
-        self.assertEqual(schema_version(self.path), "5")
-        self.assertEqual(SCHEMA_VERSION, "5")
+        self.assertEqual(schema_version(self.path), "6")
+        self.assertEqual(SCHEMA_VERSION, "6")
 
     def test_initialization_is_idempotent(self) -> None:
         initialize_database(self.path)
@@ -359,7 +371,7 @@ class TestInitialization(unittest.TestCase):
             after = conn.execute("SELECT type, name, sql FROM sqlite_master ORDER BY 2").fetchall()
             versions = conn.execute("SELECT * FROM schema_meta").fetchall()
         self.assertEqual(before, after)
-        self.assertEqual(versions, [("schema_version", "5")])
+        self.assertEqual(versions, [("schema_version", "6")])
 
     def test_the_parent_directory_is_created(self) -> None:
         nested = Path(self._tmp.name) / "nested" / "dirs" / "t.db"
@@ -371,9 +383,12 @@ class TestInitialization(unittest.TestCase):
         # evidence and audit tables; AUTOINCREMENT adds sqlite_sequence.
         initialize_database(self.path)
         self.assertLessEqual(EXPECTED_TABLES, self.tables())
-        self.assertEqual(self.tables(), EXPECTED_TABLES | SCHEMA_5_TABLES | {"sqlite_sequence"})
+        self.assertEqual(
+            self.tables(),
+            EXPECTED_TABLES | SCHEMA_5_TABLES | SCHEMA_6_TABLES | {"sqlite_sequence"},
+        )
         self.assertLessEqual(EXPECTED_TABLES, set(TABLE_NAMES))
-        self.assertEqual(set(TABLE_NAMES), EXPECTED_TABLES | SCHEMA_5_TABLES)
+        self.assertEqual(set(TABLE_NAMES), EXPECTED_TABLES | SCHEMA_5_TABLES | SCHEMA_6_TABLES)
 
     def test_exactly_the_expected_triggers_are_created(self) -> None:
         initialize_database(self.path)
@@ -383,13 +398,17 @@ class TestInitialization(unittest.TestCase):
                 for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'trigger'")
             }
         self.assertLessEqual(EXPECTED_TRIGGERS, names)  # every schema-4 trigger is kept
-        self.assertEqual(names, EXPECTED_TRIGGERS | SCHEMA_5_TRIGGERS)
+        self.assertEqual(names, EXPECTED_TRIGGERS | SCHEMA_5_TRIGGERS | SCHEMA_6_TRIGGERS)
         self.assertEqual(
             len(DDL[:SCHEMA_4_STATEMENTS]), len(EXPECTED_TABLES) + len(EXPECTED_TRIGGERS)
         )
         self.assertEqual(
             len(DDL),
-            SCHEMA_4_STATEMENTS + len(SCHEMA_5_TABLES) + SCHEMA_5_INDEXES + len(SCHEMA_5_TRIGGERS),
+            SCHEMA_4_STATEMENTS
+            + len(SCHEMA_5_TABLES)
+            + SCHEMA_5_INDEXES
+            + len(SCHEMA_5_TRIGGERS)
+            + SCHEMA_6_STATEMENTS,
         )
 
     def test_connections_have_foreign_keys_on(self) -> None:
@@ -408,14 +427,14 @@ class TestInitialization(unittest.TestCase):
             initialize_database(self.path)
         message = str(ctx.exception)
         self.assertIn("schema version 3", message)
-        self.assertIn("needs 5", message)
+        self.assertIn("needs 6", message)
         self.assertIn("C-44", message)
         self.assertIn("delete", message)
         self.assertEqual(self.tables(), {"schema_meta", "trusted_state"})
         self.assertEqual(schema_version(self.path), "3")
 
     def test_any_other_schema_version_is_refused(self) -> None:
-        for version in ("1", "2", "4", "6", "unknown"):
+        for version in ("1", "2", "4", "5", "unknown"):
             with self.subTest(version=version):
                 path = Path(self._tmp.name) / f"v{version}.db"
                 with closing(sqlite3.connect(path)) as conn:
@@ -495,7 +514,7 @@ class TestTriggerPairListMatchesTheDomain(DbCase):
 
     def test_the_trigger_pair_list_equals_doc_06_section_5(self) -> None:
         by_hand = {(old, new) for old, news in LEGAL.items() for new in news}
-        self.assertEqual(len(by_hand), 10)
+        self.assertEqual(len(by_hand), 11)  # ten of Doc 06 §5 and PROMOTABLE -> ESCALATED (C-38)
         self.assertEqual(self.trigger_pairs(), by_hand)
 
     def test_every_candidate_status_has_a_check_constraint_value(self) -> None:

@@ -7,8 +7,15 @@ candidate) and P6b (commit transaction, carry-forward, concurrency).
 
 P6a is the decision half: ``decide`` is a pure function of its arguments that returns PROMOTE,
 REJECT, RETRY or ESCALATE with every blocking reason; ``lifecycle.candidate_after`` applies the
-decision to the candidate; ``policy`` builds the DAIL and Stateful-Full policies. Nothing here
-commits anything or calls ``TrustedState.promote`` (P6b does).
+decision to the candidate; ``policy`` builds the DAIL and Stateful-Full policies. None of these
+commits anything or calls ``TrustedState.promote``.
+
+P6b is the commit half: ``commit.record_decision`` makes every decision durable and moves the
+candidate; ``commit.commit_promotion`` turns a PROMOTE into the next Trusted State, once, from the
+current parent only, in one transaction (``commit`` is the only module that calls
+``TrustedState.promote`` and ``mark_promoted``, R8). ``binding`` checks that the evidence of a proof
+binds to the new state (C-164), ``proofs`` and ``newstate`` build what ``promote`` is given, and
+``ids`` derives the state, evidence and event ids from the decision id (C-163).
 
 Import restrictions (tests/contract/test_architecture_boundaries.py): standard library and
 ``core.domain.*`` only (R18, C-157). In particular it never imports ``core.verification``: it

@@ -161,7 +161,7 @@ class TestUnitOfWork(RepoCase):
             )
         with self.assertRaises(PersistenceError) as ctx, SqliteUnitOfWork(other):
             pass
-        self.assertIn("schema version 5", str(ctx.exception))
+        self.assertIn("schema version 6", str(ctx.exception))
 
     def test_constructing_a_unit_of_work_does_not_create_the_file(self) -> None:
         missing = Path(self._tmp.name) / "later.db"
@@ -193,7 +193,8 @@ class TestUnitOfWork(RepoCase):
             seed_evidence(u, new_state)
             u.trusted_states.save_promoted(new_state)
             u.candidates.save_transition(mark_promoted(promotable, new_state))
-        self.assertEqual(seen, list(CHECKPOINTS))
+        # P6b: saving the candidate's new status is itself a checkpoint, before the commit
+        self.assertEqual(seen, [*CHECKPOINTS[:3], "after_candidate_update", "before_commit"])
         self.assertEqual(
             CHECKPOINTS,
             (

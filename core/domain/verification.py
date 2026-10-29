@@ -574,6 +574,11 @@ class VerificationReport:
             raise DomainValidationError(f"{name}.results: must be sorted by target type and id")
         if len(set(keys)) != len(keys):
             raise DomainValidationError(f"{name}.results: one result per target")
+        target_ids = [item.target_id for item in results]
+        if len(set(target_ids)) != len(target_ids):
+            raise DomainValidationError(
+                f"{name}.results: a target id has at most one result, whatever its type (C-162)"
+            )
         ids = [item.verification_id for item in results]
         if len(set(ids)) != len(ids):
             raise DomainValidationError(f"{name}.results: duplicate verification_id")

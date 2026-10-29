@@ -384,7 +384,12 @@ class InvariantProof:
 
     @classmethod
     def carry_forward(
-        cls, parent_ref: InvariantRef, candidate: object, impact: object
+        cls,
+        parent_ref: InvariantRef,
+        candidate: object,
+        impact: object,
+        *,
+        extra_evidence_ids: Iterable[str] = (),
     ) -> InvariantProof:
         """The proof of an invariant that the candidate leaves as the current state has it
         (origin CARRIED_FORWARD). Status, evidence and verification time are copied unchanged, so a
@@ -396,7 +401,11 @@ class InvariantProof:
         affected, uncertain or unmentioned invariant, or a report that is for another candidate or
         parent, is for another version, or no longer recomputes its hash, is refused: a regression
         cannot hide behind the parent's old evidence. Whether the policy permits carrying forward at
-        all is decided by the Promotion Controller (C-22, C-159)."""
+        all is decided by the Promotion Controller (C-22, C-159).
+
+        ``extra_evidence_ids`` (P6b, C-164) adds evidence ids to the copied ones: the reference of
+        the next state also carries the id of the promotion binding record, so the next
+        carry-forward can find it. Nothing else about the proof changes."""
         from core.domain.impact import ImpactReport
         from core.domain.state import CandidateState
 
@@ -432,11 +441,15 @@ class InvariantProof:
                 f"C-40: the PROTECTED reference to {parent_ref.invariant_id} was invalidated "
                 "and cannot be carried forward"
             )
+        if isinstance(extra_evidence_ids, str) or not isinstance(extra_evidence_ids, Iterable):
+            raise DomainValidationError(
+                "InvariantProof.carry_forward: extra_evidence_ids must be a list of UUIDs"
+            )
         return cls(
             invariant_id=parent_ref.invariant_id,
             invariant_version=parent_ref.invariant_version,
             status=parent_ref.status,
-            evidence_ids=parent_ref.evidence_ids,
+            evidence_ids=(*parent_ref.evidence_ids, *extra_evidence_ids),
             verified_at=parent_ref.last_verified_at,
             origin=ProofOrigin.CARRIED_FORWARD,
             candidate_id=candidate.candidate_id,

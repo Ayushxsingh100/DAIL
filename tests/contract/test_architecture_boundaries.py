@@ -288,6 +288,24 @@ R9_GUARD_TOKEN_HOMES = {
 }
 
 
+# P6b (C-157): inside the repository the sole callers of TrustedState.promote and mark_promoted are
+# the state module (which defines them) and the commit of the Promotion Controller.
+R8_SOLE_CALLERS = ("core.domain.state", "core.promotion.commit")
+
+
+def sole_caller_violations(module: str, source: str) -> list[Violation]:
+    """R8 for the repository itself: a call of ``TrustedState.promote`` or a reference to
+    ``mark_promoted`` outside ``R8_SOLE_CALLERS`` (the source is read as a module of no allowed
+    package, so every such use is found)."""
+    if module in R8_SOLE_CALLERS:
+        return []
+    return [
+        Violation("R8", module, v.imported)
+        for v in check_source("core.impact.not_allowed", source)
+        if v.rule == "R8"
+    ]
+
+
 def _import_aliases(tree: ast.AST) -> dict[str, str]:
     """Local name -> the name it was imported as, so ``T.promote`` and ``dt.now`` are seen through
     ``import ... as``/``from ... import ... as``."""
@@ -1060,6 +1078,35 @@ class TestArchitectureBoundaries(unittest.TestCase):
     def test_no_oracle_imports_anywhere_in_the_repository(self) -> None:
         violations = [v for v in check_repository(None) if v.rule == "ORACLE"]
         self.assertEqual(violations, [], "\n".join(str(v) for v in violations))
+
+    def test_only_the_commit_module_calls_promote_and_mark_promoted(self) -> None:
+        """C-157, P6b: R8 allows the state module and the promotion package; in the repository
+        itself the only module that calls ``TrustedState.promote`` or ``mark_promoted`` is
+        ``core.promotion.commit`` (and ``core.domain.state``, which defines them)."""
+        offenders = []
+        for path in iter_python_files(CHECKED_ROOTS):
+            module, _ = module_name(path)
+            source = path.read_text(encoding="utf-8")
+            offenders.extend(str(v) for v in sole_caller_violations(module, source))
+        self.assertEqual(offenders, [], "\n".join(offenders))
+
+    def test_the_sole_caller_check_can_fail(self) -> None:
+        call = "from core.domain.state import TrustedState\nTrustedState.promote(candidate=c)\n"
+        mark = "from core.domain.state import mark_promoted\nmark_promoted(c, s)\n"
+        for module in (
+            "core.promotion.newstate",
+            "core.promotion.decide",
+            "core.promotion.lifecycle",
+            "core.promotion",
+            "core.application.bad",
+        ):
+            for source in (call, mark):
+                with self.subTest(module=module, source=source.splitlines()[-1]):
+                    self.assertTrue(sole_caller_violations(module, source))
+        for module in ("core.promotion.commit", "core.domain.state"):
+            for source in (call, mark):
+                with self.subTest(module=module, allowed=True):
+                    self.assertEqual(sole_caller_violations(module, source), [])
 
     def test_scripts_import_only_stdlib_and_first_party(self) -> None:
         """A14: no third-party imports in scripts/ (core/ and evidence/ are covered by R7)."""

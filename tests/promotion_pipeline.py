@@ -95,6 +95,7 @@ class PipelineRun:
         *,
         trusted: TrustedState | None = None,
         attempt_number: int = 1,
+        decision_id: str = uid(9300),
     ) -> DecisionOutcome:
         return decide(
             self.candidate,
@@ -102,7 +103,7 @@ class PipelineRun:
             self.impact,
             self.verification,
             policy or self.policy(),
-            decision_id=uid(9300),
+            decision_id=decision_id,
             now=NOW,
             attempt_number=attempt_number,
         )
@@ -146,8 +147,17 @@ def pipeline(
     *,
     stateful_full: bool = False,
     verifiers: VerifierTable = DEFAULT_VERIFIERS,
+    candidate_id: str = CANDIDATE_STATE,
+    parent_trusted: TrustedState | None = None,
+    sequence: int = 1,
+    patch_n: int = 7,
 ) -> PipelineRun:
-    """Everything up to the verification report for one fixture that has a parent."""
+    """Everything up to the verification report for one fixture that has a parent.
+
+    The extra keywords are P6b's (they let a test run a second candidate beside the first, or from
+    a state that a commit made): ``candidate_id``, ``sequence`` and ``patch_n`` name the candidate
+    and its patch, and ``parent_trusted`` replaces the state that is otherwise built from the
+    parent directory. With none of them the behaviour is that of P6a."""
     data = fixture.data
     parent = data["parent"]
     assert parent is not None, data["fixture_id"]
@@ -158,20 +168,22 @@ def pipeline(
     assert after.resource_set_hash is not None
     definitions = list(registry(source, destination).values())
     semantic = [SemanticBinding("INV-FUNC-001", source, destination, "TCP", 5432)]
-    trusted = trusted_from(parent, before.resources, definitions)
+    trusted = parent_trusted or trusted_from(parent, before.resources, definitions)
+    parent_id = trusted.state_id
+    before_resources = trusted.resources if parent_trusted else before.resources
     identity = compare(
-        before.resources,
+        before_resources,
         after.resources,
         list(after.moves),
-        parent_state_id=PARENT_STATE,
-        candidate_id=CANDIDATE_STATE,
+        parent_state_id=parent_id,
+        candidate_id=candidate_id,
         now=NOW,
     )
     trusted_graph = build_graph(
-        before.resources, definitions, semantic, state_id=PARENT_STATE, now=NOW
+        before_resources, definitions, semantic, state_id=parent_id, now=NOW
     )
     candidate_graph = build_graph(
-        after.resources, definitions, semantic, state_id=CANDIDATE_STATE, now=NOW
+        after.resources, definitions, semantic, state_id=candidate_id, now=NOW
     )
     priors = [
         PriorProof(
@@ -184,24 +196,24 @@ def pipeline(
         for ref in trusted.invariant_refs
     ]
     impact = compute_impact(
-        before.resources,
+        before_resources,
         after.resources,
         identity,
         trusted_graph,
         candidate_graph,
         definitions,
         priors,
-        parent_state_id=PARENT_STATE,
-        candidate_id=CANDIDATE_STATE,
+        parent_state_id=parent_id,
+        candidate_id=candidate_id,
         now=NOW,
     )
     inputs = VerificationInputs(
         candidate_resources=after.resources,
-        parent_resources=before.resources,
+        parent_resources=before_resources,
         candidate_state_hash=after.resource_set_hash,
         normalization_version=NORMALIZATION_VERSION,
-        candidate_id=CANDIDATE_STATE,
-        parent_state_id=PARENT_STATE,
+        candidate_id=candidate_id,
+        parent_state_id=parent_id,
         identity=identity,
         impact=impact,
         candidate_graph=candidate_graph,
@@ -211,10 +223,10 @@ def pipeline(
     )
     candidate = CandidateState.create(
         parent=trusted,
-        patch=patch_for(trusted, n=7),
-        candidate_sequence=1,
+        patch=patch_for(trusted, n=patch_n),
+        candidate_sequence=sequence,
         now=NOW,
-        candidate_id=CANDIDATE_STATE,
+        candidate_id=candidate_id,
     )
     candidate = finish_building(start_building(candidate), after.resources)
     candidate = transition_candidate(candidate, CandidateStatus.ANALYZING)
