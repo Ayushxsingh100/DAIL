@@ -169,7 +169,22 @@ clean up later. C-45 enforcement in P6 (blocker). C-144 to C-148, C-151 to C-156
 C-149, C-150, C-155 Open.
 ```
 
-## P6a–P10 — NOT STARTED
+## P6a — Promotion decision
+
+```text
+P6a mini-gate: PASSED WITH ONE BLOCKING CONDITION (external review, 29 Oct 2026; PR #24 at
+a7ca8af, merged before the verdict, C-28 process lapse recorded a seventh time). Suite passes on
+Python 3.12 and 3.13 (3724 tests); black, ruff and mypy clean. 16 of 20 reviewer mutations of
+decide() killed; the 3 survivors are redundant checks and one is an equivalent mutant. Limits: the
+fixture table and the 37 author mutations were not independently re-run in full.
+Blocking condition (MEDIUM, fix in P6b Step 1, before the P6 gate): a second result for the same
+target id under another target type hides a FAIL (PROMOTE reproduced). Carry-forward: C-162;
+ambiguous_identity_uncertain carries FUNC (P4 question to the authors); severity order, retry
+budget in the core and violated-baseline INSUFFICIENT_EVIDENCE for the authors. C-157 to C-161
+Proposed; C-37 and C-41 Decided. C-45 enforced in carry_forward and in decide.
+```
+
+## P6b–P10 — NOT STARTED
 
 ## Temporary exceptions
 
