@@ -22,6 +22,10 @@ Verification (P5a; Doc 09, C-145): ``verification`` holds ``VerificationRequest`
 reasons, and the three pure functions P6 needs (``sufficient``, ``fresh``, ``aggregate``), which
 never count anything doubtful as proof.
 
+Promotion (P6a; Doc 09 §17-§29, C-157 to C-161): ``promotion`` holds ``PromotionDecision``,
+``PromotionEvidence``, ``PromotionPolicy`` and the closed vocabularies of decision reasons and
+proof sources. The decision itself is ``core.promotion.decide``.
+
 Lifecycles: explicit transition tables and functions (``lifecycle``, ``state``) that reject every
 transition the specification forbids, including SM-001 to SM-010. Lifecycle-bearing objects can
 be created only through those functions, so ``dataclasses.replace`` and direct constructor calls
