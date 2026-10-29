@@ -54,6 +54,7 @@ from core.domain.verification import (
     EVIDENCE_LEVELS,
     VerificationReport,
     VerificationResultRecord,
+    VerificationTargetType,
     fresh,
     sufficient,
 )
@@ -86,6 +87,13 @@ _NON_SUCCESS_CODE: Final = {
     VerificationResult.VERIFIER_ERROR: R.VERIFIER_ERROR,
 }
 _DECIDABLE: Final = (CandidateStatus.ANALYZING, CandidateStatus.PROMOTABLE)
+# the target type a result must have for each kind of required item (C-162)
+_TYPE_OF_KIND: Final = {
+    "GATE": VerificationTargetType.STRUCTURAL,
+    "INVARIANT": VerificationTargetType.INVARIANT,
+    "UNDEFINED": VerificationTargetType.INVARIANT,
+    "BASELINE": VerificationTargetType.RESOURCE,
+}
 
 
 def fold(conditions: Sequence[BlockingCondition]) -> tuple[DecisionType, DecisionReason]:
@@ -315,7 +323,7 @@ def _carry_forward_refusals(
 
 def _assess(
     item: _Item,
-    records: Mapping[str, VerificationResultRecord],
+    by_id: Mapping[str, Sequence[VerificationResultRecord]],
     candidate: CandidateState,
     trusted: TrustedState,
     impact: ImpactReport,
@@ -327,7 +335,13 @@ def _assess(
     verdict = _Verdict(RequiredCheck(item.target_id, _kind(item), None, None))
     if item.kind == "UNDEFINED":
         return verdict  # the policy condition already says what is wrong
-    record = records.get(item.target_id)
+    # C-162: the result is looked up by the type the kind requires, and every result that carries
+    # the target id is examined, so a FAIL under another type cannot be hidden
+    matches = by_id.get(item.target_id, ())
+    right = [r for r in matches if r.target_type is _TYPE_OF_KIND[item.kind]]
+    if len(right) != len(matches) or len(right) > 1:
+        return _inconsistent(verdict, item, matches, right)
+    record = right[0] if right else None
     invariant = item.invariant
     verifier_id, verifier_version = item.verifier or (
         (record.verifier_id, record.verifier_version) if record is not None else ("", "")
@@ -371,6 +385,41 @@ def _assess(
                 D.REJECT,
                 item.target_id,
                 f"{_described(record)} is stale for this candidate and these versions; {why}",
+            )
+        )
+    return verdict
+
+
+def _inconsistent(
+    verdict: _Verdict,
+    item: _Item,
+    matches: Sequence[VerificationResultRecord],
+    right: Sequence[VerificationResultRecord],
+) -> _Verdict:
+    """The report holds a second result for a required target id, or one of the wrong type: it is
+    inconsistent (REJECT), no result proves the item, and a FAIL among them stays blocking."""
+    kinds = sorted({r.target_type.value for r in matches})
+    verdict.conditions.append(
+        _condition(
+            R.INCONSISTENT_REPORTS,
+            D.REJECT,
+            item.target_id,
+            f"{len(matches)} results carry this target id (types {', '.join(kinds)}); "
+            f"{_TYPE_OF_KIND[item.kind].value} is the type it needs (C-162)",
+        )
+    )
+    verdict.conditions.extend(
+        _condition(_failure_code(item), D.REJECT, item.target_id, _described(r))
+        for r in matches
+        if r.result is VerificationResult.FAIL
+    )
+    if not right:
+        verdict.conditions.append(
+            _condition(
+                R.INSUFFICIENT_EVIDENCE,
+                D.REJECT,
+                item.target_id,
+                f"no result of type {_TYPE_OF_KIND[item.kind].value}",
             )
         )
     return verdict
@@ -548,9 +597,11 @@ def decide(
         return _build(candidate, policy, decision_id, moment, attempt_number, [], [stale], (), ())
     items, conditions = _required_items(trusted, impact, policy)
     conditions += _binding_conditions(candidate, impact, verification)
-    records = {r.target_id: r for r in verification.results}
+    by_id: dict[str, list[VerificationResultRecord]] = {}
+    for result in verification.results:
+        by_id.setdefault(result.target_id, []).append(result)
     assessed = {
-        item.target_id: _assess(item, records, candidate, trusted, impact, policy) for item in items
+        item.target_id: _assess(item, by_id, candidate, trusted, impact, policy) for item in items
     }
     for verdict in assessed.values():
         conditions += verdict.conditions
