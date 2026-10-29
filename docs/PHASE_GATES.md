@@ -201,6 +201,42 @@ decision reports are not persisted (recorded limit for P8). C-162 to C-167 Propo
 Decided.
 ```
 
+## P6 — Promotion (pending external review)
+
+```text
+P6 gate (Doc 15 §13.3) and milestone M3 (Doc 15 §23): NOT DECIDED. Status written by the P6c author
+as an input to the external review; no gate and no milestone is claimed. P6c mini-gate: NOT DECIDED.
+
+Evidence map (commands: py -3.12 -m unittest <module>; ids are in docs/DECISIONS_REGISTER.md):
+  safe candidate promotes ........ tests.unit.test_e2e_lifecycles (steps 7-9, third candidate to v2),
+                                   tests.unit.test_e2e_chains.TestSafePromotion
+  unsafe candidate rejects ....... tests.unit.test_e2e_lifecycles (steps 2-6),
+                                   tests.unit.test_e2e_chains.TestRejectedCandidate,
+                                   tests.unit.test_e2e_fixtures (18 fixtures vs the P6a pipeline)
+  stale candidate rejects ........ tests.unit.test_e2e_lifecycles (steps 10-11),
+                                   tests.unit.test_e2e_chains.TestStaleParent,
+                                   tests.unit.test_e2e_concurrency (28 schedules)
+  evidence chain complete ........ tests.unit.test_chain (one test per rule of C-172),
+                                   tests.unit.test_e2e_chains (six chains of Doc 11 §51.3),
+                                   tests.unit.test_e2e_properties
+  valid candidate advances once .. tests.unit.test_e2e_idempotency (reruns, a fault after every stage
+                                   and at every unit-of-work commit), tests.unit.test_e2e_concurrency,
+                                   P6b: tests.unit.test_promotion_commit*, test_promotion_concurrency
+  no unsafe candidate can advance  the emergency switch (test_e2e_chains.TestEmergencySwitch),
+                                   test_e2e_properties (switch off: nothing promoted), the AST test
+                                   that the orchestrator holds no decision logic, C-175 sole callers
+                                   (tests.contract.test_architecture_boundaries)
+Limits: impact and verification reports are not persisted (P8); fixed patches only, the patch text is
+not applied to the directory (C-174, P7b); one SQLite file, the MVP's single promotion worker (Doc 09
+§39), nothing is claimed for several processes beyond the concurrency tests; the baseline acceptance
+protocol is conservative and for the authors (C-171); hashed evidence carries the candidate's
+creation instant, audit timestamps are live (C-170 (4)).
+Carry-forward: C-169 Open (for the authors). C-170 to C-176 Proposed (C-173 decided by the user on
+the stale route). C-176: baseline evidence is built in core.application.baseline because
+to_evidence_submission stamps the resource-set hash, not the state's. Construction failure stores
+no decision (C-170 (3), for the authors). 18 fixtures have a parent, the prompt said 17.
+```
+
 ## P6c–P10 — NOT STARTED
 
 ## Temporary exceptions
