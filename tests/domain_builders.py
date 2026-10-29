@@ -205,8 +205,12 @@ def verified_proof(
 def carried_proof(
     parent: TrustedState, candidate: CandidateState, invariant_id: str = SEC
 ) -> InvariantProof:
-    """A CARRIED_FORWARD proof copied from the parent's reference (C-40)."""
-    return InvariantProof.carry_forward(parent_ref(parent, invariant_id), candidate)
+    """A CARRIED_FORWARD proof copied from the parent's reference (C-40), with an impact report
+    that says the candidate leaves the invariant alone and its evidence is eligible (C-45)."""
+    from tests.promotion_builders import impact_for
+
+    impact = impact_for(parent, candidate, carry=(invariant_id,))
+    return InvariantProof.carry_forward(parent_ref(parent, invariant_id), candidate, impact)
 
 
 def baseline(

@@ -18,6 +18,7 @@ from core.domain.errors import (
     IllegalTransitionError,
     UnauthorizedConstructionError,
 )
+from core.domain.impact import ImpactReport
 from core.domain.invariant import InvariantEvaluation, InvariantProof, InvariantRef
 from tests.domain_builders import (
     FUNC,
@@ -29,6 +30,7 @@ from tests.domain_builders import (
     uid,
     verified_proof,
 )
+from tests.promotion_builders import impact_for
 
 EVIDENCE = uid(1500)
 
@@ -64,7 +66,9 @@ class TestConstructionGuard(unittest.TestCase):
         self.candidate = new_candidate(self.v0)
         self.baseline_proof = proof(FUNC, S.VIOLATED, evidence=2)
         self.carried = InvariantProof.carry_forward(
-            next(r for r in self.v0.invariant_refs if r.invariant_id == FUNC), self.candidate
+            next(r for r in self.v0.invariant_refs if r.invariant_id == FUNC),
+            self.candidate,
+            impact_for(self.v0, self.candidate, carry=(FUNC,)),
         )
 
     def test_direct_construction_is_refused_for_every_origin(self) -> None:
@@ -177,10 +181,14 @@ class TestCarryForward(unittest.TestCase):
     def ref(self, invariant_id: str) -> InvariantRef:
         return next(r for r in self.v0.invariant_refs if r.invariant_id == invariant_id)
 
+    def impact(self, invariant_id: str) -> ImpactReport:
+        """An impact report that leaves ``invariant_id`` alone and offers its evidence (C-45)."""
+        return impact_for(self.v0, self.candidate, carry=(invariant_id,))
+
     def test_status_evidence_and_time_are_copied_unchanged(self) -> None:
         for invariant_id in (SEC, FUNC, "INV-SEC-002"):
             ref = self.ref(invariant_id)
-            p = InvariantProof.carry_forward(ref, self.candidate)
+            p = InvariantProof.carry_forward(ref, self.candidate, self.impact(invariant_id))
             with self.subTest(invariant=invariant_id):
                 self.assertIs(p.origin, ProofOrigin.CARRIED_FORWARD)
                 self.assertEqual(p.status, ref.status)  # VIOLATED and UNCERTAIN stay as they are
@@ -190,7 +198,7 @@ class TestCarryForward(unittest.TestCase):
                 self.assertEqual(p.invariant_version, ref.invariant_version)
 
     def test_it_is_bound_to_the_candidate_and_to_the_state_it_came_from(self) -> None:
-        p = InvariantProof.carry_forward(self.ref(SEC), self.candidate)
+        p = InvariantProof.carry_forward(self.ref(SEC), self.candidate, self.impact(SEC))
         self.assertEqual(p.candidate_id, self.candidate.candidate_id)
         self.assertEqual(p.source_state_id, self.v0.state_id)
 
@@ -198,7 +206,7 @@ class TestCarryForward(unittest.TestCase):
         other = baseline(state_id=uid(88))
         foreign = next(r for r in other.invariant_refs if r.invariant_id == SEC)
         with self.assertRaises(DomainValidationError) as ctx:
-            InvariantProof.carry_forward(foreign, self.candidate)
+            InvariantProof.carry_forward(foreign, self.candidate, self.impact(SEC))
         self.assertIn("C-40", str(ctx.exception))
 
     def test_an_invalidated_protected_reference_is_refused(self) -> None:
@@ -208,20 +216,126 @@ class TestCarryForward(unittest.TestCase):
         invalidated = InvariantRef.from_dict(data)
         self.assertFalse(invalidated.can_satisfy_proof())
         with self.assertRaises(DomainValidationError) as ctx:
-            InvariantProof.carry_forward(invalidated, self.candidate)
+            InvariantProof.carry_forward(invalidated, self.candidate, self.impact(SEC))
         self.assertIn("C-40", str(ctx.exception))
 
     def test_a_protected_status_is_never_manufactured_from_a_weaker_reference(self) -> None:
         for invariant_id in (FUNC, "INV-SEC-002"):
             with self.subTest(invariant=invariant_id):
-                p = InvariantProof.carry_forward(self.ref(invariant_id), self.candidate)
+                p = InvariantProof.carry_forward(
+                    self.ref(invariant_id), self.candidate, self.impact(invariant_id)
+                )
                 self.assertNotEqual(p.status, S.PROTECTED)
 
     def test_arguments_are_type_checked(self) -> None:
         with self.assertRaises(DomainValidationError):
-            InvariantProof.carry_forward({"invariant_id": SEC}, self.candidate)  # type: ignore[arg-type]
+            InvariantProof.carry_forward(
+                {"invariant_id": SEC},  # type: ignore[arg-type]
+                self.candidate,
+                self.impact(SEC),
+            )
         with self.assertRaises(DomainValidationError):
-            InvariantProof.carry_forward(self.ref(SEC), self.v0)  # type: ignore[arg-type]
+            InvariantProof.carry_forward(
+                self.ref(SEC),
+                self.v0,  # type: ignore[arg-type]
+                self.impact(SEC),
+            )
+
+
+class TestCarryForwardNeedsTheImpactReport(unittest.TestCase):
+    """C-45, the canonical DAIL failure: a candidate that affects an invariant and then violates
+    it must not hide behind the parent's old evidence. ``carry_forward`` therefore asks the impact
+    report of exactly this candidate and parent (``carry_forward_ok``, C-141): anything but an
+    eligible, unaffected invariant is refused."""
+
+    def setUp(self) -> None:
+        self.v0 = baseline(
+            proofs=[
+                proof(SEC, S.PROTECTED, evidence=1, minutes=3),
+                proof(FUNC, S.PROTECTED, evidence=2, minutes=4),
+            ]
+        )
+        self.candidate = new_candidate(self.v0)
+
+    def ref(self, invariant_id: str) -> InvariantRef:
+        return next(r for r in self.v0.invariant_refs if r.invariant_id == invariant_id)
+
+    def carry(self, impact: object, invariant_id: str = SEC) -> InvariantProof:
+        return InvariantProof.carry_forward(
+            self.ref(invariant_id),
+            self.candidate,
+            impact,  # type: ignore[arg-type]
+        )
+
+    def refused(self, impact: object, invariant_id: str = SEC) -> None:
+        with self.assertRaises(DomainValidationError) as ctx:
+            self.carry(impact, invariant_id)
+        self.assertIn("C-45", str(ctx.exception))
+
+    def test_an_unaffected_invariant_with_eligible_evidence_may_be_carried(self) -> None:
+        carried = self.carry(impact_for(self.v0, self.candidate, carry=(SEC, FUNC)))
+        self.assertIs(carried.origin, ProofOrigin.CARRIED_FORWARD)
+        self.assertEqual(carried.evidence_ids, self.ref(SEC).evidence_ids)
+
+    def test_an_affected_invariant_is_refused(self) -> None:
+        self.refused(impact_for(self.v0, self.candidate, affected=(SEC,), carry=(FUNC,)))
+
+    def test_an_uncertain_invariant_is_refused(self) -> None:
+        self.refused(impact_for(self.v0, self.candidate, uncertain=(SEC,), carry=(FUNC,)))
+
+    def test_an_invariant_the_report_does_not_mention_is_refused(self) -> None:
+        self.refused(impact_for(self.v0, self.candidate, carry=(FUNC,)), SEC)
+
+    def test_an_unaffected_invariant_without_eligible_evidence_is_refused(self) -> None:
+        self.refused(impact_for(self.v0, self.candidate, ineligible=(SEC,), carry=(FUNC,)))
+
+    def test_a_report_for_another_candidate_is_refused(self) -> None:
+        other = new_candidate(self.v0, sequence=2, n=2)
+        self.refused(impact_for(self.v0, other, carry=(SEC,)))
+
+    def test_a_report_for_another_parent_is_refused(self) -> None:
+        other_parent = baseline(state_id=uid(88))
+        report = impact_for(other_parent, self.candidate, carry=(SEC,))
+        self.assertNotEqual(report.parent_state_id, self.candidate.parent_state_id)
+        self.refused(report)
+
+    def test_a_report_whose_hash_no_longer_recomputes_is_refused(self) -> None:
+        report = impact_for(self.v0, self.candidate, carry=(SEC,))
+        object.__setattr__(report, "graph_version", "tampered")
+        self.assertNotEqual(report.content_hash, report.compute_hash())
+        self.refused(report)
+
+    def test_a_report_that_names_the_invariant_at_another_version_is_refused(self) -> None:
+        self.refused(impact_for(self.v0, self.candidate, carry=(SEC,), versions={SEC: 2}))
+
+    def test_the_version_asked_is_the_version_of_the_reference(self) -> None:
+        # a reference to version 2: a report that only knows version 1 does not allow it, and
+        # one that names version 2 does
+        newer = InvariantProof.for_baseline(
+            invariant_id=SEC,
+            invariant_version=2,
+            status=S.PROTECTED,
+            evidence_ids=(uid(1001),),
+            verified_at=at(3),
+        )
+        self.v0 = baseline(proofs=[newer, proof(FUNC, S.PROTECTED, evidence=2)])
+        self.candidate = new_candidate(self.v0)
+        self.assertEqual(self.ref(SEC).invariant_version, 2)
+        self.refused(impact_for(self.v0, self.candidate, carry=(SEC,), versions={SEC: 1}))
+        carried = self.carry(impact_for(self.v0, self.candidate, carry=(SEC,)))
+        self.assertEqual(carried.invariant_version, 2)
+
+    def test_the_report_is_required_and_must_be_one(self) -> None:
+        with self.assertRaises(TypeError):
+            InvariantProof.carry_forward(self.ref(SEC), self.candidate)  # type: ignore[call-arg]
+        for bad in (None, {"carry_forward_candidates": [SEC]}, "ImpactReport"):
+            with self.subTest(bad=bad), self.assertRaises(DomainValidationError):
+                self.carry(bad)
+
+    def test_a_refusal_changes_nothing(self) -> None:
+        before = self.v0.state_hash
+        self.refused(impact_for(self.v0, self.candidate, affected=(SEC,)))
+        self.assertEqual(self.v0.state_hash, before)
 
 
 if __name__ == "__main__":

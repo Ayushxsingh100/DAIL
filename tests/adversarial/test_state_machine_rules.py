@@ -64,6 +64,7 @@ from tests.domain_builders import (
     uid,
     verified_proof,
 )
+from tests.promotion_builders import impact_for
 
 CS = CandidateStatus
 S = InvariantStatus
@@ -463,7 +464,14 @@ class TestSM006(unittest.TestCase):
             promote(candidate, v0, proofs=[sec, proof(FUNC, S.PROTECTED, evidence=12)])
         # (c) Carrying the reference forward keeps it VIOLATED.
         carried = promote(
-            candidate, v0, proofs=[sec, InvariantProof.carry_forward(ref_of(v0, FUNC), candidate)]
+            candidate,
+            v0,
+            proofs=[
+                sec,
+                InvariantProof.carry_forward(
+                    ref_of(v0, FUNC), candidate, impact_for(v0, candidate, carry=(FUNC,))
+                ),
+            ],
         )
         self.assertEqual(ref_of(carried, FUNC).status, S.VIOLATED)
         self.assertFalse(ref_of(carried, FUNC).can_satisfy_proof())
