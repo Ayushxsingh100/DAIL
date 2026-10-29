@@ -118,11 +118,12 @@ class CommitCase(RepoCase):
         outcome: Any = None,
         checkpoint: Callable[[str], None] | None = None,
         evidence_ids: dict[str, str] | None = None,
+        opener: Callable[[], UnitOfWork] | None = None,
         **options: Any,
     ) -> CommitResult:
         chosen = world or self.world
         return commit_promotion(
-            self.factory(checkpoint),
+            opener or self.factory(checkpoint),
             outcome or run(chosen),
             chosen.candidate,
             chosen.impact,
