@@ -43,6 +43,9 @@ R16 core.impact imports only the standard library, core.domain.* and itself: not
 R17 core.verification imports only the standard library, core.domain.* and itself: not
     core.terraform_model, core.dependency, core.identity, core.impact, core.persistence,
     core.application, core.promotion or any other core.* package, and not evidence (C-144).
+R18 core.promotion imports only the standard library, core.domain.* and itself: not
+    core.verification, core.identity, core.dependency, core.impact, core.terraform_model,
+    core.persistence, core.application or any other core.* package, and not evidence (C-157).
 ORACLE  nothing in this repository imports the TerraPreserve oracle (ADR-010).
 
 A self-test feeds in-memory sources that break each rule, so a checker that
@@ -213,6 +216,15 @@ def check_module(module: str, imports: set[str]) -> list[Violation]:
             or top in ("evidence", "sqlite3")
         ):
             violations.append(Violation("R17", module, name))
+        if _within(module, "core.promotion") and (
+            (
+                top == "core"
+                and not _within(name, "core.promotion")
+                and not _within(name, "core.domain")
+            )
+            or top in ("evidence", "sqlite3")
+        ):
+            violations.append(Violation("R18", module, name))
         if (in_core or in_evidence) and not is_stdlib and top not in ("core", "evidence"):
             package = ".".join(module.split(".")[:2])
             if top not in THIRD_PARTY_ALLOWLIST.get(package, frozenset()):
@@ -615,6 +627,46 @@ class TestCheckerSelfTest(unittest.TestCase):
             self.assertNotIn("R17", self.rules_for(module, "from core.domain import hashing\n"))
         self.assertNotIn(
             "R17", self.rules_for("core.verificationx.bad", "from core.persistence import sqlite\n")
+        )
+
+    def test_r18_forbids_everything_but_the_standard_library_and_core_domain(self) -> None:
+        # C-157: the decision half of the Promotion Controller consumes domain objects only
+        for module in ("core.promotion", "core.promotion.decide", "core.promotion.lifecycle"):
+            for source in (
+                "from core.verification import engine\n",
+                "import core.verification.structural\n",
+                "from core.identity import engine\n",
+                "from core.dependency import build\n",
+                "from core.impact import engine\n",
+                "from core.terraform_model import security_rules\n",
+                "from core.persistence import sqlite\n",
+                "from core.application import config\n",
+                "import evidence.store\n",
+                "import sqlite3\n",
+                "from ..verification import engine\n",
+            ):
+                with self.subTest(module=module, source=source.strip()):
+                    is_package = module == "core.promotion"
+                    self.assertIn("R18", self.rules_for(module, source, is_package))
+
+    def test_r18_allows_core_domain_itself_and_the_standard_library(self) -> None:
+        for module in ("core.promotion.decide", "core.promotion.policy"):
+            for source in (
+                "from core.domain.promotion import PromotionDecision\n",
+                "from core.domain import hashing\n",
+                "import core.domain.verification\n",
+                "from core.promotion.policy import dail_policy\n",
+                "from .policy import dail_policy\n",
+                "import dataclasses\nfrom collections.abc import Mapping\n",
+            ):
+                with self.subTest(module=module, source=source.splitlines()[0]):
+                    self.assertNotIn("R18", self.rules_for(module, source))
+
+    def test_r18_applies_only_to_the_promotion_package(self) -> None:
+        for module in ("core.verification.ok", "core.impact.ok", "core.application.ok"):
+            self.assertNotIn("R18", self.rules_for(module, "from core.domain import hashing\n"))
+        self.assertNotIn(
+            "R18", self.rules_for("core.promotionx.bad", "from core.persistence import sqlite\n")
         )
 
     def test_the_verification_engine_cannot_import_the_application_layer_or_promotion(self) -> None:
