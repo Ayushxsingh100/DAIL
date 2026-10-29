@@ -44,6 +44,17 @@ def event_id_for(decision_id: str) -> str:
     return _derived(decision_id, "state-promoted:")
 
 
+def decided_event_id_for(decision_id: str) -> str:
+    """The id of the PROMOTION_DECIDED audit event of that decision."""
+    return _derived(decision_id, "promotion-decided:")
+
+
+def outcome_event_id_for(decision_id: str) -> str:
+    """The id of the audit event that follows a decision other than PROMOTE (CANDIDATE_REJECTED,
+    RETRY_SCHEDULED or ESCALATED, Doc 11 §12)."""
+    return _derived(decision_id, "decision-outcome:")
+
+
 def rejection_decision_id_for(decision_id: str) -> str:
     """The id of the REJECT decision (STALE_PARENT) stored when a commit of ``decision_id`` loses
     the race (C-166)."""
