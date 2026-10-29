@@ -369,6 +369,20 @@ class TestEvidenceSufficiencyAndFreshness(unittest.TestCase):
         out = self.with_record(level="L0")
         self.assertEqual(decided(out), (D.REJECT, R.EVIDENCE_NOT_SUFFICIENT))
 
+    def test_the_gate_items_are_l0_evidence_and_still_proof(self) -> None:
+        # the verification engine gives the structural and consistency items level L0
+        world = make_world()
+        self.assertEqual(world.records["STRUCTURAL"].evidence_level, "L0")
+        self.assertEqual(world.records["CONSISTENCY"].evidence_level, "L0")
+        self.assertEqual(decided(run(world)), (D.PROMOTE, R.ALL_REQUIRED_PROVEN))
+
+    def test_a_baseline_item_below_the_minimum_level_is_not_proof(self) -> None:
+        world = make_world()
+        low = record(world.candidate, BASELINE_ITEM, PASS, level="L0", n=44)
+        out = run(make_world(results={BASELINE_ITEM: low}))
+        self.assertEqual(decided(out), (D.REJECT, R.EVIDENCE_NOT_SUFFICIENT))
+        self.assertEqual([c.target for c in out.decision.blocking_conditions], [BASELINE_ITEM])
+
     def test_the_minimum_level_is_the_policys(self) -> None:
         world = make_world()
         low = record(

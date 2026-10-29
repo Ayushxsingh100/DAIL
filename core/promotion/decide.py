@@ -405,7 +405,7 @@ def _assess_result(
             invariant_version=None if invariant is None else invariant.version,
             verifier_id=verifier_id,
             verifier_version=verifier_version,
-        ) and _level_ok(record, policy):
+        ) and (item.kind == "GATE" or _level_ok(record, policy)):
             verdict.check = RequiredCheck(
                 target, _kind(item), ProofSource.VERIFIED, record.verification_id
             )
@@ -426,7 +426,10 @@ def _assess_result(
                 D.REJECT,
                 target,
                 f"{described} is not sufficient proof: it must be from {verifier_id} "
-                f"{verifier_version} at level {policy.min_evidence_level} or above",
+                f"{verifier_version}"
+                + (
+                    "" if item.kind == "GATE" else f" at level {policy.min_evidence_level} or above"
+                ),
             )
         )
         return

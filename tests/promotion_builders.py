@@ -128,7 +128,7 @@ def record(
     result: VerificationResult = PASS,
     *,
     definition: Invariant | None = None,
-    level: str = "L1",
+    level: str | None = None,
     verifier: tuple[str, str] | None = None,
     candidate_hash: str | None = None,
     error_type: str = "RuntimeError",
@@ -136,7 +136,8 @@ def record(
     n: int = 0,
 ) -> VerificationResultRecord:
     """One result for ``target_id`` (an invariant, a gate item or a resource), by default a fresh
-    L1 result of the verifier the definition names."""
+    result of the verifier the definition names: L1, as the verification engine gives for an
+    invariant and a baseline item, and L0 for the two gate items, as it does."""
     assert candidate.state_hash is not None
     if target_id.startswith("INVARIANT:"):
         assert definition is not None
@@ -174,7 +175,7 @@ def record(
         invariant_version=version,
         verifier_id=chosen[0],
         verifier_version=chosen[1],
-        evidence_level=level,
+        evidence_level=level or ("L0" if target_id in GATES else "L1"),
         verification_class=klass,
         result=result,
         reason=chosen_reason,
