@@ -401,11 +401,15 @@ class EvidenceChain:
         assert candidate is not None
         found = []
         types = self._types()
+        # a recorded error (even one after the ending, when the call failed once the work was done)
+        # does not move the ending; only a FAILED candidate's chain is built around it
+        skipped = _IGNORED if candidate.status is S.FAILED else _IGNORED | {T.ERROR_OCCURRED}
+        types_for_ending = [t for t in types if t not in skipped]
         if T.STATE_PROMOTED in types and candidate.status is not S.PROMOTED:
             found.append(f"ENDING: STATE_PROMOTED on a {candidate.status.value} candidate")
         if not finished:
             return found
-        last = types[-1] if types else None
+        last = types_for_ending[-1] if types_for_ending else None
         status = candidate.status
         if status is S.PROMOTED:
             if last is not T.STATE_PROMOTED:

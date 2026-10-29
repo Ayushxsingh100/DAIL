@@ -49,6 +49,49 @@ class ChainReader(ChainCase):
         with self.uow() as u:
             return describe_chain(u, candidate_id)
 
+    def failed(self, *, with_error: bool) -> CandidateState:
+        run = run_for(SAFE)
+        self.install(run)
+        trusted = run.trusted
+        created = CandidateState.create(
+            parent=trusted,
+            patch=patch_for(trusted, n=21),
+            candidate_sequence=5,
+            now=PIPELINE_NOW,
+            candidate_id=uid(3500),
+        )
+        building = start_building(created)
+        failed = fail_building(building, "the configuration does not parse")
+        with self.uow() as u:
+            u.patches.save(patch_for(trusted, n=21))
+            u.candidates.create(created)
+            u.candidates.save_transition(building)
+            u.candidates.save_transition(failed)
+            self.recorder.emit(
+                u,
+                T.CANDIDATE_CREATED,
+                event_id=oids.event_id_for(failed.candidate_id, 1, T.CANDIDATE_CREATED),
+                payload={
+                    "parent_state_id": trusted.state_id,
+                    "patch_id": failed.patch_id,
+                    "source": failed.source.value,
+                },
+                when=NOW,
+                candidate_id=failed.candidate_id,
+            )
+            if with_error:
+                self.recorder.record_error(
+                    u,
+                    stage="normalize",
+                    error_type="ConstructionFailed",
+                    detail={"status": "INVALID"},
+                    attempt_number=1,
+                    at=PIPELINE_NOW,
+                    when=NOW,
+                    candidate=failed,
+                )
+        return failed
+
 
 class TestAGoodChain(ChainReader):
     def test_a_safe_promotion_is_complete_and_in_the_order_of_c_172(self) -> None:
@@ -103,6 +146,42 @@ class TestAGoodChain(ChainReader):
     def test_an_unknown_candidate_is_a_problem(self) -> None:
         chain = self.chain(uid(123456))
         self.assertIn("UNREADABLE", codes(chain.problems()))
+
+
+class TestARecordedError(ChainReader):
+    """An error that was recorded and then recovered from is history, not a broken chain."""
+
+    def error_after_the_end(self, run: Any) -> None:
+        with self.uow() as u:
+            self.recorder.record_error(
+                u,
+                stage="commit",
+                error_type="InjectedFault",
+                detail={"message": "a read after the promotion failed"},
+                attempt_number=1,
+                at=PIPELINE_NOW,
+                when=NOW,
+                candidate=run.candidate,
+                evidence_id=oids.evidence_id_for(run.candidate.candidate_id, 1, "error", "k"),
+                event_id=oids.event_id_for(run.candidate.candidate_id, 1, T.ERROR_OCCURRED, "k"),
+            )
+
+    def test_an_error_after_a_promotion_is_not_a_problem(self) -> None:
+        run = self.promoted_chain()
+        self.error_after_the_end(run)
+        chain = self.chain(run.candidate.candidate_id)
+        self.assertEqual(chain.event_types()[-2:], ["STATE_PROMOTED", "ERROR_OCCURRED"])
+        self.assertEqual(chain.problems(), [])
+
+    def test_an_error_after_a_rejection_is_not_a_problem(self) -> None:
+        run = self.rejected_chain()
+        self.error_after_the_end(run)
+        self.assertEqual(self.chain(run.candidate.candidate_id).problems(), [])
+
+    def test_a_failed_candidate_is_still_built_around_its_error(self) -> None:
+        """The leniency stops at a FAILED candidate: without ERROR_OCCURRED it is a problem."""
+        failed = self.failed(with_error=False)
+        self.assertIn("ENDING", codes(self.chain(failed.candidate_id).problems()))
 
 
 class TestTheOrder(ChainReader):
@@ -371,49 +450,6 @@ class TestAStaleChain(ChainReader):
 
 
 class TestAFailedCandidate(ChainReader):
-    def failed(self, *, with_error: bool) -> CandidateState:
-        run = run_for(SAFE)
-        self.install(run)
-        trusted = run.trusted
-        created = CandidateState.create(
-            parent=trusted,
-            patch=patch_for(trusted, n=21),
-            candidate_sequence=5,
-            now=PIPELINE_NOW,
-            candidate_id=uid(3500),
-        )
-        building = start_building(created)
-        failed = fail_building(building, "the configuration does not parse")
-        with self.uow() as u:
-            u.patches.save(patch_for(trusted, n=21))
-            u.candidates.create(created)
-            u.candidates.save_transition(building)
-            u.candidates.save_transition(failed)
-            self.recorder.emit(
-                u,
-                T.CANDIDATE_CREATED,
-                event_id=oids.event_id_for(failed.candidate_id, 1, T.CANDIDATE_CREATED),
-                payload={
-                    "parent_state_id": trusted.state_id,
-                    "patch_id": failed.patch_id,
-                    "source": failed.source.value,
-                },
-                when=NOW,
-                candidate_id=failed.candidate_id,
-            )
-            if with_error:
-                self.recorder.record_error(
-                    u,
-                    stage="normalize",
-                    error_type="ConstructionFailed",
-                    detail={"status": "INVALID"},
-                    attempt_number=1,
-                    at=PIPELINE_NOW,
-                    when=NOW,
-                    candidate=failed,
-                )
-        return failed
-
     def test_a_failed_candidate_with_its_error_record_is_complete(self) -> None:
         failed = self.failed(with_error=True)
         chain = self.chain(failed.candidate_id)

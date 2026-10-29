@@ -27,6 +27,7 @@ from core.dependency.invariants import SemanticBinding
 from core.domain.enums import CandidateSource
 from core.domain.patch import Patch
 from core.domain.state import TrustedState
+from core.persistence.schema import initialize_database
 from core.promotion.commit import PromotionContext
 from tests.domain_builders import LINEAGE, uid
 from tests.fixture_catalog import REPO_ROOT
@@ -82,6 +83,13 @@ class OrchestratorCase(RepoCase):
     def setUp(self) -> None:
         super().setUp()
         self.opened = 0
+        self.databases = 0
+
+    def fresh_database(self) -> None:
+        """Another empty database file for the rest of the test (the old one is left as it is)."""
+        self.databases += 1
+        self.path = Path(self._tmp.name) / f"t{self.databases}.db"
+        initialize_database(self.path)
 
     def factory(self, checkpoint: Callable[[str], None] | None = None) -> Callable[[], Any]:
         return lambda: self.uow(checkpoint=checkpoint)
