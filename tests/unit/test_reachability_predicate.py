@@ -778,21 +778,24 @@ class TestRowsSixToNine(Check):
             evaluate(swap_ingress('  prefix_list_ids = ["pl-1"]\n')), U, 7, R.RULE_INDETERMINATE
         )
 
-    def test_row_seven_an_unresolved_group_of_the_source(self) -> None:
+    def test_an_unresolved_group_of_the_source_with_no_path_is_row_four(self) -> None:
+        # P5b-fix (C-156): E3 comes first, so row 4 and not row 7 (was row 7 in P5b)
         text = VAR + edits(
             canonical(),
             (APP_TO_DB, ""),
             (APP_SGS_LINE, "  vpc_security_group_ids      = [aws_security_group.app.id, var.u]\n"),
         )
-        self.check(evaluate(text), U, 7, R.ATTRIBUTE_UNRESOLVED)
+        self.check(evaluate(text), U, 4, R.ATTRIBUTE_UNRESOLVED)
 
-    def test_an_unresolved_group_does_not_spoil_a_pass_that_already_holds(self) -> None:
+    def test_an_unresolved_group_of_the_source_is_not_a_pass_even_when_the_path_holds(self) -> None:
+        # P5b-fix (C-156): superseded the P5b test that expected PASS, row 6; an unresolved entry
+        # leaves the check of the groups of S undecided (MIXED and RETAINED-INLINE), so row 4
         text = VAR + edit(
             canonical(),
             APP_SGS_LINE,
             "  vpc_security_group_ids      = [aws_security_group.app.id, var.u]\n",
         )
-        self.check(evaluate(text), P, 6, None)
+        self.check(evaluate(text), U, 4, R.ATTRIBUTE_UNRESOLVED)
 
     def test_row_seven_comes_before_row_eight(self) -> None:
         both = ingress_5432("narrow", '  cidr_blocks = ["10.0.1.0/25"]\n') + ingress_5432(
