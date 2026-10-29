@@ -264,7 +264,7 @@ def check_repository(roots: tuple[str, ...] | None = CHECKED_ROOTS) -> list[Viol
 
 # --- Source-level rules R8 to R10 (P1a step 14) ---------------------------------------------------
 
-SOURCE_RULES = frozenset({"R8", "R9", "R10"})
+SOURCE_RULES = frozenset({"R8", "R9", "R10", "ORCH"})
 # R8: only the state module and the Promotion Controller package may create a trusted state from a
 # candidate or mark a candidate promoted (SM-001, SM-002).
 R8_ALLOWED_MODULES = ("core.domain.state", "core.promotion")
@@ -304,6 +304,103 @@ def sole_caller_violations(module: str, source: str) -> list[Violation]:
         for v in check_source("core.impact.not_allowed", source)
         if v.rule == "R8"
     ]
+
+
+# P6c (C-175, closes the C-168 (b) carry-forward): the repository writes of a trusted state have one
+# caller each. ``save_promoted`` is called only by the commit of the Promotion Controller, and
+# ``save_baseline`` only by the baseline flow; ``core.persistence`` defines them. Tests are not
+# scanned (as for R8).
+R8_REPOSITORY_WRITE_CALLERS = {
+    "save_promoted": ("core.promotion.commit", "core.persistence"),
+    "save_baseline": ("core.application.baseline", "core.persistence"),
+}
+
+
+def repository_write_violations(module: str, source: str) -> list[Violation]:
+    """R8 for the repository writes: a use of ``save_promoted`` or ``save_baseline`` (as an
+    attribute, or as the name given to ``getattr``) outside the modules that may call it."""
+    found: list[Violation] = []
+    for node in ast.walk(ast.parse(source)):
+        name: str | None = None
+        if isinstance(node, ast.Attribute) and node.attr in R8_REPOSITORY_WRITE_CALLERS:
+            name = node.attr
+        elif (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id in ("getattr", "hasattr", "setattr")
+            and len(node.args) >= 2
+            and isinstance(node.args[1], ast.Constant)
+            and node.args[1].value in R8_REPOSITORY_WRITE_CALLERS
+        ):
+            name = str(node.args[1].value)
+        if name is not None and not any(
+            _within(module, allowed) for allowed in R8_REPOSITORY_WRITE_CALLERS[name]
+        ):
+            found.append(Violation("R8", module, name))
+    return found
+
+
+# P6c (C-170, R6 of the P6c prompt): the orchestrator coordinates through a factory and the
+# injected clock and ids. It imports neither sqlite3 nor core.persistence, reads no clock, draws no
+# randomness, and never calls ``decide`` after ``commit_promotion`` (a decision is made, then
+# recorded, then committed, in that order).
+ORCHESTRATOR_MODULE = "core.application.orchestrator"
+ORCHESTRATOR_CLOCK_CALLS = frozenset(
+    {
+        ("datetime", "now"),
+        ("datetime", "utcnow"),
+        ("date", "today"),
+        ("time", "time"),
+        ("time", "monotonic"),
+        ("time", "perf_counter"),
+        ("uuid", "uuid1"),
+        ("uuid", "uuid4"),
+    }
+)
+
+
+def orchestrator_violations(source: str) -> list[Violation]:
+    """The coupling rules of the orchestrator on one source (nothing is imported or executed)."""
+    module = ORCHESTRATOR_MODULE
+    tree = ast.parse(source)
+    aliases = _import_aliases(tree)
+    found: list[Violation] = []
+    first_commit: int | None = None
+    decides: list[int] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import | ast.ImportFrom):
+            names = (
+                [alias.name for alias in node.names]
+                if isinstance(node, ast.Import)
+                else [node.module or ""]
+            )
+            for name in names:
+                if _top(name) == "sqlite3" or _within(name, "core.persistence"):
+                    found.append(Violation("ORCH", module, name))
+            if isinstance(node, ast.ImportFrom):
+                for alias in node.names:
+                    if alias.name in ("uuid1", "uuid4", "random") or node.module == "random":
+                        found.append(Violation("ORCH", module, alias.name))
+        elif isinstance(node, ast.Call):
+            func = node.func
+            callee = func.id if isinstance(func, ast.Name) else getattr(func, "attr", None)
+            if callee == "commit_promotion":
+                first_commit = (
+                    node.lineno if first_commit is None else min(first_commit, node.lineno)
+                )
+            if callee == "decide":
+                decides.append(node.lineno)
+            if isinstance(func, ast.Attribute):
+                receiver = _receiver(func.value, aliases)
+                if (receiver, func.attr) in ORCHESTRATOR_CLOCK_CALLS:
+                    found.append(Violation("ORCH", module, f"{receiver}.{func.attr}"))
+                if receiver == "random":
+                    found.append(Violation("ORCH", module, f"random.{func.attr}"))
+    if first_commit is not None:
+        found += [Violation("ORCH", module, "decide after commit_promotion")] * sum(
+            1 for line in decides if line > first_commit
+        )
+    return found
 
 
 def _import_aliases(tree: ast.AST) -> dict[str, str]:
@@ -1107,6 +1204,117 @@ class TestArchitectureBoundaries(unittest.TestCase):
             for source in (call, mark):
                 with self.subTest(module=module, allowed=True):
                     self.assertEqual(sole_caller_violations(module, source), [])
+
+    def test_only_the_named_modules_call_the_repository_writes(self) -> None:
+        """C-175: ``save_promoted`` only from ``core.promotion.commit`` and ``save_baseline`` only
+        from ``core.application.baseline`` (``core.persistence`` defines them)."""
+        offenders = []
+        for path in iter_python_files(CHECKED_ROOTS):
+            module, _ = module_name(path)
+            source = path.read_text(encoding="utf-8")
+            offenders.extend(str(v) for v in repository_write_violations(module, source))
+        self.assertEqual(offenders, [], "\n".join(offenders))
+
+    def test_the_repository_write_check_can_fail(self) -> None:
+        promoted = "def f(uow, s):\n    uow.trusted_states.save_promoted(s)\n"
+        baseline = "def f(uow, s):\n    uow.trusted_states.save_baseline(s)\n"
+        reflected = 'def f(repo, s):\n    getattr(repo, "save_promoted")(s)\n'
+        stored = "def f(repo):\n    write = repo.save_baseline\n    return write\n"
+        for module in (
+            "core.application.orchestrator",
+            "core.application.recorder",
+            "core.promotion.newstate",
+            "core.promotion.decide",
+            "core.identity.engine",
+            "evidence.service",
+            "llm.adapter",
+            "scripts.dev",
+        ):
+            for source, name in (
+                (promoted, "save_promoted"),
+                (baseline, "save_baseline"),
+                (reflected, "save_promoted"),
+                (stored, "save_baseline"),
+            ):
+                with self.subTest(module=module, name=name):
+                    found = repository_write_violations(module, source)
+                    self.assertEqual([(v.rule, v.imported) for v in found], [("R8", name)])
+        # each write has its own caller: the other module's permission does not carry over
+        self.assertTrue(repository_write_violations("core.promotion.commit", baseline))
+        self.assertTrue(repository_write_violations("core.application.baseline", promoted))
+
+    def test_the_repository_write_check_allows_the_named_callers(self) -> None:
+        promoted = "def f(uow, s):\n    uow.trusted_states.save_promoted(s)\n"
+        baseline = "def f(uow, s):\n    uow.trusted_states.save_baseline(s)\n"
+        for module in ("core.promotion.commit", "core.persistence.sqlite", "core.persistence"):
+            with self.subTest(module=module, name="save_promoted"):
+                self.assertEqual(repository_write_violations(module, promoted), [])
+        for module in ("core.application.baseline", "core.persistence.sqlite"):
+            with self.subTest(module=module, name="save_baseline"):
+                self.assertEqual(repository_write_violations(module, baseline), [])
+        # a definition is not a call, and an unrelated name is not the write
+        defined = (
+            "class R:\n    def save_promoted(self, s): ...\n    def save_baseline(self, s): ...\n"
+        )
+        self.assertEqual(repository_write_violations("core.domain.repositories", defined), [])
+        self.assertEqual(
+            repository_write_violations("core.application.x", "uow.patches.save(p)\n"), []
+        )
+        self.assertEqual(
+            repository_write_violations("core.application.x", "getattr(repo, 'save')(p)\n"), []
+        )
+
+    def test_the_orchestrator_is_decoupled_when_it_exists(self) -> None:
+        """C-170, R6 of P6c: no sqlite3, no core.persistence, no clock, no randomness, and no
+        ``decide`` after ``commit_promotion``. (``test_orchestrator.py`` requires the module to
+        exist; this test checks the file when there is one.)"""
+        path = REPO_ROOT / "core" / "application" / "orchestrator.py"
+        if path.is_file():
+            found = orchestrator_violations(path.read_text(encoding="utf-8"))
+            self.assertEqual(found, [], "\n".join(str(v) for v in found))
+
+    def test_the_orchestrator_exists_and_is_among_the_checked_modules(self) -> None:
+        path = REPO_ROOT / "core" / "application" / "orchestrator.py"
+        self.assertTrue(path.is_file())
+        self.assertIn(
+            ORCHESTRATOR_MODULE, {module_name(p)[0] for p in iter_python_files(CHECKED_ROOTS)}
+        )
+
+    def test_the_orchestrator_check_can_fail(self) -> None:
+        late_decide = "decide after commit_promotion"
+        broken = {
+            "import sqlite3\n": "sqlite3",
+            "from sqlite3 import connect\n": "sqlite3",
+            "import core.persistence.sqlite\n": "core.persistence.sqlite",
+            "from core.persistence.sqlite import SqliteUnitOfWork\n": "core.persistence.sqlite",
+            "from core.persistence import sqlite\n": "core.persistence",
+            "from datetime import datetime\ndatetime.now()\n": "datetime.now",
+            "import datetime\ndatetime.datetime.now()\n": "datetime.now",
+            "from datetime import datetime as dt\ndt.utcnow()\n": "datetime.utcnow",
+            "import time\ntime.time()\n": "time.time",
+            "import time as t\nt.monotonic()\n": "time.monotonic",
+            "import random\nrandom.random()\n": "random.random",
+            "from random import choice\n": "choice",
+            "import uuid\nuuid.uuid4()\n": "uuid.uuid4",
+            "from uuid import uuid4\n": "uuid4",
+            "def f():\n    commit_promotion(1)\n    decide(2)\n": late_decide,
+            "def f(m):\n    m.commit_promotion(1)\n    m.decide(2)\n": late_decide,
+        }
+        for source, imported in broken.items():
+            with self.subTest(source=source.splitlines()[-1]):
+                found = orchestrator_violations(source)
+                self.assertIn(("ORCH", imported), [(v.rule, v.imported) for v in found])
+
+    def test_the_orchestrator_check_allows_the_intended_coupling(self) -> None:
+        for source in (
+            "def f():\n    decide(1)\n    commit_promotion(2)\n",
+            "import uuid\nuuid.uuid5(NS, 'x')\n",
+            "from datetime import datetime\ndatetime(2026, 1, 1)\n",
+            "from core.domain.state import CandidateState\nclock()\n",
+            "from core.persistence_like import x\n",
+        ):
+            with self.subTest(source=source.splitlines()[-1]):
+                self.assertEqual(orchestrator_violations(source), [])
 
     def test_scripts_import_only_stdlib_and_first_party(self) -> None:
         """A14: no third-party imports in scripts/ (core/ and evidence/ are covered by R7)."""
