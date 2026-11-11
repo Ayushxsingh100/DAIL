@@ -249,7 +249,28 @@ Carry-forward: a second attempt on the same terminal candidate returns the first
 deciding (MEDIUM; reject or document in P7/P8); C-173 Proposed until the authors confirm; C-169 Open;
 C-170 to C-176 Proposed.
 
-## P6d — Every move is a change, and invariant registry v1.1 (pending external review)
+## P6d — Every move is a change, and invariant registry v1.1 — passed with limits (external review, 11 Nov 2026; merged as 1c3d72b, tagged registry-v1.1)
+
+```text
+Verdict (external review, 11 Nov 2026, PR #27 at 8c5ca0a): APPROVED WITH LIMITS. Merged as 1c3d72b,
+tagged registry-v1.1. Limits carried forward (not blocking), from the verdict:
+1. The pipeline still defaults to registry v1.0. The end-to-end tests run v1.0 definitions; v1.1 is
+   exercised in tests/unit/test_registry_v1_1.py. P8 must make v1.1 the default for every
+   experiment condition, so that DAIL is evaluated under the decided rules.
+2. Version encoding (C-180). Registry 1.1 is stored as the integer 2, and the verifier version stays
+   "1" while its §3.3 behaviour depends on the definition's registry. The mapping "stored 2 =
+   registry 1.1" must be stated wherever evidence is reported (P8 reports, the paper).
+3. C-181 (implementation readings) is Proposed; the authors must decide it. [Decided by the
+   authors on 11 Nov 2026, recorded in P7a.]
+4. Equivalence evidence gap. In tp-v1-F3-0278 the oracle archive does not record the sources of 2
+   indeterminate rules; the conclusion relies on reading that scenario's .tf. Record in
+   TerraPreserve's v1.1 notes: the oracle evidence should record rule sources.
+5. Stale mentions of P9 remain in CLAUDE.md and README.md; update them in P7a. [Done in P7a.]
+6. C-155 readings stay DAIL implementation choices outside the registry; DAIL-oracle differences
+   on those cases are to be measured in P8.
+```
+
+The P6d author's input to the review, as written before the verdict:
 
 ```text
 P6d mini-gate: NOT DECIDED. Status written by the P6d author as an input to the external review.

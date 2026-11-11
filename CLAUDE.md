@@ -124,8 +124,9 @@ Before finishing any package, run `dev.py test`, `dev.py lint` and `pytest`. If 
   - disable or weaken a CI job or gitleaks;
   - commit directly to `main`.
 - **Terraform and AWS.**
-  - Never run `terraform apply` or `terraform destroy`, and never use AWS credentials, unless the current prompt (P9 onward) says so and the user confirms.
-  - No provider blocks anywhere before P9. Resources only under `fixtures/`, as test data: `terraform init -backend=false` and `terraform validate` only; never plan, apply or use credentials there.
+  - AWS stays fully offline (C-71): no deployment, no AWS account, no calibration against live AWS. P9 and milestone M6 are removed; DAIL and the oracle are configuration-level only.
+  - Never run `terraform apply`, `terraform destroy` or `terraform plan`, and never use AWS credentials.
+  - No provider blocks anywhere. Resources only under `fixtures/`, as test data: `terraform init -backend=false` and `terraform validate` only.
   - Terraform and AWS provider pins must match the TerraPreserve repository.
 - **Secrets.**
   - Never commit or print secrets. Secrets are referenced only as `env:NAME`.
