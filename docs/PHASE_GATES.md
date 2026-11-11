@@ -249,11 +249,44 @@ Carry-forward: a second attempt on the same terminal candidate returns the first
 deciding (MEDIUM; reject or document in P7/P8); C-173 Proposed until the authors confirm; C-169 Open;
 C-170 to C-176 Proposed.
 
-## P6d–P10 — NOT STARTED
+## P6d — Every move is a change, and invariant registry v1.1 (pending external review)
+
+```text
+P6d mini-gate: NOT DECIDED. Status written by the P6d author as an input to the external review.
+What changed:
+  Moves (C-177, supersedes C-129's resource-level clause): a pair made by a moved block or by the
+  implicit count move is never UNCHANGED; with equal fingerprints it is MODIFIED, the match carries
+  moved = true and the move evidence decides; impact carries it with the flag MOVED. No new
+  ChangeType. AddressOnlyIdentity (C-127) is unchanged. tests.unit.test_moves_are_changes.
+  Registry v1.1 (C-178 to C-181): docs/specs/INVARIANT_REGISTRY_v1.1.md, the v1.0 text with the
+  §3.3 possible clause (C-150 closed), the §2.9 wording and the versions; INVARIANT_REGISTRY_v1.md
+  unchanged (sha256 pinned by a test). INV-SEC-001/002 version 2, INV-SEC-003 and INV-FUNC-001
+  version 1; DAIL stores registry 1.1 as invariant_registry_version 2 (C-180). The verifier reads
+  the definition's predicate.registry; SEC evidence of version 2 cites registry-v1.1. Version 1
+  evidence is not carried forward to version 2 (C-62). tests.unit.test_registry_v1_1,
+  tests.unit.test_verification_public_ingress.TestRegistryGap.
+Equivalence on TerraPreserve v1.0 (read-only; archive sha256 equal to TerraPreserve
+docs/D6_FREEZE.md at 8ec1931): indeterminate SEC-001/002 ingress rules that v1.1 makes possible
+and v1.0 does not: dev primary 0, dev alternate 0, test primary 0, test alternate 0.
+TerraPreserve v1.0 labels are identical under registry v1.0 and v1.1.
+  How: the test split records no indeterminate SEC ingress rule. The dev split records two
+  (tp-v1-F3-0278, aws_security_group.ec2_sg.ingress[0] and [1], both value sets, steps 0 and 1,
+  reason "security-group sources unresolved"); the archive does not record their sources, so the
+  scenario's Terraform (scenarios/dev/tp-v1-F3-0278, steps 0 and 1) was read, not run (user's
+  decision, 11 Nov 2026): neither rule has cidr_blocks, ipv6_cidr_blocks or prefix_list_ids, and
+  the clause records no violation, so neither is possible under v1.1.
+Limits: the oracle itself is not changed (TerraPreserve is read only); C-155's readings stay DAIL
+choices (P8 measures them); the verifier version stays "1" (C-180, question for the reviewer);
+the test pipeline still defaults to the v1.0 definitions, and the canonical scenario is run under
+v1.1 by tests.unit.test_registry_v1_1. Carry-forward: C-181 Proposed; the user tags registry-v1.1
+after the verdict and the merge.
+```
+
+## P7a–P10 — NOT STARTED
 
 P9 (AWS integration) and milestone M6 (AWS Demonstration) are removed (C-71, Decided by the advisor,
 11 Nov 2026): AWS stays fully offline, with no deployment, no AWS account and no calibration against
-live AWS; the oracle and DAIL are configuration-level only. The remaining packages are P6d, P7a, P7b,
+live AWS; the oracle and DAIL are configuration-level only. The packages after P6c are P6d, P7a, P7b,
 P8a, P8b and P10.
 
 ## Temporary exceptions

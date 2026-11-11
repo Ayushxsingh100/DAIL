@@ -29,7 +29,8 @@ which document to consult for a given decision.
 - [`BUILD_SEQUENCE.md`](BUILD_SEQUENCE.md) — the 18 work packages and their order.
 - [`DECISIONS_REGISTER.md`](DECISIONS_REGISTER.md) — recorded conflicts and their resolutions.
 - [`docs/specs/D0_Dataset_Specification_TerraPreserve_v1.md`](specs/D0_Dataset_Specification_TerraPreserve_v1.md) — the TerraPreserve D0 dataset specification v1.0, the base document of the D0 amendments (added verbatim on 23 Oct 2026; implemented in the TerraPreserve repository).
-- [`docs/specs/INVARIANT_REGISTRY_v1.md`](specs/INVARIANT_REGISTRY_v1.md) — the four protected invariants: exact predicates, results, footprints and conformance vectors (C-17). Normative for P4, P5, D4 and D5.
+- [`docs/specs/INVARIANT_REGISTRY_v1.md`](specs/INVARIANT_REGISTRY_v1.md) — the four protected invariants: exact predicates, results, footprints and conformance vectors (C-17). Normative for P4, P5, D4 and D5. Frozen as the tag `registry-v1.0`; never edited (C-85). TerraPreserve v1.0's labels cite it.
+- [`docs/specs/INVARIANT_REGISTRY_v1.1.md`](specs/INVARIANT_REGISTRY_v1.1.md) — registry v1.1 (P6d; C-178 to C-181): the v1.0 text with the §3.3 `possible` clause (C-150 closed), the §2.9 wording and the versions (INV-SEC-001 and INV-SEC-002 version 2). **For DAIL it takes precedence over v1.0 from P6d on.** v1.0 stays the reference for the evidence and the labels that cite `registry-v1.0`.
 - [`docs/specs/D0_AMENDMENTS_v1.0.1.md`](specs/D0_AMENDMENTS_v1.0.1.md) — amends TerraPreserve D0 v1.0 (N-03, N-04, N-08; gt_class; canonical topology).
 
 ## Precedence
