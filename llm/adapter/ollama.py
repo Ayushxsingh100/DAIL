@@ -4,7 +4,8 @@ The only real provider in this repository is a local Ollama server (C-182). It i
 standard library (``urllib``, C-183), through an opener without proxies, and only at a loopback
 address: the constructor refuses any other host, scheme, path or user part.
 
-Documented API used (Ollama ``docs/api.md``, https://github.com/ollama/ollama/blob/main/docs/api.md,
+Documented API used (Ollama ``docs/api.md`` at the installed version, v0.40.16:
+https://github.com/ollama/ollama/blob/v0.40.16/docs/api.md,
 "Generate a chat completion" and "Structured outputs"; errors: https://docs.ollama.com/api/errors):
 
 * ``POST /api/chat`` with ``model``, ``messages`` (system, user), ``stream: false``, ``format`` (the

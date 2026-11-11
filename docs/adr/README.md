@@ -12,7 +12,7 @@ project decisions (see `docs/DECISIONS_REGISTER.md`).
 | [003](ADR-003-controlled-terraform-parsing-and-normalization.md) | Terraform CLI plus controlled normalization layer (own stdlib parser inside the core; CLI only outside it) | Parsing half accepted (C-91 to C-94, 24 Oct 2026, P3a-1); normalization half added in P3a-2 |
 | [004](ADR-004-sqlite-through-persistence-abstraction.md) | SQLite through a persistence abstraction | Accepted (C-10) |
 | [005](ADR-005-dependency-graph-representation.md) | Dependency graph representation; NetworkX deferred (deviates from Doc 02 §26) | Proposed (C-131, P3c) |
-| 006 | Provider-agnostic LLM boundary | Pending — written in P7a |
+| [006](ADR-006-provider-agnostic-llm-boundary.md) | Provider-agnostic LLM boundary | Proposed (P7a, C-182 to C-187) |
 | 007 | Promotion Controller as sole trusted-state mutation authority | Pending — written in P6a |
 | [008](ADR-008-explicit-uncertainty-result-semantics.md) | Explicit uncertainty result semantics | Accepted (1 Oct 2026) |
 | [009](ADR-009-deterministic-fixed-patch-core-before-llm.md) | Deterministic fixed-patch core before LLM integration | Accepted |

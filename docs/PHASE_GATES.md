@@ -303,7 +303,37 @@ v1.1 by tests.unit.test_registry_v1_1. Carry-forward: C-181 Proposed; the user t
 after the verdict and the merge.
 ```
 
-## P7a–P10 — NOT STARTED
+## P7a — The LLM channel (pending external review)
+
+```text
+P7a mini-gate: NOT DECIDED. Status written by the P7a author as an input to the external review.
+What exists (llm/, standard library only, C-183; ADR-006 Proposed):
+  provider seam and failure classes (llm/adapter/provider.py, Doc 10 §24, §30); FakeProvider
+  (scripted, no network) and OllamaProvider (urllib, loopback only, digest pin; C-182, C-185);
+  context builder (§6-§8: impact neighbourhood only, secrets redacted before the prompt, unknown
+  values marked); budget (§18-§19: deterministic reduction 7..3, omissions recorded,
+  CONTEXT_INSUFFICIENT without a provider call); prompts dail-repair-prompt-1 (system and task
+  layers, infrastructure as data between <<<DAIL_DATA and DAIL_DATA>>>, template hash pinned);
+  strict parser dail-llm-parser-1 (§11, §22, §25; no tolerant parser); retries (§23, the four
+  classes, bounded); request and response records and observability (§16-§17, §20-§21, §32-§34);
+  the emergency switch llm.generation_enabled (off: no provider call); config llm.provider accepts
+  "ollama". Tests: tests.unit.test_llm_parser, test_llm_context, test_llm_generate, test_llm_ollama.
+Wiring check (11 Nov 2026, the author's machine: Intel Core Ultra 5 125H, 15.7 GB RAM, CPU only):
+  Ollama 0.40.16 for Windows (official installer, signed by Ollama Inc.); model qwen2.5-coder:1.5b,
+  digest d7372fd828518a4d38b1eb196c673c31a85f2ed302b3d1e406c4c2d1b64a0668, Q4_K_M, 1.5B,
+  986 MB; licence Apache-2.0 (ollama.com/library/qwen2.5-coder:1.5b, licence blob 832dd9e00a68,
+  and `ollama show --license`). One run of the canonical objective (Doc 10 §36) with the
+  canonical regression context: status PATCH, parse errors none, latency 31.7 s, tokens in 2381 /
+  out 184, attempts 1. The patch was not turned into a candidate (P7b) and its quality was not
+  judged; this model is for wiring only, never for results (C-186).
+Limits: patch validation beyond the parser (Doc 10 §13), HCL parsing of the patch and candidate
+construction are P7b; a repair that adds a resource at a new address is refused by the scope check
+(C-187 (3)); the token estimate is characters/4, not a tokenizer; the Ollama unit tests use a
+loopback fake server, not the real one; the wiring check ran once on one machine.
+Carry-forward: C-183 to C-187 Proposed; ADR-006 Proposed.
+```
+
+## P7b–P10 — NOT STARTED
 
 P9 (AWS integration) and milestone M6 (AWS Demonstration) are removed (C-71, Decided by the advisor,
 11 Nov 2026): AWS stays fully offline, with no deployment, no AWS account and no calibration against
