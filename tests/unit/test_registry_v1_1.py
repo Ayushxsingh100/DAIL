@@ -24,7 +24,7 @@ import unittest
 from functools import cache
 from pathlib import Path
 
-from core.domain.enums import DecisionType
+from core.domain.enums import DecisionType, VerificationResult
 from core.domain.impact import ReasonCode
 from core.domain.invariant import Invariant
 from core.domain.jsonvalue import thaw_json
@@ -37,6 +37,7 @@ from core.domain.registry_v1_1 import (
 )
 from core.verification.dispatch import DEFAULT_VERIFIERS, registry_of
 from tests.domain_builders import at
+from tests.pipeline_builders import inputs_for
 from tests.promotion_pipeline import ROOT as FIXTURES_ROOT
 from tests.promotion_pipeline import PipelineRun, fixtures_with_a_parent, pipeline, trusted_from
 
@@ -176,6 +177,29 @@ class TestDefinitions(unittest.TestCase):
             predicate = {**thaw_json(self.v11[SEC1].predicate), "registry": bad}
             with self.subTest(tag=bad), self.assertRaises(ValueError):
                 registry_of(dataclasses.replace(self.v11[SEC1], predicate=predicate))
+
+    def test_the_verifier_evaluates_each_definition_under_its_own_registry(self) -> None:
+        # registry v1.0 §3.3 gives PASS for this rule (C-150); v1.1 §3.3 gives UNKNOWN (C-178)
+        gap = (
+            'variable "u" {}\n'
+            'resource "aws_security_group" "app" {\n}\n'
+            'resource "aws_security_group_rule" "r" {\n  type = "ingress"\n'
+            '  security_group_id = aws_security_group.app.id\n  protocol = "tcp"\n'
+            '  from_port = var.u\n  to_port = 22\n  cidr_blocks = ["0.0.0.0/0"]\n}\n'
+        )
+        inputs = inputs_for(gap, with_graphs=False)
+        cases = (
+            (self.v10[SEC1], VerificationResult.PASS),
+            (self.v11[SEC1], VerificationResult.UNKNOWN),
+            (self.v10[SEC2], VerificationResult.PASS),
+            # §3.3: "could permit TCP/p (its protocol or ports unresolved, ...)": an unresolved
+            # from_port could permit 5432 whatever to_port says
+            (self.v11[SEC2], VerificationResult.UNKNOWN),
+        )
+        for definition, expected in cases:
+            with self.subTest(invariant=definition.invariant_id, version=definition.version):
+                verifier = DEFAULT_VERIFIERS[(definition.verifier_id, definition.verifier_version)]
+                self.assertIs(verifier(definition, inputs).result, expected)
 
     def test_sorted_by_id(self) -> None:
         ids = [d.invariant_id for d in registry_v1_1_invariants(NOW, source=S, destination=D)]
