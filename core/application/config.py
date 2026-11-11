@@ -166,8 +166,8 @@ SCHEMA: tuple[ConfigKey, ...] = (
         safety_critical=False,
         conservative_value=None,
         runtime_overridable=False,
-        allowed=("fake",),
-        spec_ref="Doc 01 FR-LLM-006; Doc 14 §12",
+        allowed=("fake", "ollama"),
+        spec_ref="Doc 01 FR-LLM-006; Doc 14 §12; C-71, C-182 (local Ollama only)",
     ),
     ConfigKey(
         area="llm",

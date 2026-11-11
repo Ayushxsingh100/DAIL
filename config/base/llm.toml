@@ -3,4 +3,5 @@
 # generation_enabled is safety-critical (Doc 14 §37-38): it may be enabled only in a
 # reviewed configuration file, never by an environment variable or runtime override.
 generation_enabled = false
+# provider: "fake" (CI and the default tests) or "ollama" (a local server only; C-71, C-182).
 provider = "fake"
