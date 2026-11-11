@@ -19,6 +19,10 @@ evidence" (Doc 07 §7), and similarity is never sufficient (Doc 07 §5).
 | DELETED | set | null | DIFFERENT | null |
 | UNCERTAIN | either, not both null | | UNCERTAIN | LOW |
 
+``moved`` (C-177, "every resource move counts as a change"): true exactly when both refs are set
+and differ, i.e. a ``moved`` block or Terraform's implicit ``count`` move made the pair. A moved
+pair is never UNCHANGED. The constructor refuses a flag that disagrees with the refs.
+
 ``IdentityReport`` is frozen. Its ``content_hash`` covers everything except ``report_id`` and
 ``created_at`` (C-33 helpers), so two runs over the same inputs can be compared by hash; the
 constructor recomputes it (``HashMismatchError``). It also rejects a summary that is not the one
@@ -261,6 +265,7 @@ class IdentityMatch:
     change_type: ChangeType
     confidence: IdentityConfidence | None
     rationale: Mapping[str, Any]
+    moved: bool = False
 
     def __post_init__(self) -> None:
         trusted = _require_ref(self.trusted_resource_ref, "IdentityMatch.trusted_resource_ref")
@@ -272,7 +277,24 @@ class IdentityMatch:
         if self.confidence is not None:
             require_enum(self.confidence, IdentityConfidence, "IdentityMatch.confidence")
         self._check_combination(trusted, candidate)
+        self._check_moved(trusted, candidate)
         object.__setattr__(self, "rationale", self._canonical_rationale(self.rationale))
+
+    def _check_moved(self, trusted: str | None, candidate: str | None) -> None:
+        """C-177: the flag says exactly whether the pair crosses two addresses, and a pair that a
+        move made is never UNCHANGED."""
+        if not isinstance(self.moved, bool):
+            raise DomainValidationError("IdentityMatch.moved: must be a boolean")
+        across = trusted is not None and candidate is not None and trusted != candidate
+        if self.moved != across:
+            raise DomainValidationError(
+                f"IdentityMatch: moved is {self.moved} for refs {trusted!r} and {candidate!r}; it "
+                "is true exactly for a pair across two addresses (C-177)"
+            )
+        if self.moved and self.change_type is ChangeType.UNCHANGED:
+            raise DomainValidationError(
+                "IdentityMatch: a moved pair is never UNCHANGED; every move is a change (C-177)"
+            )
 
     def _check_combination(self, trusted: str | None, candidate: str | None) -> None:
         change = self.change_type
@@ -344,8 +366,12 @@ class IdentityMatch:
         change_type: ChangeType,
         rule: EvidenceType,
         evidence_ids: Iterable[str],
+        moved: bool | None = None,
     ) -> IdentityMatch:
-        """A match whose status and confidence follow from the change type (C-122)."""
+        """A match whose status and confidence follow from the change type (C-122). ``moved`` is
+        derived from the refs when it is not given (C-177); a value that disagrees is refused."""
+        if moved is None:
+            moved = trusted_ref is not None and candidate_ref is not None and trusted_ref != candidate_ref
         if change_type in _PAIR_CHANGES:
             status, confidence = IdentityStatus.SAME, IdentityConfidence.HIGH
         elif change_type is ChangeType.UNCERTAIN:
@@ -359,6 +385,7 @@ class IdentityMatch:
             change_type=change_type,
             confidence=confidence,
             rationale={"rule": rule.value, "evidence_ids": sorted(set(evidence_ids))},
+            moved=moved,
         )
 
     @property
@@ -384,6 +411,7 @@ class IdentityMatch:
             "change_type": self.change_type.value,
             "confidence": None if self.confidence is None else self.confidence.value,
             "rationale": thaw_json(self.rationale),
+            "moved": self.moved,
         }
 
     @classmethod
@@ -397,6 +425,7 @@ class IdentityMatch:
                 "change_type",
                 "confidence",
                 "rationale",
+                "moved",
             ),
             "IdentityMatch",
         )
@@ -414,6 +443,7 @@ class IdentityMatch:
                 else parse_enum(raw_confidence, IdentityConfidence, "IdentityMatch.confidence")
             ),
             rationale=fields["rationale"],
+            moved=fields["moved"],
         )
 
 

@@ -170,7 +170,8 @@ class TestWhereTheAblationDiffersAndWhereItDoesNot(unittest.TestCase):
     def test_it_differs_on_a_moved_resource(self) -> None:
         trusted, candidate = tf(vpc("a")), tf(vpc("b"), moved("aws_vpc.a", "aws_vpc.b"))
         full, ablated = both(trusted, candidate)
-        self.assertEqual(changes(full), {"aws_vpc.a->aws_vpc.b": "UNCHANGED"})
+        # C-177: every move is a change (was UNCHANGED under C-129)
+        self.assertEqual(changes(full), {"aws_vpc.a->aws_vpc.b": "MODIFIED"})
         self.assertEqual(changes(ablated), {"aws_vpc.a->-": "DELETED", "-->aws_vpc.b": "CREATED"})
 
     def test_it_differs_on_an_implicit_count_move(self) -> None:

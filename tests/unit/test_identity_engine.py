@@ -406,9 +406,11 @@ class TestExplicitMoves(PartitionMixin):
         self.assertEqual(
             (m.trusted_resource_ref, m.candidate_resource_ref), ("aws_vpc.a", "aws_vpc.b")
         )
+        # C-177 (authors, 31 Oct 2026) supersedes C-129: every move is a change, so the pair is
+        # MODIFIED and moved although the fingerprints are equal (was UNCHANGED)
         self.assertEqual(
-            (m.change_type, m.identity_status, m.confidence),
-            (ChangeType.UNCHANGED, IdentityStatus.SAME, IdentityConfidence.HIGH),
+            (m.change_type, m.identity_status, m.confidence, m.moved),
+            (ChangeType.MODIFIED, IdentityStatus.SAME, IdentityConfidence.HIGH, True),
         )
         kinds = {e.evidence_type for e in report.evidence_for(m)}
         self.assertIn(EvidenceType.EXPLICIT_MOVE, kinds)
@@ -429,8 +431,9 @@ class TestExplicitMoves(PartitionMixin):
         self.assertEqual(
             changes(report),
             {
-                'aws_vpc.a["x"]->aws_vpc.b["x"]': "UNCHANGED",
-                'aws_vpc.a["y"]->aws_vpc.b["y"]': "UNCHANGED",
+                # C-177 supersedes C-129's "a resource-level move ... can be UNCHANGED"
+                'aws_vpc.a["x"]->aws_vpc.b["x"]': "MODIFIED",
+                'aws_vpc.a["y"]->aws_vpc.b["y"]': "MODIFIED",
             },
         )
 
@@ -469,7 +472,8 @@ class TestExplicitMoves(PartitionMixin):
             tf(vpc("a")),
             tf(vpc("c"), moved("aws_vpc.a", "aws_vpc.b"), moved("aws_vpc.b", "aws_vpc.c")),
         )
-        self.assertEqual(changes(report), {"aws_vpc.a->aws_vpc.c": "UNCHANGED"})
+        # C-177: every move is a change (was UNCHANGED under C-129)
+        self.assertEqual(changes(report), {"aws_vpc.a->aws_vpc.c": "MODIFIED"})
         m = report.resource_matches[0]
         move = next(
             e for e in report.evidence_for(m) if e.evidence_type is EvidenceType.EXPLICIT_MOVE

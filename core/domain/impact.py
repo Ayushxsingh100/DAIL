@@ -166,6 +166,7 @@ class ChangeFlag(StrEnum):
 
     UNRESOLVED_CONTENT = "UNRESOLVED_CONTENT"
     UNSUPPORTED_TYPE = "UNSUPPORTED_TYPE"
+    MOVED = "MOVED"  # a pair that a move made: the change reason "moved" (C-177)
 
 
 # --- helpers --------------------------------------------------------------------------------------
@@ -251,6 +252,14 @@ class ChangedResource:
         flags = tuple(require_enum(f, ChangeFlag, "ChangedResource.flags") for f in self.flags)
         if list(flags) != sorted(set(flags)):
             raise DomainValidationError("ChangedResource.flags: must be sorted and unique")
+        if ChangeFlag.MOVED in flags and (
+            self.trusted_ref is None
+            or self.candidate_ref is None
+            or self.trusted_ref == self.candidate_ref
+        ):
+            raise DomainValidationError(
+                "ChangedResource.flags: MOVED needs a pair across two addresses (C-177)"
+            )
         object.__setattr__(self, "flags", flags)
 
     def refs(self) -> tuple[str, ...]:
