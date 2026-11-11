@@ -236,8 +236,25 @@ the stale route). C-176: baseline evidence is built in core.application.baseline
 to_evidence_submission stamps the resource-set hash, not the state's. Construction failure stores
 no decision (C-170 (3), for the authors). 18 fixtures have a parent, the prompt said 17.
 ```
+P6c mini-gate: PASSED. P6 gate: PASSED WITH LIMITS. M3 (Trust Transition Complete): reached for
+fixed patches (external review, 29 Oct 2026; PR #26 at d7c0333, merged before the verdict, C-28
+process lapse recorded a ninth time). Suite passes on Python 3.12 and 3.13 (4106 tests); black, ruff
+and mypy clean; no passed package, fixture or requirement changed. Reviewer probes: conflicting
+reruns refused, emergency switch turns a PROMOTE into an audited ESCALATE with no state change;
+6 of 6 reviewer mutations of the orchestrator killed.
+Limits: reports are not persisted (P8); fixed patches only, patch text not applied (P7b); one
+SQLite file; Step 5 suites written after the code; author's 38 mutations and the C-176 probe not
+re-run by the reviewer.
+Carry-forward: a second attempt on the same terminal candidate returns the first decision without
+deciding (MEDIUM; reject or document in P7/P8); C-173 Proposed until the authors confirm; C-169 Open;
+C-170 to C-176 Proposed.
 
-## P6c–P10 — NOT STARTED
+## P6d–P10 — NOT STARTED
+
+P9 (AWS integration) and milestone M6 (AWS Demonstration) are removed (C-71, Decided by the advisor,
+11 Nov 2026): AWS stays fully offline, with no deployment, no AWS account and no calibration against
+live AWS; the oracle and DAIL are configuration-level only. The remaining packages are P6d, P7a, P7b,
+P8a, P8b and P10.
 
 ## Temporary exceptions
 
