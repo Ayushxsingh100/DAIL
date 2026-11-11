@@ -21,7 +21,7 @@ from typing import Final
 from core.domain.invariant import Invariant
 from core.verification.inputs import VerificationInputs
 from core.verification.outcome import PredicateOutcome
-from core.verification.public_ingress import evaluate_public_ingress
+from core.verification.public_ingress import REGISTRIES, evaluate_public_ingress
 from core.verification.rds_public_flag import evaluate_rds_public_flag
 from core.verification.reachability import evaluate_reachability
 
@@ -41,13 +41,23 @@ def _port(definition: Invariant) -> int:
     return port
 
 
+def registry_of(definition: Invariant) -> str:
+    """The registry tag the definition cites (``predicate.registry``); it selects the §3.3 text
+    of ``PIP(p)`` (C-181 (2)). A tag the verifier does not know raises: VERIFIER_ERROR."""
+    registry = definition.predicate.get("registry")
+    if not isinstance(registry, str) or registry not in REGISTRIES:
+        raise ValueError(f"{definition.invariant_id}: unknown registry {registry!r}")
+    return registry
+
+
 def public_ingress(definition: Invariant, inputs: VerificationInputs) -> PredicateOutcome:
-    """INV-SEC-001 and INV-SEC-002: ``PIP(p)`` with ``p`` from the definition."""
+    """INV-SEC-001 and INV-SEC-002: ``PIP(p)`` with ``p`` and the registry from the definition."""
     return evaluate_public_ingress(
         _port(definition),
         inputs.candidate_resources,
         parent_resources=inputs.parent_resources,
         identity=inputs.identity,
+        registry=registry_of(definition),
     )
 
 

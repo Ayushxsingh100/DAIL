@@ -117,7 +117,12 @@ def parent_statuses(parent: str) -> dict[str, InvariantStatus]:
 
 
 def trusted_from(
-    parent: str, resources: Any, definitions: list[Invariant], *, state_id: str = PARENT_STATE
+    parent: str,
+    resources: Any,
+    definitions: list[Invariant],
+    *,
+    state_id: str = PARENT_STATE,
+    registry_version: int = 1,
 ) -> TrustedState:
     statuses = parent_statuses(parent)
     proofs = [
@@ -136,7 +141,7 @@ def trusted_from(
         invariant_proofs=proofs,
         evidence_refs=sorted({e for p in proofs for e in p.evidence_ids}),
         normalization_version=NORMALIZATION_VERSION,
-        invariant_registry_version=1,
+        invariant_registry_version=registry_version,
         now=NOW,
         state_id=state_id,
     )
@@ -151,13 +156,17 @@ def pipeline(
     parent_trusted: TrustedState | None = None,
     sequence: int = 1,
     patch_n: int = 7,
+    definitions: list[Invariant] | None = None,
+    registry_version: int = 1,
 ) -> PipelineRun:
     """Everything up to the verification report for one fixture that has a parent.
 
     The extra keywords are P6b's (they let a test run a second candidate beside the first, or from
     a state that a commit made): ``candidate_id``, ``sequence`` and ``patch_n`` name the candidate
     and its patch, and ``parent_trusted`` replaces the state that is otherwise built from the
-    parent directory. With none of them the behaviour is that of P6a."""
+    parent directory. With none of them the behaviour is that of P6a. P6d adds ``definitions``
+    (the registry-v1.0 definitions when not given) and the ``registry_version`` of the state
+    built from the parent directory."""
     data = fixture.data
     parent = data["parent"]
     assert parent is not None, data["fixture_id"]
@@ -166,9 +175,12 @@ def pipeline(
     after = normalize_directory(ROOT / data["config"], None, now=NOW)
     before = normalize_directory(ROOT / parent, None, now=NOW)
     assert after.resource_set_hash is not None
-    definitions = list(registry(source, destination).values())
+    if definitions is None:
+        definitions = list(registry(source, destination).values())
     semantic = [SemanticBinding("INV-FUNC-001", source, destination, "TCP", 5432)]
-    trusted = parent_trusted or trusted_from(parent, before.resources, definitions)
+    trusted = parent_trusted or trusted_from(
+        parent, before.resources, definitions, registry_version=registry_version
+    )
     parent_id = trusted.state_id
     before_resources = trusted.resources if parent_trusted else before.resources
     identity = compare(

@@ -371,7 +371,11 @@ class IdentityMatch:
         """A match whose status and confidence follow from the change type (C-122). ``moved`` is
         derived from the refs when it is not given (C-177); a value that disagrees is refused."""
         if moved is None:
-            moved = trusted_ref is not None and candidate_ref is not None and trusted_ref != candidate_ref
+            moved = (
+                trusted_ref is not None
+                and candidate_ref is not None
+                and trusted_ref != candidate_ref
+            )
         if change_type in _PAIR_CHANGES:
             status, confidence = IdentityStatus.SAME, IdentityConfidence.HIGH
         elif change_type is ChangeType.UNCERTAIN:

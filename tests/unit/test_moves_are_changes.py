@@ -54,7 +54,7 @@ def moved(source: str, target: str) -> str:
 
 
 def pair_of(report: IdentityReport, trusted_ref: str) -> IdentityMatch:
-    (found,) = [m for m in report.resource_matches if m.trusted_resource_ref == trusted_ref]
+    (found,) = (m for m in report.resource_matches if m.trusted_resource_ref == trusted_ref)
     return found
 
 
@@ -63,11 +63,11 @@ def kinds(report: IdentityReport, match: IdentityMatch) -> set[EvidenceType]:
 
 
 def move_evidence(report: IdentityReport, match: IdentityMatch) -> dict[str, object]:
-    (item,) = [
+    (item,) = (
         e
         for e in report.evidence_for(match)
         if e.evidence_type in (EvidenceType.EXPLICIT_MOVE, EvidenceType.IMPLICIT_COUNT_MOVE)
-    ]
+    )
     observed = item.to_dict()["observed_value"]
     assert isinstance(observed, dict)
     return observed
@@ -236,7 +236,7 @@ class TestMatchGuards(unittest.TestCase):
 
 LONE = 'resource "aws_security_group" "lone" {\n  name = "lone"\n  vpc_id = aws_vpc.main.id\n}\n'
 SOLO = 'resource "aws_security_group" "solo" {\n  name = "lone"\n  vpc_id = aws_vpc.main.id\n}\n'
-MOVE = 'moved {\n  from = aws_security_group.lone\n  to = aws_security_group.solo\n}\n'
+MOVE = "moved {\n  from = aws_security_group.lone\n  to = aws_security_group.solo\n}\n"
 SEC1, SEC2, SEC3, FUNC = "INV-SEC-001", "INV-SEC-002", "INV-SEC-003", "INV-FUNC-001"
 
 
@@ -257,7 +257,7 @@ def proof(invariant_id: str) -> PriorProof:
 
 class TestImpact(unittest.TestCase):
     def source_of(self, report, address: str) -> ChangedResource:  # type: ignore[no-untyped-def]
-        (found,) = [c for c in report.changed_resources if c.address == address]
+        (found,) = (c for c in report.changed_resources if c.address == address)
         return found
 
     def test_a_pure_rename_is_a_change_source_flagged_moved(self) -> None:

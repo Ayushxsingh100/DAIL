@@ -386,27 +386,74 @@ class TestFormsAndRules(Expect):
         self.check(run(text), U, P, U, R.RULE_INDETERMINATE)
 
 
-class TestRegistryGap(Expect):
-    """Registry §3.3 makes ``possible4`` depend on the IPv4 sources being unresolved or including a
-    prefix list. A rule whose *port* is unresolved but whose IPv4 source is the whole internet is
-    therefore not a possibility, and the registry text gives PASS. That is implemented verbatim
-    (prompt, C-146) and recorded as an Open row (C-150) for the authors: the next test pins the
-    behaviour so that it cannot change unnoticed."""
+def port_rule(name: str, low: str, v4: str | None = None, v6: str | None = None) -> str:
+    """An ingress rule resource of the app group whose ``from_port`` is ``low`` (HCL text)."""
+    sources = "" if v4 is None else f"  cidr_blocks = {v4}\n"
+    sources += "" if v6 is None else f"  ipv6_cidr_blocks = {v6}\n"
+    return (
+        f'resource "aws_security_group_rule" "{name}" {{\n  type = "ingress"\n'
+        '  security_group_id = aws_security_group.app.id\n  protocol = "tcp"\n'
+        f"  from_port = {low}\n  to_port = 22\n{sources}}}\n"
+    )
 
-    def test_unresolved_port_with_a_public_source_is_pass_by_the_registry_text(self) -> None:
+
+class TestRegistryGap(Expect):
+    """Registry v1.1 §3.3 (P6d; C-150 closed by C-178): ``possible4(g)`` also holds when an
+    indeterminate rule that could permit TCP/p has resolved IPv4 sources that, together with the
+    union of ``v4`` over ``D(g)``, cover 0.0.0.0/0 (``possible6`` likewise with ::/0). Registry
+    v1.0 gave PASS for ``from_port = var.u`` with ``cidr_blocks = ["0.0.0.0/0"]``; v1.1 gives
+    UNKNOWN. The expected values below are derived from that sentence."""
+
+    def test_unresolved_port_with_a_public_source_is_unknown(self) -> None:
+        outcome = run(VARS + sg() + port_rule("r", "var.u", v4='["0.0.0.0/0"]'))
+        self.check(outcome, U, U, P, R.RULE_INDETERMINATE)
+        self.assertEqual(len(outcome.observations["indeterminate_rules"]), 1)
+
+    def test_unresolved_port_with_a_private_source_alone_is_still_pass(self) -> None:
+        outcome = run(VARS + sg() + port_rule("r", "var.u", v4='["10.0.0.0/8"]'))
+        self.check(outcome, P, P, P, None)
+        self.assertEqual(len(outcome.observations["indeterminate_rules"]), 1)
+
+    def test_unresolved_port_with_the_whole_ipv6_internet_is_unknown_for_ipv6(self) -> None:
+        outcome = run(VARS + sg() + port_rule("r", "var.u", v6='["::/0"]'))
+        self.check(outcome, U, P, U, R.RULE_INDETERMINATE)
+
+    def test_together_with_the_determinate_rules_it_covers(self) -> None:
+        # D(g) holds tcp 22 from 0.0.0.0/1; the indeterminate rule adds 128.0.0.0/1: covered
         text = (
             VARS
             + sg()
-            + (
-                'resource "aws_security_group_rule" "r" {\n  type = "ingress"\n'
-                '  security_group_id = aws_security_group.app.id\n  protocol = "tcp"\n'
-                '  from_port = var.u\n  to_port = 22\n  cidr_blocks = ["0.0.0.0/0"]\n}\n'
-            )
+            + rule("half", "ingress", "tcp", 22, 22, ["0.0.0.0/1"])
+            + port_rule("r", "var.u", v4='["128.0.0.0/1"]')
         )
-        outcome = run(text)
-        self.check(outcome, P, P, P, None)
-        # not hidden: the rule is reported as indeterminate in the observations
-        self.assertEqual(len(outcome.observations["indeterminate_rules"]), 1)
+        self.check(run(text), U, U, P, R.RULE_INDETERMINATE)
+
+    def test_half_the_internet_alone_is_not_possible(self) -> None:
+        self.check(run(VARS + sg() + port_rule("r", "var.u", v4='["128.0.0.0/1"]')), P, P, P, None)
+
+    def test_a_determinate_rule_on_another_port_does_not_count_for_d_of_g(self) -> None:
+        # D(g) holds only rules that permit TCP/p; a tcp 80 rule from 0.0.0.0/1 is not in it
+        text = (
+            VARS
+            + sg()
+            + rule("web", "ingress", "tcp", 80, 80, ["0.0.0.0/1"])
+            + port_rule("r", "var.u", v4='["128.0.0.0/1"]')
+        )
+        self.check(run(text), P, P, P, None)
+
+    def test_a_rule_that_cannot_permit_the_port_is_not_possible_whatever_its_source(self) -> None:
+        text = VARS + sg() + rule("r", "ingress", "udp", 22, 22, ANY4)
+        self.check(run(text), P, P, P, None)
+
+    def test_the_registry_v1_0_reading_is_kept_for_v1_definitions(self) -> None:
+        # INV-SEC-001/002 version 1 are the registry-v1.0 predicate (TerraPreserve v1.0 labels)
+        resources = resources_of(VARS + sg() + port_rule("r", "var.u", v4='["0.0.0.0/0"]'))
+        old = evaluate_public_ingress(22, resources, registry="registry-v1.0")
+        self.check(old, P, P, P, None)
+        new = evaluate_public_ingress(22, resources, registry="registry-v1.1")
+        self.check(new, U, U, P, R.RULE_INDETERMINATE)
+        with self.assertRaises(ValueError):
+            evaluate_public_ingress(22, resources, registry="registry-v9")
 
 
 class TestIdentityAndRetention(Expect):

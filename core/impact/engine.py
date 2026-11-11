@@ -298,7 +298,8 @@ def _work_item(invariant: Invariant, impacted: ImpactedInvariant) -> Verificatio
         reason=strongest,
         scope=tuple(scope or sorted(invariant.scope.resource_types)),
         required_evidence=(
-            f"L1 {invariant.verifier_id} {invariant.verifier_version} (registry-v1.0)"
+            f"L1 {invariant.verifier_id} {invariant.verifier_version} "
+            f"({invariant.predicate.get('registry', 'registry-v1.0')})"
         ),
         priority=WorkPriority.BLOCKING,
     )
