@@ -261,8 +261,10 @@ class TestIdentityMatch(unittest.TestCase):
         confidence: str | None,
     ) -> IdentityMatch:
         return IdentityMatch(
+            # one address on both sides: a pair across two addresses is a move (C-177), which this
+            # table of status and confidence is not about
             trusted_resource_ref="aws_vpc.a" if trusted else None,
-            candidate_resource_ref="aws_vpc.b" if candidate else None,
+            candidate_resource_ref="aws_vpc.a" if candidate else None,
             identity_status=IdentityStatus(status),
             change_type=ChangeType(change),
             confidence=None if confidence is None else IdentityConfidence(confidence),
@@ -301,9 +303,9 @@ class TestIdentityMatch(unittest.TestCase):
         }
         for change, (trusted, candidate, status, confidence) in cases.items():
             with self.subTest(change=change):
-                made = IdentityMatch.create(
+                made = IdentityMatch.create(  # one address: not a move (C-177)
                     trusted_ref="aws_vpc.a" if trusted else None,
-                    candidate_ref="aws_vpc.b" if candidate else None,
+                    candidate_ref="aws_vpc.a" if candidate else None,
                     change_type=change,
                     rule=EvidenceType.EXACT_ADDRESS,
                     evidence_ids=[self.proof.evidence_id],
@@ -604,14 +606,14 @@ class TestIdentityReport(unittest.TestCase):
             (
                 [
                     match("aws_vpc.a", "aws_vpc.a", ChangeType.UNCHANGED, one),
-                    match("aws_vpc.a", "aws_vpc.b", ChangeType.UNCHANGED, two),
+                    match("aws_vpc.a", "aws_vpc.b", ChangeType.MODIFIED, two),  # moved (C-177)
                 ],
                 "trusted",
             ),
             (
                 [
-                    match("aws_vpc.a", "aws_vpc.b", ChangeType.UNCHANGED, one),
-                    match("aws_vpc.c", "aws_vpc.b", ChangeType.UNCHANGED, two),
+                    match("aws_vpc.a", "aws_vpc.b", ChangeType.MODIFIED, one),  # moved (C-177)
+                    match("aws_vpc.c", "aws_vpc.b", ChangeType.MODIFIED, two),
                 ],
                 "candidate",
             ),

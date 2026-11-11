@@ -5,8 +5,14 @@ For every security group ``g``, configured or pseudo (``EXTERNAL:<id>``, ``UNRES
     D(g)   = ingress rules of g that are determinate and permit TCP/p
     IPv4   violates4(g) := the union of their IPv4 sources covers 0.0.0.0/0
     IPv6   violates6(g) := the union of their IPv6 sources covers ::/0
-    possible4(g) := an indeterminate ingress rule could permit TCP/p and its IPv4 sources are
-                    unresolved or include a prefix list (possible6 likewise for IPv6)
+    possible4(g) := an indeterminate ingress rule could permit TCP/p and (its IPv4 sources are
+                    unresolved or include a prefix list, or its resolved IPv4 sources together
+                    with those of D(g) cover 0.0.0.0/0) (possible6 likewise for IPv6 and ::/0)
+
+The last alternative is registry v1.1 (C-178, which closes C-150); INV-SEC-001 and INV-SEC-002
+version 2 cite it. Version 1 cites registry v1.0, which has only the first two alternatives: the
+definition's ``predicate.registry`` chooses (``core.verification.dispatch``, C-181 (2)), and the
+default is v1.1, the cautious one.
 
 Each clause is decided in this order (registry §3.4), per address family:
 
@@ -34,10 +40,9 @@ group, attached or not (C-64); coverage split across two groups is not detected 
 * An unresolved egress direction matters only through MIXED: with a rule resource targeting the
   group it cannot be decided and the group is treated as MIXED (UNSUPPORTED).
 
-Registry §3.3 has one consequence the authors should know about (Open row C-150): a rule whose
-protocol or port is unresolved but whose IPv4 source is known, such as 0.0.0.0/0, is not
-``possible`` by the text, so it gives PASS. It is implemented as written and reported in
-``indeterminate_rules``.
+Under registry v1.0 a rule whose protocol or port is unresolved but whose IPv4 source is known,
+such as 0.0.0.0/0, is not ``possible``, so it gives PASS (C-150); under v1.1 it gives UNKNOWN. In
+both it is reported in ``indeterminate_rules``.
 
 Standard library and ``core.domain`` only.
 """
@@ -50,6 +55,7 @@ from typing import Any, Final
 
 from core.domain.enums import VerificationResult
 from core.domain.identity import IdentityReport
+from core.domain.registry_v1_1 import REGISTRY_TAG_V1_0, REGISTRY_TAG_V1_1
 from core.domain.resource import Resource
 from core.domain.verification import VerificationReason
 from core.verification.cidr import IPV4_ANY, IPV6_ANY, covers
@@ -78,6 +84,7 @@ ASSUMPTIONS: Final = (
     "v1: coverage split across groups is not detected (S6)",
 )
 TOLERATED_ASSUMPTION: Final = "tolerated type: aws_db_subnet_group (C-15)"
+REGISTRIES: Final = (REGISTRY_TAG_V1_0, REGISTRY_TAG_V1_1)
 
 P, F, U, S = (
     VerificationResult.PASS,
@@ -122,14 +129,26 @@ class Analysis:
     outcome: PredicateOutcome
 
 
-def _could_expose(rule: Rule, port: int, family: tuple[str, str, str, str]) -> bool:
-    """``possible`` for one indeterminate rule and one address family (registry §3.3)."""
+def _could_expose(
+    rule: Rule,
+    port: int,
+    family: tuple[str, str, str, str],
+    decided: Sequence[str],
+    registry: str,
+) -> bool:
+    """``possible`` for one indeterminate rule and one address family (registry §3.3).
+
+    ``decided`` is the union of the family's sources over ``D(g)``; only v1.1 reads it.
+    """
     if not may_permit_tcp(rule.protocol, rule.from_port, rule.to_port, port):
         return False
-    _, _, sources, unresolved = family
+    _, wanted, sources, unresolved = family
     if getattr(rule, unresolved) or rule.prefix_list_ids:
         return True
-    return rule.direction is None and bool(getattr(rule, sources))
+    known = list(getattr(rule, sources))
+    if rule.direction is None and known:  # C-146 (2): wider than the registry text, kept
+        return True
+    return registry == REGISTRY_TAG_V1_1 and covers([*decided, *known], wanted)
 
 
 def _violation(
@@ -155,6 +174,7 @@ def _group_status(
     view: GroupView,
     port: int,
     retention: VerificationReason | None,
+    registry: str,
 ) -> tuple[GroupStatus, bool]:
     """The status of one group, and whether it is MIXED."""
     ingress_like = (*view.ingress, *view.unresolved_direction)
@@ -192,7 +212,7 @@ def _group_status(
         elif reasons:
             clauses[name] = S
         elif blocks_unexpandable or any(
-            _could_expose(rule, port, family) for rule in indeterminate
+            _could_expose(rule, port, family, union, registry) for rule in indeterminate
         ):
             clauses[name] = U
         else:
@@ -225,8 +245,12 @@ def analyse(
     *,
     parent_resources: Iterable[Resource] | None = None,
     identity: IdentityReport | None = None,
+    registry: str = REGISTRY_TAG_V1_1,
 ) -> Analysis:
-    """Evaluate ``PIP(port)`` for a candidate (``parent_resources`` is ``None`` for a baseline)."""
+    """Evaluate ``PIP(port)`` for a candidate (``parent_resources`` is ``None`` for a baseline)
+    under the §3.3 text of ``registry`` (``registry-v1.0`` or ``registry-v1.1``)."""
+    if registry not in REGISTRIES:
+        raise ValueError(f"public ingress: unknown registry {registry!r}")
     candidate = list(resources)
     config = read_security(candidate)
     parent = None if parent_resources is None else {r.address: r for r in parent_resources}
@@ -245,7 +269,7 @@ def analyse(
         retention = None
         if view.forms is not None and view.forms["ingress"] == "absent":
             retention = ingress_retention(address, parent=parent, identity=identity)
-        status, mixed = _group_status(address, view, port, retention)
+        status, mixed = _group_status(address, view, port, retention, registry)
         statuses[address] = status
         if mixed:
             mixed_groups.append(address)
@@ -330,12 +354,16 @@ def evaluate_public_ingress(
     *,
     parent_resources: Iterable[Resource] | None = None,
     identity: IdentityReport | None = None,
+    registry: str = REGISTRY_TAG_V1_1,
 ) -> PredicateOutcome:
-    """``PIP(port)``: INV-SEC-001 for 22, INV-SEC-002 for 5432."""
-    return analyse(port, resources, parent_resources=parent_resources, identity=identity).outcome
+    """``PIP(port)``: INV-SEC-001 for 22, INV-SEC-002 for 5432, under ``registry``'s §3.3."""
+    return analyse(
+        port, resources, parent_resources=parent_resources, identity=identity, registry=registry
+    ).outcome
 
 
 __all__ = [
+    "REGISTRIES",
     "RELEVANT_UNSUPPORTED",
     "Analysis",
     "GroupStatus",

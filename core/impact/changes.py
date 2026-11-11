@@ -1,12 +1,13 @@
 """The changed set (Doc 08 §6; registry §2.7, §2.9; C-117; C-140 item 1, C-143).
 
 Every identity match that is not UNCHANGED is a change source, with its change type and the flags
-the identity evidence carries (``UNRESOLVED_CONTENT``, ``UNSUPPORTED_TYPE``). An UNCHANGED match is
-**also** a change source when the resource carries unresolved content: equal fingerprints do not
-prove an unresolved element unchanged (registry §2.9 treats "unresolved on both sides" as changed;
-C-117). Such a source is carried with change type UNCERTAIN and the flag ``UNRESOLVED_CONTENT``, and
-the engine uses it only for invariants whose footprint contains the resource. It can only add
-UNCERTAIN; it never removes anything.
+the identity evidence carries (``UNRESOLVED_CONTENT``, ``UNSUPPORTED_TYPE``). A pair that a move
+made is never UNCHANGED (C-177) and carries the flag ``MOVED``, the change reason "moved". An
+UNCHANGED match is **also** a change source when the resource carries unresolved content: equal
+fingerprints do not prove an unresolved element unchanged (registry §2.9 treats "unresolved on
+both sides" as changed; C-117). Such a source is carried with change type UNCERTAIN and the flag
+``UNRESOLVED_CONTENT``, and the engine uses it only for invariants whose footprint contains the
+resource. It can only add UNCERTAIN; it never removes anything.
 
 What counts as unresolved content (C-143, option A): an Unknown or Unsupported canonical value
 in the resource, a security-group direction in the form ``unresolved``, ``dynamic`` or ``mixed``,
@@ -108,6 +109,8 @@ def _flags(identity: IdentityReport, match: IdentityMatch) -> tuple[ChangeFlag, 
         for e in identity.evidence_for(match)
         if e.evidence_type in _FLAG_OF
     }
+    if match.moved:
+        found.add(ChangeFlag.MOVED)
     return tuple(sorted(found))
 
 

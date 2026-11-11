@@ -67,6 +67,16 @@ class Draft:
             change_type=self.change,
             rule=self.rule,
             evidence_ids=[item.evidence_id for item in self.evidence],
+            moved=self.moved,
+        )
+
+    @property
+    def moved(self) -> bool:
+        """A pair across two addresses: only a move can make one (C-177)."""
+        return (
+            self.trusted_ref is not None
+            and self.candidate_ref is not None
+            and self.trusted_ref != self.candidate_ref
         )
 
 

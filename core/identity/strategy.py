@@ -18,6 +18,9 @@ Both run the same decision order, with the rules the ablation removes switched o
 5. **AMB-1**: unpaired instances of one block that cannot be told apart are all UNCERTAIN.
 6. The leftovers: unpaired trusted is DELETED, unpaired candidate CREATED.
 7. A pair is UNCHANGED (equal fingerprints) or MODIFIED; **RT-1** may make it REPLACED or UNCERTAIN.
+   A pair that a move made is never UNCHANGED (C-177, "every resource move counts as a change"):
+   with equal fingerprints it is MODIFIED, decided by the move evidence, and the match is
+   ``moved``.
 
 ``UNSUPPORTED_TYPE`` and ``UNRESOLVED_CONTENT`` are flags, not identity evidence: they are attached
 by both strategies, so the two differ only in identity decisions.
@@ -411,10 +414,13 @@ class _Run:
         observed = {"trusted": trusted.fingerprint, "candidate": candidate.fingerprint}
         if trusted.fingerprint == candidate.fingerprint:
             change, rule = ChangeType.UNCHANGED, EvidenceType.FINGERPRINT_EQUAL
+            if steps:
+                # C-177: every resource move counts as a change; the move evidence decides
+                change, rule = ChangeType.MODIFIED, via.evidence_type
             fingerprint = self.ev.about(
                 trusted,
                 candidate,
-                rule,
+                EvidenceType.FINGERPRINT_EQUAL,
                 EvidenceSource.BOTH,
                 observed,
                 "The canonical content of the paired resources is identical.",

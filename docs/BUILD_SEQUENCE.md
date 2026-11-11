@@ -23,16 +23,19 @@ The build is split into 18 work packages (N-06 in `DECISIONS_REGISTER.md`). Ever
 | 13 | Nov 4–5 | P6a promotion decision |
 | 14 | Nov 6–9 | P6b promotion commit (done) |
 | 14b | Nov 6–9 | P6c orchestrator, baseline flow, fixed-patch loop → P6 gate, M3 |
+| 14c | Nov 11–13 | P6d every move is a change (C-177) and invariant registry v1.1 (C-178 to C-181; INV-SEC-001/002 version 2), inserted after P6c and before P7a; ends with a PR for external review, after which the user tags `registry-v1.1` |
 | 15 | Nov 10–13 | D3 real-world pool |
 | 16 | Nov 14–20 | D4 scenario generator |
 | 17 | Nov 21–28 | D5 oracle labels + calibration (free route, N-08) |
 | 18 | Nov 29–30 | D6 freeze TerraPreserve v1.0 |
 | 19 | Dec 1–2 | P7a LLM adapter (fake provider, Ollama) |
 | 20 | Dec 3–6 | P7b patch validation → P7 gate, M4 |
-| 21 | Dec 7–11 | P9 AWS integration (free route) → M6 |
+| 21 | — | ~~P9 AWS integration (free route) → M6~~ removed by C-71 (advisor, 11 Nov 2026): AWS stays fully offline, no deployment, no AWS account, no live calibration; milestone M6 (AWS Demonstration) is removed |
 | 22 | Dec 12–14 | P8a experiment harness |
 | 23 | Dec 15–18 | P8b metrics and reports → P8 gate, M5 |
 | 24–28 | Dec 19–Jan 2 | P10 hardening, protocol freeze + pilot, LLM patch generation, main run, QA report |
 | 29 | Jan 3–4 | TerraPreserve v1.1 (real LLM patches) |
 
 Critical path: P1a → P6b.
+
+C-71 (advisor, 11 Nov 2026): the free-of-cost route. LLMs are free open-weight models (local Ollama for wiring checks; free Kaggle or Colab GPUs for the experiment), each pinned by exact digest, quantization, temperature and seed, licence checked; no paid LLM API. AWS stays fully offline, so P9 and M6 are removed.

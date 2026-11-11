@@ -316,7 +316,8 @@ def _predicate_text(plan: _Plan) -> str:
         return plan.target_id
     predicate = plan.definition.predicate
     parameters = thaw_json(predicate.get("parameters", {}))
-    return f"registry-v1.0 {predicate.get('section', '')} {canonical_json(parameters)}"
+    registry = predicate.get("registry", "registry-v1.0")  # C-181 (4): the definition's tag
+    return f"{registry} {predicate.get('section', '')} {canonical_json(parameters)}"
 
 
 def _evidence(
