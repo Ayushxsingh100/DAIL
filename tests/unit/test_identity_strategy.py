@@ -102,18 +102,54 @@ class TestNoConfigurationReachesTheAblation(unittest.TestCase):
                 self.assertNotIn("ADDRESS_ONLY", path.read_text(encoding="utf-8"))
 
     def test_no_configuration_key_or_environment_variable_selects_a_strategy(self) -> None:
-        """No file where a switch could live mentions one: the configuration data and schema, the
-        configuration code, and the scripts."""
+        """No file where a switch could live mentions one: the configuration data and schema, and
+        the scripts. Amended in P8a (C-208, the user's decision of 12 Nov 2026): the orchestrator
+        in core/application now has the injection point the P8a work package asks for
+        (``identity_strategy``, default ``EvidenceIdentity``), so core/application is checked by
+        ``test_the_application_layer_reads_no_strategy_switch`` below instead of by its words."""
         words = re.compile(r"identity[_-]?strategy|ablation|address[_-]?only|DAIL_IDENTITY", re.I)
         places = [
             *(path for path in (REPO_ROOT / "config").rglob("*") if path.is_file()),
             *self.python_files("scripts"),
-            *(REPO_ROOT / "core" / "application").glob("*.py"),
+            REPO_ROOT / "core" / "application" / "config.py",
         ]
         self.assertTrue(places)
         for path in places:
             with self.subTest(path=str(path.relative_to(REPO_ROOT))):
                 self.assertIsNone(words.search(path.read_text(encoding="utf-8")))
+
+    def test_the_application_layer_reads_no_strategy_switch(self) -> None:
+        """C-208: in core/application no strategy comes from configuration or the environment.
+        No module reads the environment at all (``os.environ``, ``getenv``), none names the
+        ablation, no ``get``/``[]`` lookup uses a key that names a strategy, and the orchestrator's
+        default is the full strategy."""
+        import ast
+        import inspect
+
+        from core.application.orchestrator import EvaluationOrchestrator
+        from core.identity.strategy import DEFAULT_STRATEGY, EvidenceIdentity
+
+        words = re.compile(r"identity|strategy|ablation|address[_-]?only", re.I)
+        for path in sorted((REPO_ROOT / "core" / "application").glob("*.py")):
+            text = path.read_text(encoding="utf-8")
+            with self.subTest(path=str(path.relative_to(REPO_ROOT))):
+                self.assertNotIn("AddressOnlyIdentity", text)
+                self.assertNotIn("ADDRESS_ONLY", text)
+                for node in ast.walk(ast.parse(text)):
+                    if path.name != "config.py":  # the loader reads the CSX_ variables only
+                        name = getattr(node, "attr", None) or getattr(node, "id", None)
+                        self.assertNotIn(name, ("environ", "getenv"))
+                    keys: list[ast.expr] = []
+                    if isinstance(node, ast.Call) and getattr(node.func, "attr", None) == "get":
+                        keys = list(node.args[:1])
+                    elif isinstance(node, ast.Subscript):
+                        keys = [node.slice]
+                    for key in keys:
+                        if isinstance(key, ast.Constant) and isinstance(key.value, str):
+                            self.assertIsNone(words.search(key.value), key.value)
+        default = inspect.signature(EvaluationOrchestrator.__init__).parameters["identity_strategy"]
+        self.assertIs(default.default, DEFAULT_STRATEGY)
+        self.assertIsInstance(DEFAULT_STRATEGY, EvidenceIdentity)
 
     def test_the_identity_package_reads_no_environment(self) -> None:
         for path in (REPO_ROOT / "core" / "identity").glob("*.py"):
