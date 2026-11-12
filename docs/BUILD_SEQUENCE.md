@@ -31,7 +31,7 @@ The build is split into 18 work packages (N-06 in `DECISIONS_REGISTER.md`). Ever
 | 19 | Dec 1–2 | P7a LLM adapter (fake provider, Ollama) |
 | 20 | Dec 3–6 (built 12 Nov 2026) | P7b patch validation: the C-188 patch meaning, the §13 validator, AllowedChangeScope and the operation check, `LLMEvaluationRequest` (C-188 to C-195) → P7 gate, M4 |
 | 21 | — | ~~P9 AWS integration (free route) → M6~~ removed by C-71 (advisor, 11 Nov 2026): AWS stays fully offline, no deployment, no AWS account, no live calibration; milestone M6 (AWS Demonstration) is removed |
-| 22 | Dec 12–14 | P8a experiment harness |
+| 22 | Dec 12–14 (built 12 Nov 2026) | P8a experiment harness: conditions A, B, C, C′ (C-198), open targets (C-196), the TerraPreserve loader with hash pins and label blinding, trials, records and artifacts, the dev-split harness check (C-196 to C-208) |
 | 23 | Dec 15–18 | P8b metrics and reports → P8 gate, M5 |
 | 24–28 | Dec 19–Jan 2 | P10 hardening, protocol freeze + pilot, LLM patch generation, main run, QA report |
 | 29 | Jan 3–4 | TerraPreserve v1.1 (real LLM patches) |

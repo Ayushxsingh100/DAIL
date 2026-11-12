@@ -433,7 +433,57 @@ M4 "No model output can bypass promotion" ..... test_llm_candidate_e2e.TestSecur
 No item is marked passed here; the external review decides.
 ```
 
-## P8–P10 — NOT STARTED
+## P8a — The experiment harness (pending external review)
+
+```text
+P8a mini-gate: NOT DECIDED. Status written by the P8a author as an input to the external review.
+What exists:
+  experiments/ (standard library, mypy-checked): loader (TerraPreserve read only; manifest pin
+  665b326a..., every scenario_json_sha256 and step content_hash recomputed; the test split refused;
+  execution fields only), definition (Experiment §5, Trial §6, lifecycle §7, deterministic ids),
+  conditions (C-198), trial (one attempt: fresh store and lineage, S0 through the baseline flow,
+  each step a FIXED_PATCH through EvaluationOrchestrator, early termination C-200), records,
+  write-once artifacts (§41 plus an attempts level), runner (plan, run, resume, failure classes),
+  CLI python -m experiments run|summary. README in experiments/.
+  core/promotion: decide(open_targets=...) and check_open_targets (C-196); explicit required set
+  (PromotionPolicy.explicit_required_set, stateless_policy, rules dail-stateless-1, C-205); the
+  open target's FAIL is VERIFIED evidence through proofs, binding and commit; PromotionEvidence
+  records open_targets (absent from the record when empty, so existing hashes are unchanged).
+  core/application: StatefulFullScopePolicy and StatelessScopePolicy; EvaluationRequest.open_targets;
+  EvaluationOrchestrator(identity_strategy=DEFAULT_STRATEGY) (C-208); EvaluationResult.identity and
+  .work; BaselineRequest.allow_no_invariants (C-206). core/domain: TrustedState.establish_baseline
+  (allow_no_invariants=False) (C-206).
+Dev run (12 Nov 2026, the author's machine): experiment p8a-dev-harness-check version 1,
+  protocol_version draft, id fdbef60c-9b45-53dd-8e6a-5c6b765505cc; DAIL e8f43c3 (clean tree);
+  TerraPreserve terrapreserve-v1.0 (27f0ee4), manifest sha256 665b326a... verified; registry v1.1
+  (stored version 2); Python 3.12.10, Windows 11. 224 dev targets x A, B, C, C' = 896 trials,
+  896 COMPLETED, 0 FAILED, 0 harness or input failures; wall time 903 s.
+  Transitions evaluated / TRUNCATED: A 280 / 0, B 273 / 7, C 224 / 56, C' 224 / 56.
+  Transitions with an open target: A 56, B 56, C 28, C' 28.
+  Work (gate, invariant, applicable baseline, not-applicable baseline): A 560, 140, 0, 0;
+  B 546, 1092, 56, 10; C 448, 510, 56, 10; C' 448, 510, 62, 16.
+  Decisions per condition and family (PROMOTE/REJECT; no RETRY or ESCALATE occurred):
+  A: F1 28/0, F2 14/14, F3 28/0, F4 28/0, F5 28/0, F6 28/0, F7 28/0, F8 84/0.
+  B: F1 14/14, F2 14/14, F3 11/17, F4 14/14, F5 13/15, F6 9/19, F7 14/14, F8 63/14.
+  C: F1 14/14, F2 14/14, F3 11/17, F4 14/14, F5 13/15, F6 9/19, F7 14/14, F8 0/28.
+  C': F1 14/14, F2 14/14, F3 11/17, F4 14/14, F5 9/19, F6 9/19, F7 14/14, F8 0/28.
+  These are harness counts, not results; no label was opened and nothing was scored (P8b).
+Mechanism found (C-209, Open): under C and C' every F8 trajectory is rejected at step 1 with
+  INSUFFICIENT_EVIDENCE on the open target, because impact does not list it and a VIOLATED
+  reference cannot carry; C-196's stated purpose is not reached there. Nothing was tuned.
+Tests: tests.unit.test_p8a_open_targets, test_p8a_open_targets_e2e, test_p8a_conditions,
+  test_experiment_loader, test_experiment_harness, test_experiment_terrapreserve (opt-in,
+  TERRAPRESERVE_ROOT), tests.contract.test_experiment_blinding; test_identity_strategy amended
+  (C-208). Mutation checks: 18 of 18 harness, loader and promotion mutants caught (M5 only after a
+  test was added), and 2 of 2 for the amended identity test.
+Limits: open-target rule as decided blocks C and C' on F8 (C-209); condition-added work items
+  carry a stand-in reason code (C-207 (1)); automatic promotion is enabled by the reviewed
+  experiments/config/promotion.toml in the harness's copy of the configuration only (C-207 (3));
+  repetition 1, no seeds; one machine; the P7a/P7b verdict limits are not yet recorded (C-199).
+Carry-forward: C-200 to C-204 and C-207 Proposed; C-209 Open; P8b scores the stored records.
+```
+
+## P8b–P10 — NOT STARTED
 
 P9 (AWS integration) and milestone M6 (AWS Demonstration) are removed (C-71, Decided by the advisor,
 11 Nov 2026): AWS stays fully offline, with no deployment, no AWS account and no calibration against
