@@ -333,7 +333,82 @@ loopback fake server, not the real one; the wiring check ran once on one machine
 Carry-forward: C-183 to C-187 Proposed; ADR-006 Proposed.
 ```
 
-## P7b–P10 — NOT STARTED
+## P7b — From LLM patch to Candidate State (pending external review)
+
+```text
+P7b mini-gate: NOT DECIDED. Status written by the P7b author as an input to the external review.
+What exists:
+  The meaning of an LLM patch (C-188, Decided) and the application rules (C-189): complete resource
+  blocks; MODIFY replaces the parent block's bytes, DELETE removes them, CREATE writes
+  dail_llm_patch.tf; everything else copied byte for byte; built in a fresh directory under the
+  caller's work root; the parent directory is never written.
+  llm/validation/patch.py dail-patch-validator-1: the Doc 10 §13 checks in order, failure classes
+  as C-192; scope (C-190, core/domain/change_scope.py AllowedChangeScope) and the operation check
+  after DAIL's own identity (C-191); readings in C-195.
+  Parser dail-llm-parser-2 (format only); prompt dail-repair-prompt-2 (the patch format), version 1
+  reproducible (C-193). Generator validates every attempt; INVALID_OUTPUT is retried within
+  max_attempts, POLICY_VIOLATION and UNSUPPORTED are not.
+  Entry path: core.application.orchestrator.LLMEvaluationRequest (an LLM Patch, its built directory
+  and the tree hash the validator recorded; core/application/candidate_tree.py).
+Wiring check (12 Nov 2026, the author's machine, CPU only): Ollama 0.40.16, qwen2.5-coder:1.5b,
+  digest d7372fd828518a4d38b1eb196c673c31a85f2ed302b3d1e406c4c2d1b64a0668, Q4_K_M, Apache-2.0
+  (as P7a). One run end to end on the canonical objective from v0 = the canonical baseline:
+  generation PATCH, parse and validation passed, candidate built, DAIL decision REJECT (the
+  model's patch did not repair INV-SEC-001); 1 attempt, 23.0 s, tokens in 2083 / out 176; the
+  Trusted State unchanged. The model was not judged and is for wiring only (C-186).
+Mutation checks: 12 of 12 validator and entry-path rules broken in a scratch copy were caught
+  (one, the reference check, only after the tests were made to require that check 9 reports).
+Limits: the validator copies the whole parent directory; .tf.json parent blocks cannot be edited
+(UNSUPPORTED); the operation check uses the default scope of the tests (all four operations),
+experiment scopes are P8; the token estimate stays characters/4; the wiring check ran once on one
+machine with one small model.
+Carry-forward: C-189 to C-193 and C-195 Proposed; ADR-006 Proposed. The P7a mini-gate status above
+is unchanged: no verdict text for P7a was pasted in this package.
+```
+
+## P7 — LLM Integration (pending external review)
+
+```text
+P7 gate (Doc 15 §14.2) and milestone M4 (Doc 15 §24): NOT DECIDED. Each item and the tests that
+bear on it (commands: py -3.12 -m unittest <module>):
+§14.2 "Malformed output rejected" ......... tests.unit.test_llm_parser.TestInvalidOutput,
+    tests.unit.test_llm_patch_validator.TestSyntaxAndBlocks.test_hcl_syntax_error_is_invalid_output,
+    tests.unit.test_llm_patch_validator.TestBoundaries
+§14.2 "Forbidden operations rejected" ...... test_llm_patch_validator.TestSyntaxAndBlocks
+    (top-level blocks, provisioner, connection, lifecycle), TestScope (scope and the operation
+    check: REPLACED and UNCERTAIN pairs, DELETE), TestCredentialsAndIds,
+    test_llm_candidate_e2e.TestSecurity.test_infrastructure_blocks_are_policy_violations_with_no_candidate,
+    test_a_local_exec_provisioner_is_a_policy_violation,
+    test_a_verifier_file_as_a_changed_address_is_invalid_output
+§14.2 "Prompt injection fixtures pass" ..... test_llm_context.TestPrompts
+    .test_an_injected_instruction_stays_inside_the_data_delimiter,
+    test_llm_candidate_e2e.TestSecurity.test_an_injected_description_in_the_trusted_state_stays_data,
+    test_a_confident_unsafe_reply_is_rejected_by_verification
+§14.2 "LLM confidence cannot promote" ...... test_llm_candidate_e2e.TestSecurity
+    .test_a_confident_unsafe_reply_is_rejected_by_verification, test_llm_parser.TestConfidence
+§14.2 "LLM cannot mutate Trusted State" .... test_llm_candidate_e2e (every failed or rejected
+    attempt checks the current state and the lineage), TestRecords
+    .test_a_tampered_candidate_directory_is_refused, test_llm_patch_validator (tearDown: the parent
+    directory is byte-identical), tests.contract.test_architecture_boundaries (C-175 sole callers)
+§14.2 "Valid patch reaches Candidate State only" test_llm_candidate_e2e.TestEndToEnd
+    (.test_the_safe_repair_is_promoted, .test_the_candidate_lineage_points_to_one_parent,
+    .test_no_solution_and_uncertain_create_no_candidate)
+M4 "LLM generates structured candidate" ..... test_llm_generate.TestProviderInterface,
+    test_llm_patch_validator.TestApplication, the wiring checks of P7a and P7b
+M4 "Patch validation works" .................. test_llm_patch_validator (all classes)
+M4 "LLM failures are isolated" ............... test_llm_generate.TestProviderInterface
+    .test_each_failure_class_maps, TestRetry, test_llm_candidate_e2e.TestRetryThroughValidation,
+    test_llm_ollama.TestFailures
+M4 "Candidate enters deterministic DAIL pipeline" test_llm_candidate_e2e.TestEndToEnd (PROMOTE and
+    REJECT through the EvaluationOrchestrator over a real database)
+M4 "No model output can bypass promotion" ..... test_llm_candidate_e2e.TestSecurity
+    .test_a_confident_unsafe_reply_is_rejected_by_verification, TestRecords
+    .test_a_tampered_candidate_directory_is_refused, tests.unit.test_orchestrator (a FIXED_PATCH
+    request refuses an LLM patch), tests.contract.test_architecture_boundaries
+No item is marked passed here; the external review decides.
+```
+
+## P8–P10 — NOT STARTED
 
 P9 (AWS integration) and milestone M6 (AWS Demonstration) are removed (C-71, Decided by the advisor,
 11 Nov 2026): AWS stays fully offline, with no deployment, no AWS account and no calibration against
