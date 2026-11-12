@@ -373,22 +373,27 @@ class TestCredentialsAndIds(Case):
 
 
 class TestReferencesAndConstruction(Case):
+    def assert_undeclared(self, outcome: ValidationOutcome) -> None:
+        # check 9 itself reports it (P3 would also refuse the candidate later)
+        self.assert_fails(outcome, F.INVALID_OUTPUT)
+        self.assertIn("reference is not declared in the candidate", outcome.errors[0])
+
     def test_a_reference_to_an_undeclared_resource(self) -> None:
         patch = SG_APP_CLOSED.replace("aws_vpc.main.id", "aws_vpc.other.id")
-        self.assert_fails(self.run_patch(patch, [SG_APP]), F.INVALID_OUTPUT)
+        self.assert_undeclared(self.run_patch(patch, [SG_APP]))
 
     def test_a_reference_to_a_deleted_resource(self) -> None:
         patch = NEW_RULE.replace(
             "aws_security_group.app.id", "aws_security_group_rule.app_ssh_public.id"
         )
         outcome = self.run_patch(patch, ["aws_security_group_rule.app_https", SSH_RULE])
-        self.assert_fails(outcome, F.INVALID_OUTPUT)
+        self.assert_undeclared(outcome)
 
     def test_undeclared_local_and_data_roots(self) -> None:
         for expr in ("local.x", "data.aws_vpc.main.id"):
             with self.subTest(expr=expr):
                 patch = SG_APP_CLOSED.replace("aws_vpc.main.id", expr)
-                self.assert_fails(self.run_patch(patch, [SG_APP]), F.INVALID_OUTPUT)
+                self.assert_undeclared(self.run_patch(patch, [SG_APP]))
 
     def test_a_declared_reference_passes(self) -> None:
         self.assert_builds(self.run_patch(NEW_RULE, ["aws_security_group_rule.app_https"]))
