@@ -249,7 +249,28 @@ Carry-forward: a second attempt on the same terminal candidate returns the first
 deciding (MEDIUM; reject or document in P7/P8); C-173 Proposed until the authors confirm; C-169 Open;
 C-170 to C-176 Proposed.
 
-## P6d — Every move is a change, and invariant registry v1.1 (pending external review)
+## P6d — Every move is a change, and invariant registry v1.1 — passed with limits (external review, 11 Nov 2026; merged as 1c3d72b, tagged registry-v1.1)
+
+```text
+Verdict (external review, 11 Nov 2026, PR #27 at 8c5ca0a): APPROVED WITH LIMITS. Merged as 1c3d72b,
+tagged registry-v1.1. Limits carried forward (not blocking), from the verdict:
+1. The pipeline still defaults to registry v1.0. The end-to-end tests run v1.0 definitions; v1.1 is
+   exercised in tests/unit/test_registry_v1_1.py. P8 must make v1.1 the default for every
+   experiment condition, so that DAIL is evaluated under the decided rules.
+2. Version encoding (C-180). Registry 1.1 is stored as the integer 2, and the verifier version stays
+   "1" while its §3.3 behaviour depends on the definition's registry. The mapping "stored 2 =
+   registry 1.1" must be stated wherever evidence is reported (P8 reports, the paper).
+3. C-181 (implementation readings) is Proposed; the authors must decide it. [Decided by the
+   authors on 11 Nov 2026, recorded in P7a.]
+4. Equivalence evidence gap. In tp-v1-F3-0278 the oracle archive does not record the sources of 2
+   indeterminate rules; the conclusion relies on reading that scenario's .tf. Record in
+   TerraPreserve's v1.1 notes: the oracle evidence should record rule sources.
+5. Stale mentions of P9 remain in CLAUDE.md and README.md; update them in P7a. [Done in P7a.]
+6. C-155 readings stay DAIL implementation choices outside the registry; DAIL-oracle differences
+   on those cases are to be measured in P8.
+```
+
+The P6d author's input to the review, as written before the verdict:
 
 ```text
 P6d mini-gate: NOT DECIDED. Status written by the P6d author as an input to the external review.
@@ -282,7 +303,37 @@ v1.1 by tests.unit.test_registry_v1_1. Carry-forward: C-181 Proposed; the user t
 after the verdict and the merge.
 ```
 
-## P7a–P10 — NOT STARTED
+## P7a — The LLM channel (pending external review)
+
+```text
+P7a mini-gate: NOT DECIDED. Status written by the P7a author as an input to the external review.
+What exists (llm/, standard library only, C-183; ADR-006 Proposed):
+  provider seam and failure classes (llm/adapter/provider.py, Doc 10 §24, §30); FakeProvider
+  (scripted, no network) and OllamaProvider (urllib, loopback only, digest pin; C-182, C-185);
+  context builder (§6-§8: impact neighbourhood only, secrets redacted before the prompt, unknown
+  values marked); budget (§18-§19: deterministic reduction 7..3, omissions recorded,
+  CONTEXT_INSUFFICIENT without a provider call); prompts dail-repair-prompt-1 (system and task
+  layers, infrastructure as data between <<<DAIL_DATA and DAIL_DATA>>>, template hash pinned);
+  strict parser dail-llm-parser-1 (§11, §22, §25; no tolerant parser); retries (§23, the four
+  classes, bounded); request and response records and observability (§16-§17, §20-§21, §32-§34);
+  the emergency switch llm.generation_enabled (off: no provider call); config llm.provider accepts
+  "ollama". Tests: tests.unit.test_llm_parser, test_llm_context, test_llm_generate, test_llm_ollama.
+Wiring check (11 Nov 2026, the author's machine: Intel Core Ultra 5 125H, 15.7 GB RAM, CPU only):
+  Ollama 0.40.16 for Windows (official installer, signed by Ollama Inc.); model qwen2.5-coder:1.5b,
+  digest d7372fd828518a4d38b1eb196c673c31a85f2ed302b3d1e406c4c2d1b64a0668, Q4_K_M, 1.5B,
+  986 MB; licence Apache-2.0 (ollama.com/library/qwen2.5-coder:1.5b, licence blob 832dd9e00a68,
+  and `ollama show --license`). One run of the canonical objective (Doc 10 §36) with the
+  canonical regression context: status PATCH, parse errors none, latency 31.7 s, tokens in 2381 /
+  out 184, attempts 1. The patch was not turned into a candidate (P7b) and its quality was not
+  judged; this model is for wiring only, never for results (C-186).
+Limits: patch validation beyond the parser (Doc 10 §13), HCL parsing of the patch and candidate
+construction are P7b; a repair that adds a resource at a new address is refused by the scope check
+(C-187 (3)); the token estimate is characters/4, not a tokenizer; the Ollama unit tests use a
+loopback fake server, not the real one; the wiring check ran once on one machine.
+Carry-forward: C-183 to C-187 Proposed; ADR-006 Proposed.
+```
+
+## P7b–P10 — NOT STARTED
 
 P9 (AWS integration) and milestone M6 (AWS Demonstration) are removed (C-71, Decided by the advisor,
 11 Nov 2026): AWS stays fully offline, with no deployment, no AWS account and no calibration against
