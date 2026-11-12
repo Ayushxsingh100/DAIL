@@ -17,10 +17,11 @@ from datetime import UTC, datetime, timedelta
 from functools import cache
 from typing import Any
 
+from core.domain.change_scope import ALL_OPERATIONS, AllowedChangeScope
 from core.domain.invariant import Invariant
 from core.domain.registry_v1_1 import registry_v1_1_invariants
 from core.domain.resource import Resource
-from llm.adapter.context import ContextInputs, LLMContext, build_context
+from llm.adapter.context import SUPPORTED_TYPES, ContextInputs, LLMContext, build_context
 from llm.schemas.records import BudgetConfig, LLMConfig, RetryPolicy
 from llm.schemas.repair_response import RESPONSE_SCHEMA_VERSION
 from tests.promotion_pipeline import PipelineRun, fixtures_with_a_parent, pipeline
@@ -56,12 +57,25 @@ def statuses(run: PipelineRun) -> dict[str, str]:
     return {r.invariant_id: r.status.value for r in run.trusted.invariant_refs}
 
 
+def caller_scope(run: PipelineRun | None = None) -> AllowedChangeScope:
+    """The scope a test controller gives (C-190): every trusted address, every supported type,
+    no attribute restriction, all four operations."""
+    run = run or regression_run()
+    return AllowedChangeScope(
+        resource_addresses=tuple(sorted(r.address for r in run.trusted.resources)),
+        resource_types=SUPPORTED_TYPES,
+        attributes=(),
+        operation_types=ALL_OPERATIONS,
+    )
+
+
 def canonical_inputs(
     *,
     resources: Sequence[Resource] | None = None,
     focus: Sequence[str] = (),
     history: Sequence[str] = (),
     use_impact: bool = True,
+    scope: AllowedChangeScope | None = None,
 ) -> ContextInputs:
     run = regression_run()
     return ContextInputs(
@@ -72,6 +86,7 @@ def canonical_inputs(
         statuses=statuses(run),
         objective=OBJECTIVE,
         repair_targets=("INV-SEC-001",),
+        scope=scope or caller_scope(run),
         impact=run.impact if use_impact else None,
         focus=tuple(focus),
         history=tuple(history),
@@ -97,7 +112,7 @@ def config(**changes: Any) -> LLMConfig:
         "max_output_tokens": 1024,
         "timeout_seconds": 30.0,
         "retry_policy_id": "retry-3",
-        "prompt_version": "dail-repair-prompt-1",
+        "prompt_version": "dail-repair-prompt-2",
         "response_schema_version": RESPONSE_SCHEMA_VERSION,
     }
     values.update(changes)

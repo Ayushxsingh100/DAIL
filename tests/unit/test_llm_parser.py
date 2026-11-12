@@ -1,4 +1,5 @@
-"""The structured-response parser (P7a; Doc 10 §11, §22, §25; C-183, C-184, C-187).
+"""The structured-response parser (P7a; Doc 10 §11, §22, §25; C-183, C-184, C-187; P7b C-189,
+C-190: version 2 keeps only the format checks, the scope moved to the patch validator).
 
 Expected values come from the quoted spec text:
 
@@ -26,12 +27,10 @@ from llm.validation.parser import PARSER_VERSION, parse_response
 from tests.llm_builders import reply
 
 F = FailureClass
-TYPES = ("aws_security_group", "aws_security_group_rule", "aws_instance", "aws_db_instance")
-SCOPE = ("aws_security_group.app", "aws_security_group_rule.app_ssh_public")
 
 
 def parse(raw: str):  # type: ignore[no-untyped-def]
-    return parse_response(raw, allowed_types=TYPES, allowed_scope=SCOPE)
+    return parse_response(raw)
 
 
 def body(**changes: object) -> dict[str, object]:
@@ -159,13 +158,29 @@ class TestInvalidOutput(unittest.TestCase):
 
 
 class TestScopeAndSupport(unittest.TestCase):
-    def test_a_changed_address_of_an_unsupported_type(self) -> None:
-        outcome = parse(json.dumps(body(changed_addresses=["aws_lambda_function.f"])))
-        self.assertIs(outcome.failure_class, F.UNSUPPORTED)
+    """C-190 (P7b): the parser keeps only the format checks; supported types and the scope are
+    checked by the patch validator (tests.unit.test_llm_patch_validator.TestScope). Under
+    dail-llm-parser-1 these two cases were UNSUPPORTED and POLICY_VIOLATION here."""
 
-    def test_a_changed_address_outside_the_allowed_scope(self) -> None:
+    def test_a_changed_address_of_an_unsupported_type_is_left_to_the_validator(self) -> None:
+        outcome = parse(json.dumps(body(changed_addresses=["aws_lambda_function.f"])))
+        self.assertIsNone(outcome.failure_class)
+
+    def test_a_changed_address_outside_any_scope_is_left_to_the_validator(self) -> None:
         outcome = parse(json.dumps(body(changed_addresses=["aws_db_instance.database"])))
-        self.assertIs(outcome.failure_class, F.POLICY_VIOLATION)
+        self.assertIsNone(outcome.failure_class)
+
+    def test_only_configuration_addresses_are_accepted(self) -> None:
+        for address in (
+            "aws_vpc.main[0]",
+            'aws_vpc.main["a"]',
+            "module.m.aws_vpc.main",
+            "aws_vpc",
+            "aws_vpc.main.id",
+        ):
+            with self.subTest(address=address):
+                outcome = parse(json.dumps(body(changed_addresses=[address])))
+                self.assertIs(outcome.failure_class, F.INVALID_OUTPUT)
 
     def test_a_malformed_address_is_invalid_output(self) -> None:
         outcome = parse(json.dumps(body(changed_addresses=["not an address"])))

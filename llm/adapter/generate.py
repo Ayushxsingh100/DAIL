@@ -52,8 +52,11 @@ from llm.schemas.records import (
 )
 from llm.schemas.repair_response import RESPONSE_JSON_SCHEMA, RESPONSE_SCHEMA_VERSION
 from llm.validation.parser import PARSER_VERSION, parse_response
+from llm.validation.patch import VALIDATOR_VERSION as PATCH_VALIDATOR_VERSION
+from llm.validation.patch import PatchValidator
 
-VALIDATOR_VERSION = PARSER_VERSION  # P7a validates with the parser only (§31, §22)
+# Without a patch validator only the parser checks (§22) run, as in P7a.
+VALIDATOR_VERSION = PARSER_VERSION
 _COMPONENT = "llm.generate"
 
 
@@ -71,6 +74,7 @@ class Generator:
         sleep: Callable[[float], None] = time.sleep,
         logger: StructuredLogger | None = None,
         ctx: CorrelationContext | None = None,
+        validator: PatchValidator | None = None,
     ) -> None:
         if not isinstance(generation_enabled, bool):
             raise ValueError("generation_enabled must be the boolean llm.generation_enabled")
@@ -86,7 +90,9 @@ class Generator:
         self.sleep = sleep
         self.logger = logger
         self.ctx = ctx
+        self.validator = validator
         self._redactor = Redactor()
+        self._builds: dict[str, object] = {}
 
     # --- §31 ------------------------------------------------------------------------------------
 
@@ -109,6 +115,8 @@ class Generator:
         if not self.generation_enabled:
             return self._result(GenerationStatus.DISABLED, None, (), context, None, None, ())
         self._validate_config()
+        if self.validator is not None:
+            self.validator.check_context(context)
         budget = apply_budget(context, self.budget)
         if budget.insufficient:
             return self._result(
@@ -139,8 +147,19 @@ class Generator:
             ):
                 break
         status = GenerationStatus.PATCH if failure is None else GenerationStatus.FAILED
+        build = None
+        if failure is None and attempts and attempts[-1].response.patch_id is not None:
+            build = self._builds.get(attempts[-1].response.response_id)
         return self._result(
-            status, failure, tuple(attempts), budget.context, prompt, budget, (), patch=patch
+            status,
+            failure,
+            tuple(attempts),
+            budget.context,
+            prompt,
+            budget,
+            (),
+            patch=patch,
+            build=build,
         )
 
     # --- one attempt ----------------------------------------------------------------------------
@@ -175,7 +194,7 @@ class Generator:
             reply, error = None, raised
         except Exception as raised:  # noqa: BLE001 - a provider bug is a failure, never a reply
             reply, error = None, ProviderError(FailureClass.TRANSIENT_ERROR, type(raised).__name__)
-        response = self._response(request, context, reply, error)
+        response = self._response(request, reply, error)
         self._log(
             "llm.response",
             "FAILED" if response.failure_class else "SUCCEEDED",
@@ -192,7 +211,6 @@ class Generator:
     def _response(
         self,
         request: LLMRequest,
-        context: LLMContext,
         reply: ProviderReply | None,
         error: ProviderError | None,
     ) -> LLMResponse:
@@ -213,17 +231,23 @@ class Generator:
                 parser_version=PARSER_VERSION,
                 created_at=self.clock(),
             )
-        outcome = parse_response(
-            reply.text,
-            allowed_types=context.allowed_resource_types,
-            allowed_scope=context.allowed_change_scope,
-        )
+        outcome = parse_response(reply.text)
         parsed = outcome.response
+        failure = outcome.failure_class
         patch = None
-        if parsed is not None and outcome.failure_class is None:
+        validation = None
+        response_id = self.ids()
+        if parsed is not None and failure is None and self.validator is not None:
+            validation = self.validator.validate(
+                parsed, request_id=request.request_id, patch_id=self.ids()
+            )
+            failure = validation.failure_class
+            if validation.build is not None:
+                self._builds[response_id] = validation.build
+        if parsed is not None and failure is None:
             patch = self._redactor.redact(parsed.patch).payload
         return LLMResponse(
-            response_id=self.ids(),
+            response_id=response_id,
             request_id=request.request_id,
             raw_response=self._redactor.redact(reply.text).payload,
             parsed_status=None if parsed is None else parsed.status.value,
@@ -231,12 +255,26 @@ class Generator:
             response_hash=sha256_text(reply.text),
             patch_hash=None if patch is None else sha256_text(patch),
             parse_errors=tuple(self._redactor.redact(list(outcome.errors)).payload),
-            failure_class=outcome.failure_class,
+            failure_class=failure,
             latency_ms=reply.latency_ms,
             token_usage=dict(reply.token_usage),
             parser_version=outcome.parser_version,
             created_at=self.clock(),
             confidence=None if parsed is None else parsed.confidence,
+            validator_version=None if validation is None else validation.validator_version,
+            validation_errors=(
+                ()
+                if validation is None
+                else tuple(self._redactor.redact(list(validation.errors)).payload)
+            ),
+            patch_id=(
+                None if validation is None or validation.build is None else validation.patch_id
+            ),
+            candidate_tree_hash=(
+                None
+                if validation is None or validation.build is None
+                else validation.build.tree_hash
+            ),
         )
 
     # --- results and logs -----------------------------------------------------------------------
@@ -253,6 +291,7 @@ class Generator:
         *,
         patch: str | None = None,
         detail: str = "",
+        build: object = None,
     ) -> GenerationResult:
         return GenerationResult(
             status=status,
@@ -267,8 +306,11 @@ class Generator:
             budget={} if budget is None else budget.to_dict(),
             omitted=omitted if budget is None else budget.omitted,
             parser_version=PARSER_VERSION,
-            validator_version=VALIDATOR_VERSION,
+            validator_version=(
+                VALIDATOR_VERSION if self.validator is None else PATCH_VALIDATOR_VERSION
+            ),
             detail=detail,
+            build=build,
         )
 
     def _log(self, event: str, status: str, request_id: str, metadata: dict[str, object]) -> None:

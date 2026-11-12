@@ -22,6 +22,7 @@ import dataclasses
 import json
 import unittest
 
+from core.domain.change_scope import AllowedChangeScope
 from core.domain.resource import Resource
 from llm.adapter.budget import apply_budget
 from llm.adapter.context import CONTEXT_VERSION, PRIORITY_OF
@@ -38,6 +39,7 @@ from tests.identity_builders import normalize
 from tests.llm_builders import (
     OBJECTIVE,
     budget,
+    caller_scope,
     canonical_context,
     fake_aws_key,
     fake_password,
@@ -110,11 +112,19 @@ class TestContextFields(unittest.TestCase):
         context = canonical_context(focus=(outside,))
         self.assertIn(outside, {r["address"] for r in context.relevant_resources})
 
-    def test_the_allowed_change_scope_is_the_neighbourhood(self) -> None:
-        context = canonical_context()
-        self.assertEqual(
-            set(context.allowed_change_scope), {r["address"] for r in context.relevant_resources}
+    def test_the_allowed_change_scope_is_the_callers(self) -> None:
+        # P7b (C-190): the scope is given by the caller, never derived by the context builder
+        narrow = AllowedChangeScope(
+            resource_addresses=("aws_security_group.app",),
+            resource_types=("aws_security_group", "aws_lambda_function"),
+            attributes=(),
+            operation_types=caller_scope().operation_types,
         )
+        context = canonical_context(scope=narrow)
+        self.assertEqual(context.allowed_change_scope, ("aws_security_group.app",))
+        self.assertEqual(context.allowed_resource_types, ("aws_security_group",))
+        context = canonical_context()
+        self.assertEqual(context.allowed_change_scope, caller_scope().resource_addresses)
         self.assertIn("aws_security_group", context.allowed_resource_types)
         self.assertNotIn("aws_lambda_function", context.allowed_resource_types)
 
@@ -228,7 +238,12 @@ class TestBudget(unittest.TestCase):
 
 class TestPrompts(unittest.TestCase):
     def test_version_and_stable_hash(self) -> None:
-        self.assertEqual(PROMPT_VERSION, "dail-repair-prompt-1")
+        # P7b (C-193): version 2 is current; version 1 stays reproducible
+        self.assertEqual(PROMPT_VERSION, "dail-repair-prompt-2")
+        v1 = "dail-repair-prompt-1"
+        self.assertEqual(template_hash(v1), PROMPT_HASHES[v1])
+        self.assertEqual(render(canonical_context(), version=v1).prompt_version, v1)
+        self.assertNotEqual(PROMPT_HASHES[v1], PROMPT_HASHES[PROMPT_VERSION])
         self.assertEqual(PROMPT_HASHES[PROMPT_VERSION], template_hash())
         context = canonical_context()
         self.assertEqual(render(context), render(context))

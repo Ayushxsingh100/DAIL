@@ -261,12 +261,17 @@ class LLMResponse:
     parser_version: str
     created_at: datetime
     confidence: float | None = None  # §25: advisory metadata only
+    validator_version: str | None = None  # P7b: dail-patch-validator-1 when validated
+    validation_errors: tuple[str, ...] = ()
+    patch_id: str | None = None  # the Patch record of a built candidate
+    candidate_tree_hash: str | None = None
 
     def __post_init__(self) -> None:
         require_uuid(self.response_id, "LLMResponse.response_id")
         require_uuid(self.request_id, "LLMResponse.request_id")
         object.__setattr__(self, "created_at", utc(self.created_at, "LLMResponse.created_at"))
         object.__setattr__(self, "parse_errors", tuple(self.parse_errors))
+        object.__setattr__(self, "validation_errors", tuple(self.validation_errors))
         object.__setattr__(self, "token_usage", dict(self.token_usage))
 
     def to_dict(self) -> dict[str, Any]:
@@ -285,6 +290,10 @@ class LLMResponse:
             "parser_version": self.parser_version,
             "created_at": iso_utc(self.created_at),
             "confidence": self.confidence,
+            "validator_version": self.validator_version,
+            "validation_errors": list(self.validation_errors),
+            "patch_id": self.patch_id,
+            "candidate_tree_hash": self.candidate_tree_hash,
         }
 
 
@@ -314,6 +323,7 @@ class GenerationResult:
     validator_version: str
     detail: str = ""
     extra: Mapping[str, Any] = field(default_factory=dict)
+    build: Any = None  # llm.validation.patch.CandidateBuild of the final attempt, if built
 
     @property
     def retry_count(self) -> int:
