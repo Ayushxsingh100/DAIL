@@ -1,25 +1,24 @@
-"""The strict structured-response parser (Doc 10 §11, §22, §25; C-184, C-187). Parser only: the full
-patch validation pipeline (Doc 10 §13) is P7b.
+"""The strict structured-response parser (Doc 10 §11, §22, §25; C-184, C-187; P7b C-189, C-190).
 
-``parse_response(raw, allowed_types=..., allowed_scope=...)`` returns a ``ParseOutcome``. The rules,
-in order (the first that applies decides):
+Version 2 (P7b) keeps only the format checks; supported types, the change scope and everything
+about the patch text are the patch validator's (``llm.validation.patch``, C-190).
+
+``parse_response(raw)`` returns a ``ParseOutcome``. The rules, in order (the first that applies
+decides):
 
 1. **Structured-only (§22 "Extraneous text ... reject").** The reply must be exactly one JSON
    object; surrounding whitespace is allowed, any other text (a sentence, a code fence) is
-   INVALID_OUTPUT.
-   There is no tolerant parser in v1. Duplicate keys, ``NaN`` and ``Infinity`` are rejected.
+   INVALID_OUTPUT. There is no tolerant parser. Duplicate keys, ``NaN`` and ``Infinity`` are
+   rejected.
 2. **Schema (§11, §22 "Malformed JSON/schema: INVALID").** Exactly the required fields of
    ``LLMRepairResponse`` plus the optional ``confidence``; any other field, a missing field, a wrong
    type, an unknown status or another ``schema_version`` is INVALID_OUTPUT.
 3. **Patch by status (§11, §22 "Missing patch").** PATCH needs a non-empty patch string (C-184:
    ``PatchFormat.TERRAFORM_HCL``); every other status needs ``patch = null``.
 4. **Boundaries (§22 "Ambiguous patch boundaries: reject; never guess").** A PATCH must name at
-   least one changed address; every changed address must be a resource address
-   (``type.name`` with an optional module path and instance key); duplicates are rejected.
-5. **Support and scope (§22 "Unsupported resource: reject/UNSUPPORTED. Forbidden operation:
-   reject").** A changed address whose type is not allowed is UNSUPPORTED; one outside the allowed
-   change scope is POLICY_VIOLATION. The patch text itself is not parsed as HCL here (P7b).
-6. **Status.** A valid PATCH has no failure class. NO_SOLUTION and UNCERTAIN are the model's
+   least one changed address; every changed address must be a configuration address
+   (``type.name``: no instance key, no ``module.`` prefix, C-189); duplicates are rejected.
+5. **Status.** A valid PATCH has no failure class. NO_SOLUTION and UNCERTAIN are the model's
    inability signal: NO_SOLUTION (C-187). A model that answers INVALID is INVALID_OUTPUT.
 
 ``confidence`` (§25) is kept as metadata only: it never changes a status or a failure class.
@@ -31,11 +30,10 @@ from __future__ import annotations
 
 import json
 import math
-import re
-from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any, Final
 
+from core.domain.change_scope import CONFIG_ADDRESS
 from llm.schemas.records import FailureClass
 from llm.schemas.repair_response import (
     OPTIONAL_FIELDS,
@@ -45,11 +43,8 @@ from llm.schemas.repair_response import (
     RepairStatus,
 )
 
-PARSER_VERSION: Final = "dail-llm-parser-1"
+PARSER_VERSION: Final = "dail-llm-parser-2"
 F = FailureClass
-_NAME = r"[A-Za-z_][A-Za-z0-9_-]*"
-_KEY = r'(?:\[(?:[0-9]+|"(?:[^"\\]|\\.)*")\])'
-_ADDRESS: Final = re.compile(rf"^(?:module\.{_NAME}{_KEY}?\.)*({_NAME})\.{_NAME}{_KEY}?$")
 
 
 @dataclass(frozen=True)
@@ -146,37 +141,24 @@ def _schema(data: dict[str, Any]) -> LLMRepairResponse:
     )
 
 
-def _boundaries(
-    response: LLMRepairResponse,
-    allowed_types: frozenset[str] | None,
-    allowed_scope: frozenset[str] | None,
-) -> None:
+def _boundaries(response: LLMRepairResponse) -> None:
     if response.status is RepairStatus.PATCH and not response.changed_addresses:
         raise _Reject(
             F.INVALID_OUTPUT, "PATCH names no changed address: ambiguous patch boundaries (§22)"
         )
     for address in response.changed_addresses:
-        match = _ADDRESS.match(address)
-        if match is None:
-            raise _Reject(F.INVALID_OUTPUT, f"changed_addresses: {address!r} is not an address")
-        if allowed_types is not None and match.group(1) not in allowed_types:
-            raise _Reject(F.UNSUPPORTED, f"{address}: type {match.group(1)} is not supported")
-        if allowed_scope is not None and address not in allowed_scope:
-            raise _Reject(F.POLICY_VIOLATION, f"{address}: outside the allowed change scope")
+        if CONFIG_ADDRESS.match(address) is None:
+            raise _Reject(
+                F.INVALID_OUTPUT,
+                f"changed_addresses: {address!r} is not a configuration address type.name",
+            )
 
 
-def parse_response(
-    raw: object,
-    *,
-    allowed_types: Iterable[str] | None,
-    allowed_scope: Iterable[str] | None,
-) -> ParseOutcome:
-    """Parse one reply text. ``allowed_types`` and ``allowed_scope`` come from the context."""
-    types = None if allowed_types is None else frozenset(allowed_types)
-    scope = None if allowed_scope is None else frozenset(allowed_scope)
+def parse_response(raw: object) -> ParseOutcome:
+    """Parse one reply text (format only, C-190)."""
     try:
         response = _schema(_decode(raw))
-        _boundaries(response, types, scope)
+        _boundaries(response)
     except _Reject as reject:
         return ParseOutcome(None, reject.failure, (str(reject),))
     if response.status is RepairStatus.PATCH:
@@ -184,13 +166,3 @@ def parse_response(
     if response.status is RepairStatus.INVALID:
         return ParseOutcome(response, F.INVALID_OUTPUT, ("the model answered INVALID",))
     return ParseOutcome(response, F.NO_SOLUTION, ())
-
-
-def changed_types(addresses: Sequence[str]) -> tuple[str, ...]:
-    """The resource types named by addresses that match the address form."""
-    found = []
-    for address in addresses:
-        match = _ADDRESS.match(address)
-        if match is not None:
-            found.append(match.group(1))
-    return tuple(sorted(set(found)))

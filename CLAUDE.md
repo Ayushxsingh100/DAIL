@@ -71,7 +71,7 @@ prompt and this file conflict, stop and ask.
 - **Standard library only in `core/` and `evidence/`** (Python 3.12, ADR-002, ADR-004).
   - Any third-party import needs its own ADR first. There is no standing exception: NetworkX is deferred (ADR-005).
 - **Import boundaries R1–R7** are in `tests/contract/test_architecture_boundaries.py`. Never loosen that test or its allowlist unless the prompt names the ADR that allows it.
-- **No Pydantic or SQLAlchemy in the core.** Pydantic is allowed only in `llm/`, from P7.
+- **No Pydantic or SQLAlchemy.** `llm/` is standard library only as well (C-183).
 - **Configuration.**
   - Code lives in `core/application/config.py`; data lives in `config/`.
   - New keys are added only through schema changes.

@@ -40,6 +40,7 @@ from llm.schemas.records import (
     RetryPolicy,
 )
 from llm.validation.parser import PARSER_VERSION
+from llm.validation.patch import ValidationOutcome
 from tests.llm_builders import (
     Clock,
     Ids,
@@ -70,6 +71,28 @@ def generator(provider: FakeProvider, **changes: object) -> Generator:
     return Generator(**values)  # type: ignore[arg-type]
 
 
+class StubValidator:
+    """A validator that answers with one failure class (P7b moved the scope and the support
+    checks from the parser to the patch validator, C-190); it builds nothing."""
+
+    def __init__(self, failure: FailureClass | None) -> None:
+        self.failure = failure
+        self.calls = 0
+
+    def check_context(self, _context: object) -> None:
+        return None
+
+    def validate(self, response, *, request_id, patch_id):  # type: ignore[no-untyped-def]  # noqa: ARG002
+        self.calls += 1
+        return ValidationOutcome(
+            failure_class=self.failure,
+            errors=() if self.failure is None else ("stub",),
+            build=None,
+            operations=(),
+            patch_id=None,
+        )
+
+
 def ok(text: str) -> ProviderReply:
     return ProviderReply(text=text, latency_ms=12.5, token_usage={"input": 100, "output": 50})
 
@@ -95,19 +118,22 @@ class TestProviderInterface(unittest.TestCase):
         context = canonical_context()
         scope = context.allowed_change_scope
         cases = {
-            F.TRANSIENT_ERROR: ProviderError(F.TRANSIENT_ERROR, "connection reset"),
-            F.TIMEOUT: ProviderError(F.TIMEOUT, "no answer in 30 s"),
-            F.RATE_LIMIT: ProviderError(F.RATE_LIMIT, "HTTP 429"),
-            F.INVALID_OUTPUT: ok("not json"),
-            F.NO_SOLUTION: ok(reply("NO_SOLUTION")),
-            F.POLICY_VIOLATION: ok(reply(changed_addresses=["aws_vpc.elsewhere_not_in_scope"])),
-            F.UNSUPPORTED: ok(reply(changed_addresses=["aws_lambda_function.f"])),
+            F.TRANSIENT_ERROR: (ProviderError(F.TRANSIENT_ERROR, "connection reset"), None),
+            F.TIMEOUT: (ProviderError(F.TIMEOUT, "no answer in 30 s"), None),
+            F.RATE_LIMIT: (ProviderError(F.RATE_LIMIT, "HTTP 429"), None),
+            F.INVALID_OUTPUT: (ok("not json"), None),
+            F.NO_SOLUTION: (ok(reply("NO_SOLUTION")), None),
+            # P7b (C-190, C-192): these two come from the patch validator now
+            F.POLICY_VIOLATION: (ok(reply()), StubValidator(F.POLICY_VIOLATION)),
+            F.UNSUPPORTED: (ok(reply()), StubValidator(F.UNSUPPORTED)),
         }
-        self.assertNotIn("aws_vpc.elsewhere_not_in_scope", scope)
-        for expected, scripted in cases.items():
+        self.assertTrue(scope)
+        for expected, (scripted, check) in cases.items():
             with self.subTest(failure=expected):
                 provider = FakeProvider([scripted])
-                result = generator(provider, retry_policy=retry_policy(1)).generate(context)
+                result = generator(
+                    provider, retry_policy=retry_policy(1), validator=check
+                ).generate(context)
                 self.assertIs(result.failure_class, expected)
                 self.assertIs(result.attempts[0].response.failure_class, expected)
                 self.assertEqual(len(provider.calls), 1)
@@ -165,15 +191,16 @@ class TestRetry(unittest.TestCase):
         self.assertEqual(result.retry_count, 1)
 
     def test_no_retry_on_the_other_classes(self) -> None:
-        for scripted in (
-            ProviderError(F.TIMEOUT, "x"),
-            ProviderError(F.RATE_LIMIT, "x"),
-            ok(reply(changed_addresses=["aws_lambda_function.f"])),
-            ok(reply(changed_addresses=["aws_vpc.not_in_scope"])),
+        for scripted, check in (
+            (ProviderError(F.TIMEOUT, "x"), None),
+            (ProviderError(F.RATE_LIMIT, "x"), None),
+            # P7b (C-190, C-192): unsupported type and out-of-scope come from the validator
+            (ok(reply()), StubValidator(F.UNSUPPORTED)),
+            (ok(reply()), StubValidator(F.POLICY_VIOLATION)),
         ):
             with self.subTest(scripted=repr(scripted)[:40]):
                 provider = FakeProvider([scripted, ok(reply())])
-                result = generator(provider).generate(canonical_context())
+                result = generator(provider, validator=check).generate(canonical_context())
                 self.assertEqual(len(provider.calls), 1)
                 self.assertIs(result.status, GenerationStatus.FAILED)
 
@@ -265,6 +292,10 @@ class TestRecords(unittest.TestCase):
             "token_usage",
             "parser_version",
             "patch_hash",
+            "validator_version",
+            "validation_errors",
+            "patch_id",
+            "candidate_tree_hash",
         ):
             with self.subTest(field=name):
                 self.assertIn(name, response)
@@ -357,7 +388,7 @@ class TestConfigValidation(unittest.TestCase):
     def test_a_config_for_another_provider_or_prompt_is_refused(self) -> None:
         for changes in (
             {"provider": "ollama"},
-            {"prompt_version": "dail-repair-prompt-0"},
+            {"prompt_version": "dail-repair-prompt-1"},  # reproducible, not the current one
             {"response_schema_version": "other/1"},
         ):
             with self.subTest(changes=changes):

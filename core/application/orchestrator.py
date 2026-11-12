@@ -40,9 +40,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from core.application import ids as oids
+from core.application.candidate_tree import tree_hash
 from core.application.recorder import StageRecorder
 from core.application.scope_policy import VerificationScopePolicy
 from core.dependency.build import build_graph
@@ -140,6 +141,7 @@ class EvaluationRequest:
     bindings: tuple[SemanticBinding, ...]
     context: PromotionContext
     oracle_verdicts: tuple[OracleVerdict, ...] = ()
+    _PATCH_SOURCE: ClassVar[CandidateSource] = CandidateSource.FIXED_PATCH
 
     def __post_init__(self) -> None:
         for name in ("lineage_id", "candidate_id"):
@@ -148,11 +150,10 @@ class EvaluationRequest:
             value = getattr(self, name)
             if not isinstance(value, int) or isinstance(value, bool) or value < 1:
                 raise EvaluationInputError(f"EvaluationRequest.{name} must be an integer >= 1")
-        if (
-            not isinstance(self.patch, Patch)
-            or self.patch.source is not CandidateSource.FIXED_PATCH
-        ):
-            raise EvaluationInputError("EvaluationRequest.patch must be a FIXED_PATCH Patch")
+        if not isinstance(self.patch, Patch) or self.patch.source is not self._PATCH_SOURCE:
+            raise EvaluationInputError(
+                f"{type(self).__name__}.patch must be a {self._PATCH_SOURCE.value} Patch"
+            )
         if not isinstance(self.candidate_dir, Path):
             raise EvaluationInputError("EvaluationRequest.candidate_dir must be a Path")
         if not isinstance(self.context, PromotionContext):
@@ -169,6 +170,37 @@ class EvaluationRequest:
         object.__setattr__(self, "definitions", definitions)
         object.__setattr__(self, "bindings", bindings)
         object.__setattr__(self, "oracle_verdicts", verdicts)
+
+
+@dataclass(frozen=True)
+class LLMEvaluationRequest(EvaluationRequest):
+    """An LLM candidate on the same evaluation path (P7b; C-188, Doc 10 §12, §40).
+
+    ``patch`` is an LLM ``Patch`` (``source = LLM``, bound to its request); ``candidate_dir`` is the
+    directory the patch validator built from the parent and the patch, and ``built_tree_hash`` the
+    hash it recorded. The directory is hashed again here: one edited after the build is refused,
+    so the patch and the candidate cannot disagree (C-188). It is a sibling of the fixed-patch
+    request rather than a flag on it so that a FIXED_PATCH request still refuses an LLM patch, and
+    an LLM candidate cannot be evaluated without the record that binds its directory."""
+
+    built_tree_hash: str = ""
+    _PATCH_SOURCE: ClassVar[CandidateSource] = CandidateSource.LLM
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.patch.metadata.get("tree_hash") != self.built_tree_hash:
+            raise EvaluationInputError(
+                "LLMEvaluationRequest: the patch record does not name this built tree"
+            )
+        try:
+            actual = tree_hash(self.candidate_dir)
+        except (OSError, ValueError) as error:
+            raise EvaluationInputError(f"LLMEvaluationRequest: {error}") from error
+        if not self.built_tree_hash or actual != self.built_tree_hash:
+            raise EvaluationInputError(
+                "LLMEvaluationRequest: the candidate directory tree is not the one the patch "
+                "validator built (C-188)"
+            )
 
 
 @dataclass(frozen=True)

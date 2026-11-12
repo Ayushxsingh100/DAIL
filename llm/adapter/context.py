@@ -5,8 +5,11 @@
 * **Neighbourhood (§6, §7).** Only resources relevant to the repair: the addresses an impact report
   names (its changed resources, the changed resources of each affected invariant and every node of
   their dependency paths) plus an explicit ``focus``, restricted to the trusted state. Nothing else
-  of the environment is sent. ``allowed_change_scope`` is that neighbourhood; ``allowed_resource_
-  types`` is the supported model (registry §1.3).
+  of the environment is sent.
+* **Scope (§15, C-190).** ``allowed_change_scope`` and ``allowed_resource_types`` come from the
+  caller's ``AllowedChangeScope`` (its addresses; its types that are in the supported model,
+  registry §1.3); the builder never derives them. The allowed operations and attributes are
+  stated in ``known_constraints``.
 * **Secrets (§8).** Every resource is passed through ``core.domain.redaction.Redactor`` before
   anything else reads it; the count and the policy version are recorded.
 * **Unknown facts (§6, §8).** An unresolved value is shown as ``{"$unknown": <reason>}`` (an
@@ -25,6 +28,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Final
 
+from core.domain.change_scope import AllowedChangeScope
 from core.domain.enums import ResourceSupport
 from core.domain.hashing import content_hash
 from core.domain.impact import ImpactReport
@@ -70,6 +74,7 @@ class ContextInputs:
     statuses: Mapping[str, str]
     objective: str
     repair_targets: tuple[str, ...]
+    scope: AllowedChangeScope
     impact: ImpactReport | None = None
     focus: tuple[str, ...] = ()
     history: tuple[str, ...] = ()
@@ -231,6 +236,15 @@ def build_context(inputs: ContextInputs) -> LLMContext:
         if i["role"] == "protect"
     ]
     known.append(f"patch format: {PATCH_FORMAT}")
+    if not isinstance(inputs.scope, AllowedChangeScope):
+        raise ValueError("ContextInputs.scope must be the caller's AllowedChangeScope (C-190)")
+    known.append(
+        "allowed operations: " + ", ".join(op.value for op in inputs.scope.operation_types)
+    )
+    known.append(
+        "allowed attributes: "
+        + (", ".join(inputs.scope.attributes) if inputs.scope.attributes else "any")
+    )
     redacted_notes = redactor.redact(sorted(set(notes)))
     objective = redactor.redact(inputs.objective)
     return LLMContext(
@@ -242,8 +256,10 @@ def build_context(inputs: ContextInputs) -> LLMContext:
         relevant_invariants=invariants,
         impact_summary=_impact_lines(inputs.impact),
         dependency_summary=_path_lines(inputs.impact),
-        allowed_resource_types=SUPPORTED_TYPES,
-        allowed_change_scope=tuple(wanted),
+        allowed_resource_types=tuple(
+            t for t in SUPPORTED_TYPES if t in inputs.scope.resource_types
+        ),
+        allowed_change_scope=inputs.scope.resource_addresses,
         known_constraints=tuple(sorted(known)),
         unsupported_constraints=tuple(redacted_notes.payload),
         patch_format=PATCH_FORMAT,
