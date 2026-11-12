@@ -303,7 +303,16 @@ v1.1 by tests.unit.test_registry_v1_1. Carry-forward: C-181 Proposed; the user t
 after the verdict and the merge.
 ```
 
-## P7a — The LLM channel (pending external review)
+## P7a — The LLM channel — passed with limits (verdict on PR #28)
+
+```text
+P7a: passed with limits (verdict on PR #28). Recorded in P8a (C-199).
+Limits of the verdict (open items, with the package that closes each): NOT YET RECORDED. The
+verdict text was not available to the P8a author; it is to be copied here word for word from
+the pasted verdict (C-199).
+```
+
+The P7a author's input to the review, as written before the verdict:
 
 ```text
 P7a mini-gate: NOT DECIDED. Status written by the P7a author as an input to the external review.
@@ -333,7 +342,16 @@ loopback fake server, not the real one; the wiring check ran once on one machine
 Carry-forward: C-183 to C-187 Proposed; ADR-006 Proposed.
 ```
 
-## P7b — From LLM patch to Candidate State (pending external review)
+## P7b — From LLM patch to Candidate State — passed with limits (verdict on PR #29)
+
+```text
+P7b: passed with limits (verdict on PR #29). Recorded in P8a (C-199).
+Limits of the verdict (open items, with the package that closes each): NOT YET RECORDED. The
+verdict text was not available to the P8a author; it is to be copied here word for word from
+the pasted verdict (C-199).
+```
+
+The P7b author's input to the review, as written before the verdict:
 
 ```text
 P7b mini-gate: NOT DECIDED. Status written by the P7b author as an input to the external review.
@@ -366,7 +384,14 @@ Carry-forward: C-189 to C-193 and C-195 Proposed; ADR-006 Proposed. The P7a mini
 is unchanged: no verdict text for P7a was pasted in this package.
 ```
 
-## P7 — LLM Integration (pending external review)
+## P7 — LLM Integration — passed with limits (verdict on PR #29)
+
+```text
+P7 gate (Doc 15 §14.2) and milestone M4 (Doc 15 §24): passed with limits (verdict on PR #29).
+Recorded in P8a (C-199). The limits are those of the P7b verdict, listed in the P7b section.
+```
+
+The gate map written by the P7b author as an input to the review:
 
 ```text
 P7 gate (Doc 15 §14.2) and milestone M4 (Doc 15 §24): NOT DECIDED. Each item and the tests that
