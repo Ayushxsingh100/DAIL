@@ -462,7 +462,35 @@ M4 "No model output can bypass promotion" ..... test_llm_candidate_e2e.TestSecur
 No item is marked passed here; the external review decides.
 ```
 
-## P8a — The experiment harness (pending external review)
+## P8a — The experiment harness — passed with limits (verdict on PR #30)
+
+```text
+P8a: passed with limits (verdict on PR #30). Verdict: APPROVED WITH LIMITS (external review,
+12 Nov 2026 at d75b55e and 13 Nov 2026 at 68772e9; merged as 2db255b, whose message is the C-28
+approval record). The P8 gate and milestone M5 wait for P8b.
+Limits carried forward (not blocking), from the verdict, with the package that closes each:
+1. C-200 to C-204 and C-207 are Proposed. The authors must decide them. [Closed: Decided by the
+   authors on 13 Nov 2026, "accepted as built after external review", recorded in P8b.]
+2. parent_refs defaults to empty. A caller that does not pass it gets impact's work set only. That
+   fails closed (INSUFFICIENT_EVIDENCE, never a wrong PROMOTE), and the orchestrator passes it (the
+   author's mutant U5 is caught). Open (stated limit).
+3. Condition A is narrow by design (C-205, C-206). A's lineage tracks only the repair target, and a
+   change-request scenario under A starts from a baseline with no invariant. The paper must define
+   A exactly this way. Open (paper).
+4. Automatic promotion is enabled only for the harness (C-207 (3)), through the reviewed file
+   experiments/config/promotion.toml, whose hash every definition pins. It must never be used
+   outside experiments/. Open (standing rule).
+5. U_t items count as DAIL work (C-210). The paper's W must say so. Open (paper).
+6. The dev-run counts are harness counts, not results. For example, C' rejects 4 more F5
+   transitions than C. That gets explained only by P8b's scoring. Open (P8b).
+7. For P8b, all from immutable records and never by hand: score every transition against the
+   labels; report DAIL-oracle disagreements at S0 and per step (C-155); impact precision and recall
+   against oracle_affected; H3 identity errors against mutation_record; the common-prefix analysis
+   for the 7 truncations per condition; the Doc 13 §49 check "no unsafe promotion" under C. On dev,
+   a failure is a defect to investigate, not to tune around. Open (P8b, this package).
+```
+
+The P8a author's input to the review, as written before the verdict:
 
 ```text
 P8a mini-gate: NOT DECIDED. Status written by the P8a author as an input to the external review.
@@ -527,7 +555,87 @@ Limits: the open-target rule blocked C and C' on F8 (C-209, closed by C-210 in P
 Carry-forward: C-200 to C-204 and C-207 Proposed; C-209 closed by C-210; P8b scores the stored records.
 ```
 
-## P8b–P10 — NOT STARTED
+## P8b — Scoring, metrics and the dev report (pending external review)
+
+```text
+P8b mini-gate: NOT DECIDED. Status written by the P8b author as an input to the external review.
+Fix round P8b-2 (13 Nov 2026, after the external review of PR #31 at 86a1e5a): baseline items under
+  registry v1.1 were never evaluated (core/verification/baseline.py looked the definition up at
+  version 1; C-216, fixed in a34e25a). Run 2 is superseded by run 3, p8b-dev-run-3
+  (c4c20b99...), run on a34e25a: 896 trials, all COMPLETED, 339 s. docs/P8_DEV_PILOT.md is now
+  generated from run 3 and says so at the top. Against run 2: REJECT -> PROMOTE for 7 transitions
+  under B, 7 under C, 9 under C' (no other decision changed); every security baseline item is
+  evaluated (B and C: groups 23 PASS, 9 FAIL; rules 1 PASS, 13 FAIL; C': rules 7 PASS, 13 FAIL;
+  none invariant.unknown). Run 3 headline: unsafe promoted / promoted A 105/266, B 0/159,
+  C 0/159, C' 0/157; missed regressions / regressions B, C, C' 0/98; false rejections / safe
+  A 0/161, B 2/161, C 2/161, C' 4/161; W A 700, B 1694, C 1283, C' 1289; TRUNCATED A 0/280,
+  B, C, C' 7/280. Report guard: a table of every non-PASS required check, and a test that fails if
+  a baseline item is invariant.unknown while the definition is held (it flags 144 items in run 2,
+  none in run 3). Reproducibility against run 3: p8b-repro-check-3 (6764aa91...), 80 trials,
+  136 common transitions, 0 differences. An extractor reading found in the fix round (C-217 (1)):
+  unproven required checks now count in the UNKNOWN/UNSUPPORTED rates.
+  The numbers below this paragraph are those of the first P8b report (run 2), kept as written.
+What exists:
+  experiments/scoring (the only label reader: labels with the manifest and scenario hash checks,
+  per-transition truth, the identity truth table identity-truth-1 written from D4_OPERATORS.md,
+  the reproducibility selection); experiments/metrics (the extractor metrics-draft-1: MetricRecords
+  of Appendix B with scope, stratum and Wilson 95%; TrialOutcome of §31); experiments/report (the
+  ExperimentReport of §33 and its Markdown); python -m experiments.report extract|select|compare.
+  Blinding contract: (a) no module outside experiments/scoring names a label field; (b) no execution
+  module imports experiments.scoring, .metrics or .report (both shown failing on a mutant).
+Dev report (13 Nov 2026): docs/P8_DEV_PILOT.md, generated from p8a-dev-harness-check-2
+  (ec2b4fa8...), 896 trials, 1120 transitions, 1835 metric records; metric_records.json sha256
+  9f4d3d65..., report.json sha256 6fd62e2d...; a second extract wrote byte-identical files.
+  Headline (all evaluated transitions; numerator / denominator): unsafe promoted / promoted
+  A 105/266, B 0/152, C 0/152, C' 0/148; missed regressions / regressions A 98/98, B 0/98,
+  C 0/98, C' 0/98; false rejections / safe A 0/161, B 9/161, C 9/161, C' 13/161; W total A 700,
+  B 1694, C 1283, C' 1289; Save(C vs B) on the common prefix (273) = 1 - 1283/1694; TRUNCATED
+  A 0/280, B, C, C' 7/280. Unsafe promotions under C: none. Truth changes outside the verified
+  set: 0. DAIL-oracle disagreements under B: 6 (all DAIL UNSUPPORTED, oracle PASS; 2 scenarios).
+  Identity errors / true pairs: C 3/80, C' 23/80 (40 pairs excluded per condition).
+  These are dev numbers of a draft protocol, not findings (C-214).
+Reproducibility: p8b-repro-check (308471ba...), 20 scenarios x 4 conditions = 80 trials on the
+  same code; 136 transitions in common with run 2, 0 decision and 0 invariant-result differences.
+Tests: tests.unit.test_p8b_metrics (hand-computed record set), test_p8b_scoring_report,
+  tests.contract.test_experiment_blinding. Mutation checks: 12 of 12 metric mutants caught (3 only
+  after tests were added for the cases the record set lacked), 2 of 2 blinding mutants.
+Limits: metrics-draft-1 is a draft (P10 freezes the definitions before the test split); the
+  identity table covers only what the catalogue states (5 operators excluded); evidence-transfer
+  error is the author's reading (C-215 (1)); descriptive statistics only.
+Carry-forward: C-212 to C-215 Proposed.
+```
+
+## P8 — Experiment Harness (pending external review)
+
+```text
+P8 gate (Doc 15 §15.3) and milestone M5 (Doc 15 §25): NOT DECIDED. Each item and what bears on it:
+§15.3 "Trials are reproducible" ........ tests.unit.test_experiment_harness.TestReproducibility
+    (records identical across runs, concurrency, corrupted labels); the 20-trial re-run
+    (P8_DEV_PILOT.md section 13); the reviewer's independent re-run of both dev runs (PR #30).
+§15.3 "All compared conditions share compatible fixtures" .. the one fixture_set of every
+    definition; test_experiment_harness.TestConditions.test_baselines_agree_across_conditions;
+    the common prefixes of the report (sections 1-2).
+§15.3 "Metrics have frozen definitions" .. metrics-draft-1 is versioned and every record names it
+    (C-212; tests.unit.test_p8b_metrics.TestRecords); it is a draft for the dev pilot, and P10
+    freezes the final definitions before the test split is opened.
+§15.3 "Failed/excluded trials remain visible" .. experiments.report.build failures and
+    excluded_count; P8_DEV_PILOT.md section 12; test_p8b_scoring_report.TestReport;
+    test_experiment_harness.TestFailures.
+§15.3 "Reports derive from persisted evidence" .. python -m experiments.report extract reads only
+    the stored records; test_p8b_scoring_report.TestDevPilotDocument; the byte-identical second
+    extract.
+M5 "Experiments run reproducibly" ...... as §15.3 "Trials are reproducible".
+M5 "Baselines work" .................... conditions A and B (tests.unit.test_p8a_conditions,
+    test_experiment_harness.TestConditions; P8_DEV_PILOT.md section 1).
+M5 "Metrics generated" ................. metric_records.json (1835 records) of run 2.
+M5 "Trial artifacts linked" ............ correlation ids and artifact_refs
+    (test_experiment_harness.TestConditions.test_a_transition_records_what_section_4_3_lists,
+    report artifact_refs).
+M5 "Comparison report generated" ....... docs/P8_DEV_PILOT.md.
+No item is marked passed here; the external review decides.
+```
+
+## P10 — NOT STARTED
 
 P9 (AWS integration) and milestone M6 (AWS Demonstration) are removed (C-71, Decided by the advisor,
 11 Nov 2026): AWS stays fully offline, with no deployment, no AWS account and no calibration against

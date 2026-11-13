@@ -20,6 +20,14 @@ no earlier evidence to carry forward, so it is checked on its own.
 The verifier ids are those of the invariant definitions given (INV-SEC-001 for groups and rules,
 INV-SEC-003 for databases); a definition set without them makes the item UNSUPPORTED, never PASS.
 
+**Which definition (C-216, P8b-2).** The item uses the definition the run's definitions hold for its
+invariant, the highest version if several are present; its evidence (``observations``) records that
+``invariant_id``, ``invariant_version`` and ``registry``, and a security item evaluates ``PIP(p)``
+under that definition's registry (version 1 -> registry-v1.0, version 2 -> registry-v1.1), so a
+baseline item and its invariant item never use different rules. Before P8b-2 the lookup was fixed
+at version 1, so under registry v1.1 every security baseline item was UNSUPPORTED
+``invariant.unknown`` (found by the external review of PR #31).
+
 Standard library and ``core.domain`` only.
 """
 
@@ -30,9 +38,11 @@ from dataclasses import dataclass
 from typing import Any, Final
 
 from core.domain.enums import ResourceSupport, VerificationResult
+from core.domain.invariant import Invariant
 from core.domain.registry_v1 import FUNC_RELEVANT_UNSUPPORTED
 from core.domain.resource import Resource
 from core.domain.verification import VerificationReason
+from core.verification.dispatch import registry_of
 from core.verification.inputs import VerificationInputs
 from core.verification.outcome import CLAUSE_IPV4, CLAUSE_IPV6, combine
 from core.verification.public_ingress import GroupStatus, analyse
@@ -66,19 +76,39 @@ class BaselineOutcome:
     verifier_version: str
 
 
-def _verifier(inputs: VerificationInputs, invariant_id: str) -> tuple[str, str] | None:
-    definition = inputs.invariant(invariant_id, 1)
-    return None if definition is None else (definition.verifier_id, definition.verifier_version)
+def _definition(inputs: VerificationInputs, invariant_id: str) -> Invariant | None:
+    """The run's definition of ``invariant_id``: the highest version present, or ``None``."""
+    found = [d for d in inputs.invariants if d.invariant_id == invariant_id]
+    return max(found, key=lambda d: d.version) if found else None
+
+
+def baseline_definition(inputs: VerificationInputs, kind: str) -> Invariant | None:
+    """The definition a baseline item of this resource type belongs to (C-216), if any."""
+    if kind in _SECURITY_TYPES:
+        return _definition(inputs, "INV-SEC-001")
+    if kind == DB_INSTANCE_TYPE:
+        return _definition(inputs, "INV-SEC-003")
+    return None
 
 
 def baseline_verifier(inputs: VerificationInputs, kind: str) -> tuple[str, str] | None:
     """The verifier a baseline item of this resource type is attributed to, or ``None`` when the
     definitions do not have the invariant it belongs to."""
-    if kind in _SECURITY_TYPES:
-        return _verifier(inputs, "INV-SEC-001")
-    if kind == DB_INSTANCE_TYPE:
-        return _verifier(inputs, "INV-SEC-003")
+    if kind in _SECURITY_TYPES or kind == DB_INSTANCE_TYPE:
+        definition = baseline_definition(inputs, kind)
+        return None if definition is None else (definition.verifier_id, definition.verifier_version)
     return BASELINE_VERIFIER
+
+
+def _named(definition: Invariant | None) -> dict[str, Any]:
+    """What the evidence records about the definition the item used (C-216)."""
+    if definition is None:
+        return {}
+    return {
+        "invariant_id": definition.invariant_id,
+        "invariant_version": definition.version,
+        "registry": registry_of(definition),
+    }
 
 
 def _worst(values: list[VerificationResult]) -> VerificationResult:
@@ -93,7 +123,7 @@ def _contributing_groups(resource: Resource) -> list[str]:
 
 
 def _security(
-    resource: Resource, inputs: VerificationInputs, ids: tuple[str, str]
+    resource: Resource, inputs: VerificationInputs, ids: tuple[str, str], definition: Invariant
 ) -> BaselineOutcome:
     groups = _contributing_groups(resource)
     predicates: dict[str, dict[str, str]] = {}
@@ -105,6 +135,7 @@ def _security(
             inputs.candidate_resources,
             parent_resources=inputs.parent_resources,
             identity=inputs.identity,
+            registry=registry_of(definition),
         )
         statuses: list[GroupStatus] = [analysis.groups[g] for g in groups if g in analysis.groups]
         shown: dict[str, str] = {}
@@ -122,7 +153,9 @@ def _security(
         reason = reasons[0]
     elif result is U:
         reason = R.RULE_INDETERMINATE
-    observations = _base(resource) | {"groups": groups, "predicates": predicates}
+    observations = (
+        _base(resource) | _named(definition) | {"groups": groups, "predicates": predicates}
+    )
     return BaselineOutcome(result, reason, observations, (), True, *ids)
 
 
@@ -148,21 +181,23 @@ def verify_baseline(address: str, inputs: VerificationInputs) -> BaselineOutcome
         return BaselineOutcome(
             S, R.INVARIANT_UNKNOWN, _base(resource), (), True, *BASELINE_VERIFIER
         )
+    definition = baseline_definition(inputs, kind)
+    named = _base(resource) | _named(definition)
     if kind in FUNC_RELEVANT_UNSUPPORTED:
-        return BaselineOutcome(S, R.TYPE_RELEVANT_UNSUPPORTED, _base(resource), (), True, *ids)
+        return BaselineOutcome(S, R.TYPE_RELEVANT_UNSUPPORTED, named, (), True, *ids)
     if resource.support_status is ResourceSupport.UNKNOWN:
-        return BaselineOutcome(U, R.RESOURCE_INDETERMINATE, _base(resource), (), True, *ids)
-    if kind in _SECURITY_TYPES or kind == DB_INSTANCE_TYPE:
+        return BaselineOutcome(U, R.RESOURCE_INDETERMINATE, named, (), True, *ids)
+    if definition is not None:
         if resource.support_status is ResourceSupport.UNSUPPORTED:
-            return BaselineOutcome(S, R.RULE_UNSUPPORTED, _base(resource), (), True, *ids)
+            return BaselineOutcome(S, R.RULE_UNSUPPORTED, named, (), True, *ids)
         if kind in _SECURITY_TYPES:
-            return _security(resource, inputs, ids)
-        return _database(resource, ids)
+            return _security(resource, inputs, ids, definition)
+        return _database(resource, ids, definition)
     note = f"registry-v1.0 declares no baseline predicate for {kind}"
     return BaselineOutcome(P, None, _base(resource), (note,), False, *ids)
 
 
-def _database(resource: Resource, ids: tuple[str, str]) -> BaselineOutcome:
+def _database(resource: Resource, ids: tuple[str, str], definition: Invariant) -> BaselineOutcome:
     result, shown = instance_state(resource)
     reasons: Mapping[VerificationResult, VerificationReason | None] = {
         P: None,
@@ -171,5 +206,10 @@ def _database(resource: Resource, ids: tuple[str, str]) -> BaselineOutcome:
         S: R.RULE_UNSUPPORTED,
     }
     return BaselineOutcome(
-        result, reasons[result], _base(resource) | {"value": shown}, (), True, *ids
+        result,
+        reasons[result],
+        _base(resource) | _named(definition) | {"value": shown},
+        (),
+        True,
+        *ids,
     )

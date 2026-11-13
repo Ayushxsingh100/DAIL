@@ -7,11 +7,15 @@ INV-FUNC-001 bindings) and the primary variable_values. Never labels, gt_class, 
 mutation_record, intent, variable_values_alt or anything else. A contract test fails if any module
 used by trial execution reads one of those fields (for example by parsing the sources with ast)."
 
-Every module of ``experiments/`` is used by trial execution in P8a (scoring is P8b, and a scoring
-module would be listed here by name as the one exception). The check parses each source with ``ast``
-and reports any use of a forbidden field name: a string constant that is not a docstring (a key, a
-``get`` or ``getattr`` argument, a set or list member), an attribute, a name or a keyword argument.
-A self-test feeds sources that read each field, so a checker that can no longer fail is caught.
+P8b (work package Step 2): ``experiments/scoring/`` is the only package that reads label fields.
+(a) No other module of ``experiments/`` names one: neither the execution modules (the top-level
+modules of ``experiments/``) nor ``experiments/metrics/`` and ``experiments/report/``, which consume
+scoring's output. (b) No execution module imports ``experiments.scoring``, ``experiments.metrics``
+or ``experiments.report``, so trial execution cannot reach a label even indirectly. The check parses
+each source with ``ast`` and reports any use of a forbidden field name: a string constant that is
+not a docstring (a key, a ``get`` or ``getattr`` argument, a set or list member), an attribute, a
+name or a keyword argument. A self-test feeds sources that read each field, so a checker that can no
+longer fail is caught.
 """
 
 from __future__ import annotations
@@ -25,8 +29,9 @@ EXPERIMENTS = REPO_ROOT / "experiments"
 FORBIDDEN = frozenset(
     {"labels", "gt_class", "oracle", "mutation_record", "intent", "variable_values_alt"}
 )
-# P8b's scoring module(s) will be the only exception; none exists in P8a.
-SCORING_MODULES: frozenset[str] = frozenset()
+# P8b: the only package that reads label fields.
+SCORING_PACKAGE = EXPERIMENTS / "scoring"
+ANALYSIS_PACKAGES = ("experiments.scoring", "experiments.metrics", "experiments.report")
 
 
 def _docstrings(tree: ast.AST) -> set[int]:
@@ -62,25 +67,66 @@ def label_reads(source: str) -> list[str]:
     return found
 
 
-def execution_modules() -> list[Path]:
+def non_scoring_modules() -> list[Path]:
+    """Every module of experiments/ outside experiments/scoring/ (check (a))."""
     return sorted(
         p
         for p in EXPERIMENTS.rglob("*.py")
-        if "__pycache__" not in p.parts and p.stem not in SCORING_MODULES
+        if "__pycache__" not in p.parts and SCORING_PACKAGE not in p.parents
     )
 
 
+def execution_modules() -> list[Path]:
+    """The modules trial execution runs: the top-level modules of experiments/ (check (b))."""
+    return sorted(EXPERIMENTS.glob("*.py"))
+
+
+def analysis_imports(source: str) -> list[str]:
+    """Every import of experiments.scoring, experiments.metrics or experiments.report."""
+    found: list[str] = []
+    for node in ast.walk(ast.parse(source)):
+        names: list[str] = []
+        if isinstance(node, ast.Import):
+            names = [alias.name for alias in node.names]
+        elif isinstance(node, ast.ImportFrom):
+            if node.level:
+                names = [f"experiments.{node.module or ''}"] + [
+                    f"experiments.{alias.name}" for alias in node.names
+                ]
+            else:
+                base = node.module or ""
+                names = [base] + [f"{base}.{alias.name}" for alias in node.names]
+        for name in names:
+            if any(name == p or name.startswith(p + ".") for p in ANALYSIS_PACKAGES):
+                found.append(f"{node.lineno}: {name}")
+    return found
+
+
 class TestBlinding(unittest.TestCase):
-    def test_no_execution_module_reads_a_label_field(self) -> None:
-        modules = execution_modules()
+    def test_no_module_outside_scoring_reads_a_label_field(self) -> None:
+        modules = non_scoring_modules()
         self.assertTrue(modules, "experiments/ has no module to check")
         self.assertIn(EXPERIMENTS / "loader.py", modules)
+        self.assertIn(EXPERIMENTS / "metrics" / "extractor.py", modules)
+        self.assertIn(EXPERIMENTS / "report" / "build.py", modules)
         for path in modules:
             with self.subTest(module=path.relative_to(REPO_ROOT).as_posix()):
                 self.assertEqual(label_reads(path.read_text(encoding="utf-8")), [])
 
-    def test_no_scoring_module_exists_yet(self) -> None:
-        self.assertEqual(SCORING_MODULES, frozenset())
+    def test_the_scoring_package_is_the_one_exception(self) -> None:
+        # P8b replaces P8a's "no scoring module exists yet": the scoring package exists and reads
+        # labels; it is the only part of experiments/ the check (a) skips
+        self.assertTrue((SCORING_PACKAGE / "labels.py").is_file())
+        reads = label_reads((SCORING_PACKAGE / "labels.py").read_text(encoding="utf-8"))
+        self.assertTrue(reads, "the scoring package should be where labels are read")
+
+    def test_execution_never_imports_scoring_metrics_or_report(self) -> None:
+        modules = execution_modules()
+        self.assertIn(EXPERIMENTS / "trial.py", modules)
+        self.assertIn(EXPERIMENTS / "__main__.py", modules)
+        for path in modules:
+            with self.subTest(module=path.relative_to(REPO_ROOT).as_posix()):
+                self.assertEqual(analysis_imports(path.read_text(encoding="utf-8")), [])
 
 
 class TestTheCheckerCanFail(unittest.TestCase):
@@ -98,6 +144,18 @@ class TestTheCheckerCanFail(unittest.TestCase):
         ):
             with self.subTest(source=source.strip()):
                 self.assertNotEqual(label_reads(source), [])
+
+    def test_each_kind_of_analysis_import_is_found(self) -> None:
+        for source in (
+            "import experiments.scoring\n",
+            "from experiments.metrics import extractor\n",
+            "from experiments.report.build import build_report\n",
+            "from .scoring import labels\n",
+            "from . import metrics\n",
+        ):
+            with self.subTest(source=source.strip()):
+                self.assertNotEqual(analysis_imports(source), [])
+        self.assertEqual(analysis_imports("from experiments.loader import load\n"), [])
 
     def test_docstrings_and_allowed_fields_are_not_findings(self) -> None:
         source = (
