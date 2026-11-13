@@ -16,11 +16,23 @@ each source with ``ast`` and reports any use of a forbidden field name: a string
 not a docstring (a key, a ``get`` or ``getattr`` argument, a set or list member), an attribute, a
 name or a keyword argument. A self-test feeds sources that read each field, so a checker that can no
 longer fail is caught.
+
+P10a (work package Section 3.3): "Extend the blinding contract test: ``experiments/generation/``
+names no label field and no ``description``, ``intent``, ``mutation_record`` or later step, and never
+opens ``step_1`` or beyond. Show the test failing on a mutant." (c) Every module of
+``experiments/generation/`` is checked for the label fields and for ``description`` (TerraPreserve's
+``target.description``); a later step is any string naming ``step_<n>`` with n >= 1, and any use of
+a scenario's ``steps`` other than ``steps[0]`` or ``steps[:1]`` (an index, a loop, a slice past S0).
+The invariant's own registry statement reaches the task through ``experiments.task_text``, which
+reads a DAIL ``Invariant`` only. (d) No generation module imports ``experiments.scoring``,
+``.metrics`` or ``.report``. A dynamic check is in ``tests.unit.test_p10a_generation.TestNoLaterStep``:
+generation, replay and export run with the later step directories deleted.
 """
 
 from __future__ import annotations
 
 import ast
+import re
 import unittest
 from pathlib import Path
 
@@ -32,6 +44,10 @@ FORBIDDEN = frozenset(
 # P8b: the only package that reads label fields.
 SCORING_PACKAGE = EXPERIMENTS / "scoring"
 ANALYSIS_PACKAGES = ("experiments.scoring", "experiments.metrics", "experiments.report")
+# P10a: the generation package.
+GENERATION_PACKAGE = EXPERIMENTS / "generation"
+GENERATION_FORBIDDEN = FORBIDDEN | {"description"}
+LATER_STEP = re.compile(r"step_0*[1-9][0-9]*")
 
 
 def _docstrings(tree: ast.AST) -> set[int]:
@@ -65,6 +81,61 @@ def label_reads(source: str) -> list[str]:
         if name is not None:
             found.append(f"{getattr(node, 'lineno', '?')}: {name}")
     return found
+
+
+def _first_step_only(node: ast.Subscript) -> bool:
+    """``steps[0]`` or ``steps[:1]``."""
+    index = node.slice
+    if isinstance(index, ast.Constant):
+        return index.value == 0
+    if isinstance(index, ast.Slice):
+        return (
+            index.lower is None
+            and index.step is None
+            and isinstance(index.upper, ast.Constant)
+            and index.upper.value == 1
+        )
+    return False
+
+
+def generation_reads(source: str) -> list[str]:
+    """(c): label fields, ``description``, a later step's name, and any use of ``steps`` other than
+    ``steps[0]`` or ``steps[:1]``, as 'line: what'."""
+    tree = ast.parse(source)
+    skip = _docstrings(tree)
+    found: list[str] = []
+    allowed_steps: set[int] = set()
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Subscript)
+            and isinstance(node.value, ast.Attribute)
+            and node.value.attr == "steps"
+            and _first_step_only(node)
+        ):
+            allowed_steps.add(id(node.value))
+    for node in ast.walk(tree):
+        name: str | None = None
+        if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in skip:
+            if node.value in GENERATION_FORBIDDEN:
+                name = node.value
+            elif LATER_STEP.search(node.value):
+                name = f"later step {node.value!r}"
+        elif isinstance(node, ast.Attribute):
+            if node.attr in GENERATION_FORBIDDEN:
+                name = node.attr
+            elif node.attr == "steps" and id(node) not in allowed_steps:
+                name = "steps other than steps[0] or steps[:1]"
+        elif isinstance(node, ast.Name) and node.id in GENERATION_FORBIDDEN:
+            name = node.id
+        elif isinstance(node, ast.keyword) and node.arg in GENERATION_FORBIDDEN:
+            name = node.arg
+        if name is not None:
+            found.append(f"{getattr(node, 'lineno', '?')}: {name}")
+    return found
+
+
+def generation_modules() -> list[Path]:
+    return sorted(p for p in GENERATION_PACKAGE.rglob("*.py") if "__pycache__" not in p.parts)
 
 
 def non_scoring_modules() -> list[Path]:
@@ -127,6 +198,51 @@ class TestBlinding(unittest.TestCase):
         for path in modules:
             with self.subTest(module=path.relative_to(REPO_ROOT).as_posix()):
                 self.assertEqual(analysis_imports(path.read_text(encoding="utf-8")), [])
+
+
+class TestGenerationBlinding(unittest.TestCase):
+    def test_generation_names_no_label_description_or_later_step(self) -> None:
+        modules = generation_modules()
+        self.assertIn(GENERATION_PACKAGE / "run.py", modules)
+        self.assertIn(GENERATION_PACKAGE / "task.py", modules)
+        for path in modules:
+            with self.subTest(module=path.relative_to(REPO_ROOT).as_posix()):
+                self.assertEqual(generation_reads(path.read_text(encoding="utf-8")), [])
+
+    def test_generation_never_imports_scoring_metrics_or_report(self) -> None:
+        for path in generation_modules():
+            with self.subTest(module=path.relative_to(REPO_ROOT).as_posix()):
+                self.assertEqual(analysis_imports(path.read_text(encoding="utf-8")), [])
+
+
+class TestTheGenerationCheckerCanFail(unittest.TestCase):
+    def test_each_kind_of_read_is_found(self) -> None:
+        for source in (
+            'text = doc["target"]["description"]\n',
+            "text = target.description\n",
+            'value = doc.get("intent")\n',
+            'value = doc["mutation_record"]\n',
+            'value = doc["labels"]\n',
+            "later = scenario.steps[1]\n",
+            "last = scenario.steps[-1]\n",
+            "rest = scenario.steps[1:]\n",
+            "both = scenario.steps[:2]\n",
+            "for step in scenario.steps:\n    pass\n",
+            "count = len(scenario.steps)\n",
+            'path = base / "step_1"\n',
+            'path = base / f"step_{k}" / "step_12"\n',
+        ):
+            with self.subTest(source=source.strip()):
+                self.assertNotEqual(generation_reads(source), [])
+
+    def test_s0_is_allowed(self) -> None:
+        source = (
+            '"""Never the description, nor step_1."""\n'
+            "first = scenario.steps[0]\n"
+            "only = scenario.steps[:1]\n"
+            'path = base / "step_0"\n'
+        )
+        self.assertEqual(generation_reads(source), [])
 
 
 class TestTheCheckerCanFail(unittest.TestCase):
