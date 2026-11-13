@@ -462,7 +462,35 @@ M4 "No model output can bypass promotion" ..... test_llm_candidate_e2e.TestSecur
 No item is marked passed here; the external review decides.
 ```
 
-## P8a — The experiment harness (pending external review)
+## P8a — The experiment harness — passed with limits (verdict on PR #30)
+
+```text
+P8a: passed with limits (verdict on PR #30). Verdict: APPROVED WITH LIMITS (external review,
+12 Nov 2026 at d75b55e and 13 Nov 2026 at 68772e9; merged as 2db255b, whose message is the C-28
+approval record). The P8 gate and milestone M5 wait for P8b.
+Limits carried forward (not blocking), from the verdict, with the package that closes each:
+1. C-200 to C-204 and C-207 are Proposed. The authors must decide them. [Closed: Decided by the
+   authors on 13 Nov 2026, "accepted as built after external review", recorded in P8b.]
+2. parent_refs defaults to empty. A caller that does not pass it gets impact's work set only. That
+   fails closed (INSUFFICIENT_EVIDENCE, never a wrong PROMOTE), and the orchestrator passes it (the
+   author's mutant U5 is caught). Open (stated limit).
+3. Condition A is narrow by design (C-205, C-206). A's lineage tracks only the repair target, and a
+   change-request scenario under A starts from a baseline with no invariant. The paper must define
+   A exactly this way. Open (paper).
+4. Automatic promotion is enabled only for the harness (C-207 (3)), through the reviewed file
+   experiments/config/promotion.toml, whose hash every definition pins. It must never be used
+   outside experiments/. Open (standing rule).
+5. U_t items count as DAIL work (C-210). The paper's W must say so. Open (paper).
+6. The dev-run counts are harness counts, not results. For example, C' rejects 4 more F5
+   transitions than C. That gets explained only by P8b's scoring. Open (P8b).
+7. For P8b, all from immutable records and never by hand: score every transition against the
+   labels; report DAIL-oracle disagreements at S0 and per step (C-155); impact precision and recall
+   against oracle_affected; H3 identity errors against mutation_record; the common-prefix analysis
+   for the 7 truncations per condition; the Doc 13 §49 check "no unsafe promotion" under C. On dev,
+   a failure is a defect to investigate, not to tune around. Open (P8b, this package).
+```
+
+The P8a author's input to the review, as written before the verdict:
 
 ```text
 P8a mini-gate: NOT DECIDED. Status written by the P8a author as an input to the external review.
