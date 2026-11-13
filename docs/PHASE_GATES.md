@@ -559,6 +559,22 @@ Carry-forward: C-200 to C-204 and C-207 Proposed; C-209 closed by C-210; P8b sco
 
 ```text
 P8b mini-gate: NOT DECIDED. Status written by the P8b author as an input to the external review.
+Fix round P8b-2 (13 Nov 2026, after the external review of PR #31 at 86a1e5a): baseline items under
+  registry v1.1 were never evaluated (core/verification/baseline.py looked the definition up at
+  version 1; C-216, fixed in a34e25a). Run 2 is superseded by run 3, p8b-dev-run-3
+  (c4c20b99...), run on a34e25a: 896 trials, all COMPLETED, 339 s. docs/P8_DEV_PILOT.md is now
+  generated from run 3 and says so at the top. Against run 2: REJECT -> PROMOTE for 7 transitions
+  under B, 7 under C, 9 under C' (no other decision changed); every security baseline item is
+  evaluated (B and C: groups 23 PASS, 9 FAIL; rules 1 PASS, 13 FAIL; C': rules 7 PASS, 13 FAIL;
+  none invariant.unknown). Run 3 headline: unsafe promoted / promoted A 105/266, B 0/159,
+  C 0/159, C' 0/157; missed regressions / regressions B, C, C' 0/98; false rejections / safe
+  A 0/161, B 2/161, C 2/161, C' 4/161; W A 700, B 1694, C 1283, C' 1289; TRUNCATED A 0/280,
+  B, C, C' 7/280. Report guard: a table of every non-PASS required check, and a test that fails if
+  a baseline item is invariant.unknown while the definition is held (it flags 144 items in run 2,
+  none in run 3). Reproducibility against run 3: p8b-repro-check-3 (6764aa91...), 80 trials,
+  136 common transitions, 0 differences. An extractor reading found in the fix round (C-217 (1)):
+  unproven required checks now count in the UNKNOWN/UNSUPPORTED rates.
+  The numbers below this paragraph are those of the first P8b report (run 2), kept as written.
 What exists:
   experiments/scoring (the only label reader: labels with the manifest and scenario hash checks,
   per-transition truth, the identity truth table identity-truth-1 written from D4_OPERATORS.md,
