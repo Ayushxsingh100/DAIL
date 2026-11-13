@@ -306,10 +306,21 @@ after the verdict and the merge.
 ## P7a — The LLM channel — passed with limits (verdict on PR #28)
 
 ```text
-P7a: passed with limits (verdict on PR #28). Recorded in P8a (C-199).
-Limits of the verdict (open items, with the package that closes each): NOT YET RECORDED. The
-verdict text was not available to the P8a author; it is to be copied here word for word from
-the pasted verdict (C-199).
+P7a: passed with limits (verdict on PR #28). Recorded in P8a (C-199); limits recorded in P8a-2.
+Limits of the verdict (open items, with the package that closes each):
+1. C-183 to C-187 Proposed (now Decided in P7b). Closed.
+2. Provider interface differs from Doc 10 §30 (ADR-006): state as a deviation in the paper.
+   Open (paper).
+3. Scope check refused new-address repairs. Closed in P7b (C-190).
+4. Ollama 400/404 map to UNSUPPORTED, not retried: P10 counts them separately from model failures.
+   Open (P10).
+5. Token budget is an estimate (ceil(characters / 4)): P10 reports it as an estimate and checks the
+   model's real context window. Open (P10).
+6. The wiring check proves the plumbing only; model and licence checked by the author. Open (P10
+   model choice).
+7. Weak red run, compensated by mutations. Closed.
+8. Remove llm.api_key_ref (kept by C-194) and the Pydantic line in CLAUDE.md (done in P7b). Closed.
+9. Ollama left running on the author's machine; the installer can be deleted. Open (user).
 ```
 
 The P7a author's input to the review, as written before the verdict:
@@ -345,10 +356,28 @@ Carry-forward: C-183 to C-187 Proposed; ADR-006 Proposed.
 ## P7b — From LLM patch to Candidate State — passed with limits (verdict on PR #29)
 
 ```text
-P7b: passed with limits (verdict on PR #29). Recorded in P8a (C-199).
-Limits of the verdict (open items, with the package that closes each): NOT YET RECORDED. The
-verdict text was not available to the P8a author; it is to be copied here word for word from
-the pasted verdict (C-199).
+P7b: passed with limits (verdict on PR #29). Recorded in P8a (C-199); limits recorded in P8a-2.
+Limits of the verdict (open items, with the package that closes each):
+1. C-189 to C-193 and C-195 Proposed: the authors decide. Open.
+2. Untested branch: a non-var. reference as a credential value (for example password = local.x ->
+   POLICY_VIOLATION) needs a test. Open (add it in this fix round, see Step 4). [Test added in
+   P8a-2: tests.unit.test_llm_patch_validator.TestCredentialsAndIds
+   .test_a_secret_argument_from_a_local_value_is_a_policy_violation.]
+3. The invented-id check sees whole string literals only (an id split inside a template passes).
+   Open (stated limit).
+4. A MODIFY may drop the parent's lifecycle block. 14 of the 288 dev scenarios have a lifecycle
+   block in S0. Open (P10 decides).
+5. The tree hash is checked when the request is built, not at evaluation time: P10 builds and
+   evaluates each LLM candidate in one step and deletes the build. Open (P10).
+6. The candidate directory copies every parent file: P10 passes configuration-only parents.
+   Open (P10).
+7. Experiment scope for LLM candidates not fixed yet: one scope per scenario, the same for every
+   condition, recorded in advance. Open (P10).
+8. The wiring run proves the path only (the 1.5B model kept public SSH; DAIL rejected it). Open
+   (P10 model choice).
+9. Delete-only patches need a comment as patch text: P10 reports how often models fail on this.
+   Open (P10).
+10. llm.api_key_ref stays (C-194). Open (unused).
 ```
 
 The P7b author's input to the review, as written before the verdict:
@@ -476,11 +505,11 @@ Tests: tests.unit.test_p8a_open_targets, test_p8a_open_targets_e2e, test_p8a_con
   TERRAPRESERVE_ROOT), tests.contract.test_experiment_blinding; test_identity_strategy amended
   (C-208). Mutation checks: 18 of 18 harness, loader and promotion mutants caught (M5 only after a
   test was added), and 2 of 2 for the amended identity test.
-Limits: open-target rule as decided blocks C and C' on F8 (C-209); condition-added work items
+Limits: the open-target rule blocked C and C' on F8 (C-209, closed by C-210 in P8a-2); condition-added work items
   carry a stand-in reason code (C-207 (1)); automatic promotion is enabled by the reviewed
   experiments/config/promotion.toml in the harness's copy of the configuration only (C-207 (3));
-  repetition 1, no seeds; one machine; the P7a/P7b verdict limits are not yet recorded (C-199).
-Carry-forward: C-200 to C-204 and C-207 Proposed; C-209 Open; P8b scores the stored records.
+  repetition 1, no seeds; one machine.
+Carry-forward: C-200 to C-204 and C-207 Proposed; C-209 closed by C-210; P8b scores the stored records.
 ```
 
 ## P8b–P10 — NOT STARTED
