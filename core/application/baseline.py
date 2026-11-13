@@ -95,7 +95,9 @@ class BaselineRefused(DomainValidationError):
 @dataclass(frozen=True)
 class BaselineRequest:
     """What to establish. ``eligible`` is the caller's declaration that the fixture may serve as a
-    baseline (Doc 13 §13); ``now`` is the one instant used for everything that is hashed."""
+    baseline (Doc 13 §13); ``now`` is the one instant used for everything that is hashed.
+    ``allow_no_invariants`` (default off) accepts an empty ``definitions``: only the experiment
+    harness sets it, for condition A on a change request (C-206); the gates still run."""
 
     baseline_id: str
     lineage_id: str
@@ -108,6 +110,7 @@ class BaselineRequest:
     eligible: bool
     verifiers: VerifierTable = DEFAULT_VERIFIERS
     registry_version: int = 1
+    allow_no_invariants: bool = False
 
     def __post_init__(self) -> None:
         require_uuid(self.baseline_id, "BaselineRequest.baseline_id")
@@ -118,8 +121,12 @@ class BaselineRequest:
             raise DomainValidationError("BaselineRequest.eligible must be a bool")
         if not isinstance(self.context, PromotionContext):
             raise DomainValidationError("BaselineRequest.context must be a PromotionContext")
+        if not isinstance(self.allow_no_invariants, bool):
+            raise DomainValidationError("BaselineRequest.allow_no_invariants must be a bool")
         definitions = tuple(self.definitions)
-        if not definitions or not all(isinstance(d, Invariant) for d in definitions):
+        if (not definitions and not self.allow_no_invariants) or not all(
+            isinstance(d, Invariant) for d in definitions
+        ):
             raise DomainValidationError("BaselineRequest.definitions must hold Invariant objects")
         bindings = tuple(self.bindings)
         if not all(isinstance(b, SemanticBinding) for b in bindings):
@@ -353,6 +360,7 @@ def _write(
         invariant_registry_version=request.registry_version,
         now=request.now,
         state_id=prepared.state_id,
+        allow_no_invariants=request.allow_no_invariants,
     )
     if existing is not None and (
         existing.state_hash != state.state_hash or existing.lineage_id != state.lineage_id

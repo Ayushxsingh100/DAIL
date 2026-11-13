@@ -18,6 +18,7 @@ from core.domain.graph import Relationship
 from core.domain.impact import (
     AFFECTED_CODES,
     IMPACT_ALGORITHM_VERSION,
+    POLICY_CODES,
     REASON_DEFINITIONS,
     UNAFFECTED_CODES,
     UNCERTAIN_CODES,
@@ -75,12 +76,24 @@ class TestVocabularies(unittest.TestCase):
                 "NO_PRIOR_EVIDENCE",
                 "INVARIANT_VERSION_CHANGED",
                 "VERIFIER_CHANGED",
+                # P8a-2 (C-211): the reasons of work that a scope policy adds, never impact's
+                "CONDITION_SCOPE",
+                "NOT_PROTECTED_IN_PARENT",
             },
         )
         self.assertEqual(set(REASON_DEFINITIONS), set(ReasonCode))
+        self.assertEqual(
+            POLICY_CODES, {ReasonCode.CONDITION_SCOPE, ReasonCode.NOT_PROTECTED_IN_PARENT}
+        )
 
     def test_every_code_is_in_exactly_one_group(self) -> None:
-        groups = [AFFECTED_CODES, UNCERTAIN_CODES, UNAFFECTED_CODES, {ReasonCode.CREATED_BASELINE}]
+        groups = [
+            AFFECTED_CODES,
+            UNCERTAIN_CODES,
+            UNAFFECTED_CODES,
+            {ReasonCode.CREATED_BASELINE},
+            POLICY_CODES,
+        ]
         for code in ReasonCode:
             self.assertEqual(sum(code in g for g in groups), 1, code)
 
@@ -623,3 +636,36 @@ class TestNoFloats(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestPolicyReasonCodes(unittest.TestCase):
+    """C-211: CONDITION_SCOPE and NOT_PROTECTED_IN_PARENT are reasons of invariant work that a
+    scope policy adds; a resource item cannot carry them and an impact report never does."""
+
+    def item(self, reason: ReasonCode, target: str = "INVARIANT:INV-SEC-002:1"):  # type: ignore[no-untyped-def]
+        from core.domain.impact import VerificationWorkItem, WorkPriority, WorkTargetType
+
+        kind = (
+            WorkTargetType.INVARIANT if target.startswith("INVARIANT:") else WorkTargetType.RESOURCE
+        )
+        return VerificationWorkItem(
+            target, kind, reason, ("aws_security_group",), "L1", WorkPriority.BLOCKING
+        )
+
+    def test_an_invariant_item_may_carry_them(self) -> None:
+        for code in POLICY_CODES:
+            with self.subTest(code=code):
+                self.assertIs(self.item(code).reason, code)
+
+    def test_a_resource_item_may_not(self) -> None:
+        for code in POLICY_CODES:
+            with self.subTest(code=code), self.assertRaises(DomainValidationError):
+                self.item(code, "RESOURCE:aws_subnet.new")
+
+    def test_an_impact_report_never_carries_them(self) -> None:
+        for code in POLICY_CODES:
+            with self.subTest(code=code):
+                sec = affected_invariant()
+                bad = dataclasses.replace(work_for(sec), reason=code)
+                with self.assertRaises(DomainValidationError):
+                    report(affected=[sec], work=[bad, baseline_work("aws_internet_gateway.new")])

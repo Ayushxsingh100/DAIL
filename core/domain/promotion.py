@@ -486,7 +486,11 @@ _EVIDENCE_KEYS = (
 @dataclass(frozen=True)
 class PromotionEvidence:
     """What a decision rests on (Doc 11 §26). A PROMOTE references every mandatory verification
-    result used; ``new_state_id`` stays null until P6b creates the state."""
+    result used; ``new_state_id`` stays null until P6b creates the state.
+
+    ``open_targets`` (C-196) are the invariants whose FAIL did not block this decision; they are
+    written to the record (and so to its hash) only when there is one, so a decision without an
+    open target has exactly the record it had before P8a."""
 
     decision_id: str
     candidate_id: str
@@ -499,10 +503,12 @@ class PromotionEvidence:
     reason: DecisionReason
     new_state_id: str | None
     content_hash: str
+    open_targets: tuple[str, ...] = ()
     _token: InitVar[object | None] = None
 
     def __post_init__(self, _token: object | None) -> None:
         name = "PromotionEvidence"
+        object.__setattr__(self, "open_targets", _texts(self.open_targets, f"{name}.open_targets"))
         require_uuid(self.decision_id, f"{name}.decision_id")
         require_uuid(self.candidate_id, f"{name}.candidate_id")
         require_uuid(self.parent_state_id, f"{name}.parent_state_id")
@@ -576,8 +582,10 @@ class PromotionEvidence:
         policy_version: str,
         decision: DecisionType,
         reason: DecisionReason,
+        open_targets: Iterable[str] = (),
     ) -> PromotionEvidence:
-        probe = {
+        opened = _texts(open_targets, "PromotionEvidence.open_targets")
+        probe: dict[str, Any] = {
             "candidate_id": candidate_id,
             "parent_state_id": parent_state_id,
             "required_checks": [c.to_dict() for c in required_checks],
@@ -588,6 +596,8 @@ class PromotionEvidence:
             "reason": getattr(reason, "value", reason),
             "new_state_id": None,
         }
+        if opened:
+            probe["open_targets"] = list(opened)
         return cls(
             decision_id=decision_id,
             candidate_id=candidate_id,
@@ -600,10 +610,11 @@ class PromotionEvidence:
             reason=reason,
             new_state_id=None,
             content_hash=content_hash(probe),
+            open_targets=opened,
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data: dict[str, Any] = {
             "decision_id": self.decision_id,
             "candidate_id": self.candidate_id,
             "parent_state_id": self.parent_state_id,
@@ -616,10 +627,19 @@ class PromotionEvidence:
             "new_state_id": self.new_state_id,
             "content_hash": self.content_hash,
         }
+        if self.open_targets:
+            data["open_targets"] = list(self.open_targets)
+        return data
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> PromotionEvidence:
-        fields = require_keys(data, _EVIDENCE_KEYS, "PromotionEvidence")
+        keys = (*_EVIDENCE_KEYS, "open_targets") if "open_targets" in data else _EVIDENCE_KEYS
+        fields = require_keys(data, keys, "PromotionEvidence")
+        opened = _list_of(fields["open_targets"], "open_targets") if "open_targets" in data else []
+        if "open_targets" in data and not opened:
+            raise DomainValidationError(
+                "PromotionEvidence.open_targets: an empty list is written as no field"
+            )
         return cls(
             decision_id=fields["decision_id"],
             candidate_id=fields["candidate_id"],
@@ -635,6 +655,7 @@ class PromotionEvidence:
             reason=parse_enum(fields["reason"], DecisionReason, "reason"),
             new_state_id=fields["new_state_id"],
             content_hash=fields["content_hash"],
+            open_targets=tuple(opened),
             _token=_COMMIT_TOKEN,
         )
 
@@ -746,6 +767,10 @@ class PromotionPolicy:
     automatic_enabled: bool
     accept_oracle_for_unknown: bool
     gate_verifiers: tuple[tuple[str, str, str], ...]
+    # C-205 (condition A of the experiments): when True the required set is exactly the gate items
+    # and ``extra_required``; no RESOURCE baseline item, and an invariant of the current state
+    # outside the set is a policy condition (ESCALATE), never dropped. Default: the C-159 set.
+    explicit_required_set: bool = False
     _by_id: dict[str, Invariant] = field(
         init=False, repr=False, compare=False, default_factory=dict
     )
@@ -775,6 +800,7 @@ class PromotionPolicy:
             )
         _bool(self.carry_forward_enabled, f"{name}.carry_forward_enabled")
         _bool(self.automatic_enabled, f"{name}.automatic_enabled")
+        _bool(self.explicit_required_set, f"{name}.explicit_required_set")
         if _bool(self.accept_oracle_for_unknown, f"{name}.accept_oracle_for_unknown"):
             raise DomainValidationError(
                 f"{name}: oracle evidence is never proof, so accept_oracle_for_unknown must be "

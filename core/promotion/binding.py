@@ -20,7 +20,7 @@ commit. Standard library and ``core.domain`` only (R18).
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from typing import Any, Final
 
 from core.domain import hashing
@@ -106,9 +106,12 @@ def verified_problems(
     definition: Invariant | None,
     result: VerificationResultRecord | None,
     evidence_id: str | None,
+    is_open: bool = False,
 ) -> list[str]:
-    """Why the evidence of a VERIFIED entry is not proof for this candidate (C-164, C-68)."""
+    """Why the evidence of a VERIFIED entry is not proof for this candidate (C-164, C-68). For an
+    open target (C-196) the result it names is a FAIL; for anything else, a PASS."""
     label = f"{entry.target_id} (VERIFIED)"
+    wanted = VerificationResult.FAIL if is_open else VerificationResult.PASS
     if candidate.state_hash is None:
         return [f"{label}: the candidate has no state_hash"]
     if result is None or evidence_id is None:
@@ -116,11 +119,8 @@ def verified_problems(
     if definition is None or definition.version != entry.invariant_version:
         return [f"{label}: no definition of that version to check the verifier against"]
     problems: list[str] = []
-    if (
-        result.result is not VerificationResult.PASS
-        or result.candidate_hash != candidate.state_hash
-    ):
-        problems.append(f"{label}: the result is not a PASS of this candidate's hash")
+    if result.result is not wanted or result.candidate_hash != candidate.state_hash:
+        problems.append(f"{label}: the result is not a {wanted.value} of this candidate's hash")
     event, problems_read = _fetch(evidence, evidence_id, label)
     problems += problems_read
     if event is None:
@@ -144,7 +144,7 @@ def verified_problems(
             "verifier_version": definition.verifier_version,
             "candidate_id": candidate.candidate_id,
             "candidate_hash": candidate.state_hash,
-            "result": VerificationResult.PASS.value,
+            "result": wanted.value,
         }
         for key, expected in subject.items():
             if payload.get(key) != expected:
@@ -224,8 +224,10 @@ def binding_problems(
     definitions: Mapping[str, Invariant],
     results: Mapping[str, VerificationResultRecord],
     evidence_ids: Mapping[str, str],
+    open_targets: Collection[str] = (),
 ) -> list[str]:
-    """Every reason the evidence of ``plan`` does not bind to the new state (empty: it does)."""
+    """Every reason the evidence of ``plan`` does not bind to the new state (empty: it does).
+    ``open_targets`` are the decision's open targets (C-196), whose VERIFIED evidence is a FAIL."""
     references = {r.invariant_id: r for r in parent.invariant_refs}
     problems: list[str] = []
     for entry in plan:
@@ -238,6 +240,7 @@ def binding_problems(
                 definitions.get(entry.invariant_id),
                 results.get(key),
                 evidence_ids.get(key),
+                entry.invariant_id in open_targets,
             )
         else:
             problems += carried_problems(

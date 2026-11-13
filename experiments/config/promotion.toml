@@ -1,0 +1,11 @@
+# Reviewed experiment configuration (P8a, C-207). Flat keys for the promotion area, as in
+# config/base/promotion.toml, which it replaces only in the experiment harness's own copy of the
+# repository configuration (experiments.runner.experiment_config).
+#
+# automatic_enabled is safety-critical (Doc 14 §37-38) and may be enabled only in a reviewed
+# configuration file. It is enabled here, for the experiment harness only: every trial runs on its
+# own fresh store and lineage under the experiment root, outside the repository, and no experiment
+# lineage is ever the authoritative lineage (C-202, Doc 13 §20). Without it every PROMOTE would be an
+# ESCALATE and no condition could be measured. The repository configuration (config/) is unchanged:
+# automatic promotion stays off in every environment there.
+automatic_enabled = true

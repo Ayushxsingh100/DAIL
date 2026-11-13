@@ -31,6 +31,13 @@ directory under the same ids raises ``ConflictingDuplicateError``, and the store
 back with ``duplicate=True``.
 
 ``checkpoint`` is a test-only hook, called with the name of a stage after its records committed.
+
+**Experiment seams (P8a; C-196, C-198).** ``identity_strategy`` is the identity strategy given to
+``compare``; its default is ``DEFAULT_STRATEGY`` (``EvidenceIdentity``), the only one production
+code uses, and only the experiment harness passes the address-only ablation (C-127, condition C').
+``EvaluationRequest.open_targets`` (default none) is handed to ``decide``; ``check_open_targets``
+refuses a bad one against the candidate's parent before anything is stored. The result carries the
+identity report and the work the scope policy selected, for the experiment records.
 """
 
 from __future__ import annotations
@@ -52,8 +59,9 @@ from core.domain.audit import AuditEventType
 from core.domain.enums import CandidateSource, CandidateStatus, DecisionType
 from core.domain.errors import DomainValidationError, StaleParentError
 from core.domain.hashing import content_hash
+from core.domain.identity import IdentityReport
 from core.domain.ids import require_uuid
-from core.domain.impact import ImpactReport
+from core.domain.impact import ImpactReport, VerificationWorkItem
 from core.domain.invariant import Invariant
 from core.domain.patch import Patch
 from core.domain.promotion import (
@@ -75,6 +83,7 @@ from core.domain.state import (
 )
 from core.domain.verification import ConstructionStatus, VerificationReport
 from core.identity.engine import compare
+from core.identity.strategy import DEFAULT_STRATEGY, IdentityStrategy
 from core.impact.engine import compute_impact
 from core.impact.inputs import PriorProof
 from core.promotion import ids as pids
@@ -85,7 +94,7 @@ from core.promotion.commit import (
     commit_promotion,
     record_decision,
 )
-from core.promotion.decide import decide
+from core.promotion.decide import check_open_targets, decide
 from core.promotion.policy import dail_policy
 from core.terraform_model.normalization import normalize_directory
 from core.verification.dispatch import DEFAULT_VERIFIERS, VerifierTable
@@ -141,6 +150,7 @@ class EvaluationRequest:
     bindings: tuple[SemanticBinding, ...]
     context: PromotionContext
     oracle_verdicts: tuple[OracleVerdict, ...] = ()
+    open_targets: tuple[str, ...] = ()
     _PATCH_SOURCE: ClassVar[CandidateSource] = CandidateSource.FIXED_PATCH
 
     def __post_init__(self) -> None:
@@ -167,6 +177,12 @@ class EvaluationRequest:
         verdicts = tuple(self.oracle_verdicts)
         if not all(isinstance(v, OracleVerdict) for v in verdicts):
             raise EvaluationInputError("EvaluationRequest.oracle_verdicts must hold OracleVerdict")
+        if isinstance(self.open_targets, str):
+            raise EvaluationInputError("EvaluationRequest.open_targets must be a list of ids")
+        opened = tuple(self.open_targets)
+        if not all(isinstance(t, str) and t for t in opened) or len(set(opened)) != len(opened):
+            raise EvaluationInputError("EvaluationRequest.open_targets: invariant ids, each once")
+        object.__setattr__(self, "open_targets", opened)
         object.__setattr__(self, "definitions", definitions)
         object.__setattr__(self, "bindings", bindings)
         object.__setattr__(self, "oracle_verdicts", verdicts)
@@ -222,6 +238,8 @@ class EvaluationResult:
     verification: VerificationReport | None = None
     evidence_ids: Mapping[str, str] | None = None
     duplicate: bool = False
+    identity: IdentityReport | None = None
+    work: tuple[VerificationWorkItem, ...] | None = None
 
 
 class EvaluationOrchestrator:
@@ -238,6 +256,7 @@ class EvaluationOrchestrator:
         verifiers: VerifierTable = DEFAULT_VERIFIERS,
         policy_factory: Callable[..., PromotionPolicy] = dail_policy,
         checkpoint: Callable[[str], None] | None = None,
+        identity_strategy: IdentityStrategy = DEFAULT_STRATEGY,
     ) -> None:
         if not callable(factory):
             raise EvaluationInputError("EvaluationOrchestrator: factory must open a unit of work")
@@ -249,6 +268,12 @@ class EvaluationOrchestrator:
             raise EvaluationInputError("EvaluationOrchestrator: policy_version must be text")
         if checkpoint is not None and not callable(checkpoint):
             raise EvaluationInputError("EvaluationOrchestrator: checkpoint must be callable")
+        if not callable(getattr(identity_strategy, "decide", None)) or not isinstance(
+            getattr(identity_strategy, "algorithm_version", None), str
+        ):
+            raise EvaluationInputError(
+                "EvaluationOrchestrator: identity_strategy must be an IdentityStrategy"
+            )
         try:
             flag = config.get(_FLAG)
         except (KeyError, AttributeError) as missing:
@@ -263,6 +288,14 @@ class EvaluationOrchestrator:
         self._policy_factory = policy_factory
         self._checkpoint = checkpoint
         self._automatic = flag
+        self._identity = identity_strategy
+
+    def _policy(self, request: EvaluationRequest) -> PromotionPolicy:
+        return self._policy_factory(
+            policy_version=self._policy_version,
+            invariants=request.definitions,
+            automatic_enabled=self._automatic,
+        )
 
     def evaluate(self, request: EvaluationRequest) -> EvaluationResult:
         """Evaluate ``request`` (see the module docstring). Raises ``EvaluationInputError`` for a
@@ -296,6 +329,8 @@ class _Run:
         self.stage = "load"
         self.candidate: CandidateState | None = None
         self.failed_now = False  # this call is the one that moved the candidate to FAILED
+        self.identity: IdentityReport | None = None
+        self.work: tuple[VerificationWorkItem, ...] | None = None
 
     # --- small helpers -------------------------------------------------------------------------
 
@@ -334,6 +369,7 @@ class _Run:
                 f"the patch was written against state {r.patch.parent_state_id}, which is not a "
                 f"state of lineage {r.lineage_id}"
             )
+        check_open_targets(parent, o._policy(r), r.open_targets)  # C-196, before any write
         self.stage = "candidate"
         candidate = self._create(parent)
         at = candidate.created_at
@@ -353,7 +389,9 @@ class _Run:
             parent_state_id=parent.state_id,
             candidate_id=self._cid,
             now=at,
+            strategy=o._identity,
         )
+        self.identity = identity
         self._record(
             lambda u: self.recorder.record_identity(
                 u, candidate, identity, attempt_number=r.attempt_number, at=at, when=self._when()
@@ -398,7 +436,8 @@ class _Run:
         )
         self._passed("after_impact")
         self.stage = "verification"
-        work = o._scope_policy.select(impact, r.definitions)
+        work = o._scope_policy.select(impact, r.definitions, parent_refs=parent.invariant_refs)
+        self.work = tuple(work)
         inputs = VerificationInputs(
             candidate_resources=outcome.resources,
             parent_resources=parent.resources,
@@ -634,6 +673,7 @@ class _Run:
             now=at,
             attempt_number=r.attempt_number,
             oracle_verdicts=r.oracle_verdicts,
+            open_targets=() if stale else r.open_targets,
         )
         return outcome, stale
 
@@ -648,11 +688,7 @@ class _Run:
         candidate = self._stored()
         if candidate.status in _TERMINAL:
             return self._stored_result(candidate, impact, report, evidence_ids)
-        policy = o._policy_factory(
-            policy_version=o._policy_version,
-            invariants=r.definitions,
-            automatic_enabled=o._automatic,
-        )
+        policy = o._policy(r)
         outcome, stale = self._decision(candidate, impact, report, policy, at)
         try:
             with o._factory() as uow:
@@ -675,6 +711,8 @@ class _Run:
                 impact=impact,
                 verification=report,
                 evidence_ids=evidence_ids,
+                identity=self.identity,
+                work=self.work,
             )
         self.stage = "commit"
         with o._factory() as uow:
@@ -735,6 +773,8 @@ class _Run:
             verification=report,
             evidence_ids=evidence_ids,
             duplicate=committed.duplicate,
+            identity=self.identity,
+            work=self.work,
         )
 
     def _stored_result(
@@ -772,6 +812,8 @@ class _Run:
             verification=report,
             evidence_ids=evidence_ids,
             duplicate=True,
+            identity=self.identity,
+            work=self.work,
         )
 
     # --- failures that are not decisions -------------------------------------------------------

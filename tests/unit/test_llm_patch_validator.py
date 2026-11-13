@@ -335,6 +335,55 @@ class TestCredentialsAndIds(Case):
         # var.db_password is not declared in the candidate: reference check (INVALID_OUTPUT)
         self.assert_fails(self.run_patch(patch, [SG_APP]), F.INVALID_OUTPUT)
 
+    def test_a_secret_argument_from_a_local_value_is_a_policy_violation(self) -> None:
+        # P7b verdict limit 2 (P8a-2): only a var. reference may carry a new credential; a local
+        # value that the parent declares is still a POLICY_VIOLATION
+        import shutil
+        import tempfile
+        from pathlib import Path
+
+        from core.terraform_model.normalization import normalize_directory
+        from llm.validation.patch import PatchValidator
+        from tests.identity_builders import NOW
+        from tests.llm_patch_builders import BASELINE, scope, trusted
+
+        with tempfile.TemporaryDirectory(prefix="dail-p8a2-") as tmp:
+            parent = Path(tmp) / "parent"
+            shutil.copytree(BASELINE, parent, ignore=shutil.ignore_patterns("expected.json"))
+            locals_text = "locals {" + chr(10) + '  x = "from-a-local"' + chr(10) + "}" + chr(10)
+            (parent / "locals.tf").write_text(locals_text, "utf-8")
+            outcome = normalize_directory(parent, None, now=NOW)
+            self.assertEqual(outcome.resource_set_hash, trusted().resource_set_hash())
+            db = block(
+                "aws_db_instance",
+                "database",
+                'identifier                  = "dail-canonical-db"',
+                'engine                      = "postgres"',
+                'instance_class              = "db.t3.micro"',
+                "allocated_storage           = 20",
+                'username                    = "dbadmin"',
+                "password                    = local.x",
+                "db_subnet_group_name        = aws_db_subnet_group.db.name",
+                "vpc_security_group_ids      = [aws_security_group.db.id]",
+                "publicly_accessible         = false",
+                "skip_final_snapshot         = true",
+            )
+            parsed = parse_response(repair(db, ["aws_db_instance.database"]))
+            assert parsed.response is not None
+            work = Path(tmp) / "work"
+            work.mkdir()
+            checked = PatchValidator(
+                parent_dir=parent,
+                trusted=trusted(),
+                scope=scope(),
+                work_root=work,
+                variables=None,
+                now=NOW,
+            ).validate(parsed.response, request_id=REQUEST_ID, patch_id=PATCH_ID)
+            self.assertIs(checked.failure_class, F.POLICY_VIOLATION, checked.errors)
+            self.assertIsNone(checked.build)
+            self.assertEqual(list(work.iterdir()), [])
+
     def test_an_aws_access_key_id_anywhere_is_a_policy_violation(self) -> None:
         key = (
             "AK"

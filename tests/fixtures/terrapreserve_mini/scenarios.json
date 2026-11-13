@@ -1,0 +1,86 @@
+{
+  "_comment": "P8a test data: small scenarios in TerraPreserve's layout, built at test time from DAIL's canonical fixtures (fixtures/canonical_regression). Hashes are computed by tests/experiment_builders.py, never copied from TerraPreserve. Label fields are junk so that a test can corrupt them.",
+  "endpoints": {"S": "aws_instance.app", "D": "aws_db_instance.database"},
+  "scenarios": [
+    {
+      "scenario_id": "tp-mini-F2-0001",
+      "family": "F2",
+      "template_id": "tpl-mini",
+      "v1_role": "target",
+      "target": {"kind": "repair", "invariant_id": "INV-SEC-001", "description": "Close public SSH."},
+      "steps": [
+        {"from": "fixtures/canonical_regression/baseline", "edits": []},
+        {"from": "fixtures/canonical_regression/patch_safe", "edits": []}
+      ]
+    },
+    {
+      "scenario_id": "tp-mini-F8-0002",
+      "family": "F8",
+      "template_id": "tpl-mini",
+      "v1_role": "target",
+      "target": {"kind": "repair", "invariant_id": "INV-SEC-001", "description": "Close public SSH in two steps."},
+      "steps": [
+        {"from": "fixtures/canonical_regression/baseline", "edits": []},
+        {"from": "fixtures/canonical_regression/baseline", "edits": [["description = \"Application security group\"", "description = \"Application security group, step 1\""]]},
+        {"from": "fixtures/canonical_regression/patch_safe", "edits": []}
+      ]
+    },
+    {
+      "scenario_id": "tp-mini-F1-0003",
+      "family": "F1",
+      "template_id": "tpl-mini",
+      "v1_role": "target",
+      "target": {"kind": "change_request", "invariant_id": null, "description": "Resize the application instance."},
+      "steps": [
+        {"from": "fixtures/canonical_regression/patch_safe", "edits": []},
+        {"from": "fixtures/canonical_regression/patch_safe", "edits": [["instance_type               = \"t3.micro\"", "instance_type               = \"t3.small\""]]}
+      ]
+    },
+    {
+      "scenario_id": "tp-mini-F4-0004",
+      "family": "F4",
+      "template_id": "tpl-mini",
+      "v1_role": "target",
+      "target": {"kind": "repair", "invariant_id": "INV-SEC-001", "description": "Close public SSH (the repair breaks EC2 to RDS)."},
+      "steps": [
+        {"from": "fixtures/canonical_regression/baseline", "edits": []},
+        {"from": "fixtures/canonical_regression/patch_regression", "edits": []}
+      ]
+    },
+    {
+      "scenario_id": "tp-mini-F8-0006",
+      "family": "F8",
+      "template_id": "tpl-mini",
+      "v1_role": "target",
+      "target": {"kind": "repair", "invariant_id": "INV-SEC-001", "description": "Close public SSH in two steps; the first breaks EC2 to RDS."},
+      "steps": [
+        {"from": "fixtures/canonical_regression/baseline", "edits": []},
+        {"from": "fixtures/canonical_regression/patch_regression", "edits": []},
+        {"from": "fixtures/canonical_regression/patch_safe", "edits": []}
+      ]
+    },
+    {
+      "scenario_id": "tp-mini-F8-0007",
+      "family": "F8",
+      "template_id": "tpl-mini",
+      "v1_role": "target",
+      "target": {"kind": "repair", "invariant_id": "INV-SEC-001", "description": "Close public SSH in two steps; the first does not touch the security groups."},
+      "steps": [
+        {"from": "fixtures/canonical_regression/baseline", "edits": []},
+        {"from": "fixtures/canonical_regression/baseline", "edits": [["instance_type               = \"t3.micro\"", "instance_type               = \"t3.small\""]]},
+        {"from": "fixtures/canonical_regression/patch_safe", "edits": []}
+      ]
+    },
+    {
+      "scenario_id": "tp-mini-F2-0005",
+      "family": "F2",
+      "template_id": "tpl-mini",
+      "v1_role": "reserve",
+      "target": {"kind": "repair", "invariant_id": "INV-SEC-001", "description": "A reserve: never a trial."},
+      "steps": [
+        {"from": "fixtures/canonical_regression/baseline", "edits": []},
+        {"from": "fixtures/canonical_regression/patch_safe", "edits": []}
+      ]
+    }
+  ]
+}

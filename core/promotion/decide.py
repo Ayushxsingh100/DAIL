@@ -13,6 +13,16 @@ the early return of its loop is not: every required item is examined and the con
 by severity (C-158), so a later FAIL cannot hide behind an earlier UNKNOWN and the decision does not
 depend on the order of anything.
 
+**Two extensions for the experiments (P8a), both off by default.** (1) An explicit required set
+(``policy.explicit_required_set``, C-205): the required set is the gate items and
+``policy.extra_required`` only; an invariant of the current state outside it is an ESCALATE
+(POLICY_REGISTRY_REGRESSION), so nothing is dropped. (2) Open targets (``open_targets``, C-196): an
+invariant that is VIOLATED in the current state and named as open may FAIL without blocking; a
+sufficient fresh FAIL is its VERIFIED evidence and it stays VIOLATED. Anything else about it blocks
+as before (a non-success, a missing or insufficient result), every other item is decided as before,
+and the open targets are recorded in the decision evidence. ``check_open_targets`` refuses an open
+target that is not VIOLATED in the current state or not required.
+
 Standard library and ``core.domain`` only (R18).
 """
 
@@ -213,7 +223,8 @@ def _level_ok(record: VerificationResultRecord, policy: PromotionPolicy) -> bool
 def _required_items(
     trusted: TrustedState, impact: ImpactReport, policy: PromotionPolicy
 ) -> tuple[list[_Item], list[BlockingCondition]]:
-    """Every required target (C-159), and the policy conditions found on the way (C-41)."""
+    """Every required target (C-159, or C-205's explicit set), and the policy conditions found on
+    the way (C-41)."""
     problems: list[BlockingCondition] = []
     if policy.invariant_registry_version < trusted.invariant_registry_version:
         problems.append(
@@ -230,7 +241,24 @@ def _required_items(
         _Item(target, "GATE", None, None, policy.gate_verifier(target))
         for target in (GATE_CONSISTENCY, GATE_STRUCTURAL)
     ]
-    for invariant_id in sorted({*references, *policy.extra_required}):
+    if policy.explicit_required_set:
+        for invariant_id in sorted(set(references) - set(policy.extra_required)):
+            version = references[invariant_id].invariant_version
+            problems.append(
+                _condition(
+                    R.POLICY_REGISTRY_REGRESSION,
+                    D.ESCALATE,
+                    f"INVARIANT:{invariant_id}:{version}",
+                    "the current state holds it but the policy's explicit required set leaves it "
+                    "out; an invariant of the state cannot be dropped (C-41, C-205)",
+                )
+            )
+    wanted = (
+        set(policy.extra_required)
+        if policy.explicit_required_set
+        else {*references, *policy.extra_required}
+    )
+    for invariant_id in sorted(wanted):
         reference = references.get(invariant_id)
         definition = policy.definition(invariant_id)
         if definition is None or (
@@ -258,11 +286,12 @@ def _required_items(
                 (definition.verifier_id, definition.verifier_version),
             )
         )
-    items.extend(
-        _Item(work.target_id, "BASELINE", None, None, None)
-        for work in impact.verification_work
-        if work.target_type is WorkTargetType.RESOURCE
-    )
+    if not policy.explicit_required_set:
+        items.extend(
+            _Item(work.target_id, "BASELINE", None, None, None)
+            for work in impact.verification_work
+            if work.target_type is WorkTargetType.RESOURCE
+        )
     return sorted(items, key=lambda item: item.target_id), problems
 
 
@@ -328,6 +357,7 @@ def _assess(
     trusted: TrustedState,
     impact: ImpactReport,
     policy: PromotionPolicy,
+    opened: frozenset[str] = frozenset(),
 ) -> _Verdict:
     """Is ``item`` proven, and if not, why not (C-158, C-159)?"""
     candidate_hash = candidate.state_hash
@@ -353,7 +383,10 @@ def _assess(
         verifier_version=verifier_version,
     )
     if record is not None and is_fresh:
-        _assess_result(verdict, item, record, verifier_id, verifier_version, candidate_hash, policy)
+        is_open = invariant is not None and invariant.invariant_id in opened
+        _assess_result(
+            verdict, item, record, verifier_id, verifier_version, candidate_hash, policy, is_open
+        )
         return verdict
     if invariant is not None:
         refusals = _carry_forward_refusals(item, candidate, trusted, impact, policy)
@@ -437,10 +470,17 @@ def _assess_result(
     verifier_version: str,
     candidate_hash: str,
     policy: PromotionPolicy,
+    is_open: bool = False,
 ) -> None:
     """A fresh result decides: FAIL rejects, a non-success follows the table, a sufficient PASS
-    proves (Doc 09 §11, §18)."""
+    proves (Doc 09 §11, §18). On an open target (C-196) a sufficient FAIL is the target's VERIFIED
+    evidence, not a blocking condition; an insufficient one does not prove it."""
     target, described = item.target_id, _described(record)
+    if record.result is VerificationResult.FAIL and is_open:
+        _assess_open_fail(
+            verdict, item, record, verifier_id, verifier_version, candidate_hash, policy
+        )
+        return
     if record.result is VerificationResult.FAIL:
         verdict.conditions.append(_condition(_failure_code(item), D.REJECT, target, described))
         return
@@ -493,16 +533,118 @@ def _assess_result(
     )
 
 
+def _proves_violation(
+    record: VerificationResultRecord,
+    *,
+    target_id: str,
+    candidate_hash: str,
+    invariant: Invariant,
+    verifier_id: str,
+    verifier_version: str,
+) -> bool:
+    """``sufficient`` (Doc 09 §11) with FAIL in place of PASS: the FAIL names this target, this
+    candidate, this invariant version and the definition's verifier, and carries every field."""
+    if record.result is not VerificationResult.FAIL:
+        return False
+    if not all(
+        getattr(record, name) not in (None, "", {}, ())
+        for name in ("verifier_id", "verifier_version", "evidence_level", "evidence")
+    ):
+        return False
+    return (
+        record.target_id == target_id
+        and record.candidate_hash == candidate_hash
+        and record.invariant_id == invariant.invariant_id
+        and record.invariant_version == invariant.version
+        and record.verifier_id == verifier_id
+        and record.verifier_version == verifier_version
+    )
+
+
+def _assess_open_fail(
+    verdict: _Verdict,
+    item: _Item,
+    record: VerificationResultRecord,
+    verifier_id: str,
+    verifier_version: str,
+    candidate_hash: str,
+    policy: PromotionPolicy,
+) -> None:
+    """A FAIL on an open target (C-196): VERIFIED evidence that it stays VIOLATED, when it is
+    sufficient; otherwise EVIDENCE_NOT_SUFFICIENT, as for a PASS."""
+    invariant = item.invariant
+    assert invariant is not None
+    if _proves_violation(
+        record,
+        target_id=item.target_id,
+        candidate_hash=candidate_hash,
+        invariant=invariant,
+        verifier_id=verifier_id,
+        verifier_version=verifier_version,
+    ) and _level_ok(record, policy):
+        verdict.check = RequiredCheck(
+            item.target_id, "INVARIANT", ProofSource.VERIFIED, record.verification_id
+        )
+        verdict.result_id = record.verification_id
+        verdict.entry = ProofPlanEntry(
+            invariant.invariant_id,
+            invariant.version,
+            ProofSource.VERIFIED,
+            record.verification_id,
+            None,
+            (),
+        )
+        return
+    verdict.conditions.append(
+        _condition(
+            R.EVIDENCE_NOT_SUFFICIENT,
+            D.REJECT,
+            item.target_id,
+            f"{_described(record)} is not sufficient evidence for the open target: it must be from "
+            f"{verifier_id} {verifier_version} at level {policy.min_evidence_level} or above",
+        )
+    )
+
+
+def check_open_targets(
+    trusted: TrustedState, policy: PromotionPolicy, open_targets: object
+) -> tuple[str, ...]:
+    """The open targets, sorted, if every one is allowed (C-196); ``PromotionInputError`` if not.
+
+    Each must be an invariant id held VIOLATED by the current state ``trusted`` and required by
+    ``policy``. The empty set is always allowed."""
+    if isinstance(open_targets, str) or not isinstance(open_targets, Iterable):
+        raise PromotionInputError("open_targets: must be a list of invariant ids")
+    names = list(open_targets)
+    if not all(isinstance(n, str) and n for n in names) or len(set(names)) != len(names):
+        raise PromotionInputError("open_targets: invariant ids, each once")
+    references = {ref.invariant_id: ref for ref in trusted.invariant_refs}
+    for name in names:
+        reference = references.get(name)
+        if reference is None or reference.status is not InvariantStatus.VIOLATED:
+            shown = "absent" if reference is None else reference.status.value
+            raise PromotionInputError(
+                f"open_targets: {name} is {shown} in the current state; an open target must be "
+                "VIOLATED there (C-196)"
+            )
+        if policy.explicit_required_set and name not in policy.extra_required:
+            raise PromotionInputError(f"open_targets: {name} is not in the policy's required set")
+    return tuple(sorted(names))
+
+
 def _oracle_conflicts(
     verdicts: Iterable[OracleVerdict],
     results: dict[str, _Verdict],
     policy: PromotionPolicy,
+    opened: frozenset[str] = frozenset(),
 ) -> list[BlockingCondition]:
     """Primary PASS (or a carried proof) and oracle FAIL: a conflict, and the check is not proven
     (C-160). Every other pairing leaves the primary result as it is."""
     found = []
     for oracle in sorted(verdicts, key=lambda v: (v.invariant_id, v.invariant_version)):
         if oracle.result is not VerificationResult.FAIL:
+            continue
+        if oracle.invariant_id in opened:  # the primary says FAIL too: no conflict (C-196)
             continue
         target = f"INVARIANT:{oracle.invariant_id}:{oracle.invariant_version}"
         verdict = results.get(target)
@@ -569,12 +711,14 @@ def decide(
     now: datetime,
     attempt_number: int = 1,
     oracle_verdicts: Iterable[OracleVerdict] = (),
+    open_targets: Iterable[str] = (),
 ) -> DecisionOutcome:
     """PROMOTE, REJECT, RETRY or ESCALATE for ``candidate`` against the current state ``trusted``.
 
     ``attempt_number`` counts the attempts at this candidate's problem (1 for the first); it feeds
     only the retry budget of the policy. PROMOTE needs every required item proven, nothing
-    conflicting, a complete decision and the emergency switch on (Doc 09 §19)."""
+    conflicting, a complete decision and the emergency switch on (Doc 09 §19). ``open_targets``
+    (C-196, default none) are checked by ``check_open_targets`` and recorded in the evidence."""
     moment, verdicts = _check_arguments(
         candidate,
         trusted,
@@ -586,6 +730,7 @@ def decide(
         attempt_number,
         oracle_verdicts,
     )
+    opened = check_open_targets(trusted, policy, open_targets)
     if candidate.parent_state_id != trusted.state_id:
         stale = _condition(
             R.STALE_PARENT,
@@ -594,18 +739,22 @@ def decide(
             f"the candidate's parent {candidate.parent_state_id} is not the current state "
             f"{trusted.state_id}",
         )
-        return _build(candidate, policy, decision_id, moment, attempt_number, [], [stale], (), ())
+        return _build(
+            candidate, policy, decision_id, moment, attempt_number, [], [stale], (), (), opened
+        )
     items, conditions = _required_items(trusted, impact, policy)
     conditions += _binding_conditions(candidate, impact, verification)
     by_id: dict[str, list[VerificationResultRecord]] = {}
     for result in verification.results:
         by_id.setdefault(result.target_id, []).append(result)
+    open_set = frozenset(opened)
     assessed = {
-        item.target_id: _assess(item, by_id, candidate, trusted, impact, policy) for item in items
+        item.target_id: _assess(item, by_id, candidate, trusted, impact, policy, open_set)
+        for item in items
     }
     for verdict in assessed.values():
         conditions += verdict.conditions
-    conditions += _oracle_conflicts(verdicts, assessed, policy)
+    conditions += _oracle_conflicts(verdicts, assessed, policy, open_set)
     ordered = [assessed[item.target_id] for item in items]
     checks = [v.check for v in ordered]
     plan = sorted((v.entry for v in ordered if v.entry is not None), key=lambda e: e.invariant_id)
@@ -645,7 +794,16 @@ def decide(
                 _condition(R.DECISION_INCOMPLETE, decision, "DECISION", "; ".join(problems))
             )
     return _build(
-        candidate, policy, decision_id, moment, attempt_number, checks, conditions, plan, supporting
+        candidate,
+        policy,
+        decision_id,
+        moment,
+        attempt_number,
+        checks,
+        conditions,
+        plan,
+        supporting,
+        opened,
     )
 
 
@@ -659,6 +817,7 @@ def _build(
     conditions: Sequence[BlockingCondition],
     plan: Sequence[ProofPlanEntry],
     supporting: Sequence[str],
+    opened: Sequence[str] = (),
 ) -> DecisionOutcome:
     unique = sorted({c.sort_key(): c for c in conditions}.values(), key=BlockingCondition.sort_key)
     if unique:
@@ -690,5 +849,6 @@ def _build(
         policy_version=policy.policy_version,
         decision=decision,
         reason=reason,
+        open_targets=opened,
     )
     return DecisionOutcome(made, tuple(plan), evidence)

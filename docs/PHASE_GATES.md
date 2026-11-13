@@ -303,7 +303,27 @@ v1.1 by tests.unit.test_registry_v1_1. Carry-forward: C-181 Proposed; the user t
 after the verdict and the merge.
 ```
 
-## P7a — The LLM channel (pending external review)
+## P7a — The LLM channel — passed with limits (verdict on PR #28)
+
+```text
+P7a: passed with limits (verdict on PR #28). Recorded in P8a (C-199); limits recorded in P8a-2.
+Limits of the verdict (open items, with the package that closes each):
+1. C-183 to C-187 Proposed (now Decided in P7b). Closed.
+2. Provider interface differs from Doc 10 §30 (ADR-006): state as a deviation in the paper.
+   Open (paper).
+3. Scope check refused new-address repairs. Closed in P7b (C-190).
+4. Ollama 400/404 map to UNSUPPORTED, not retried: P10 counts them separately from model failures.
+   Open (P10).
+5. Token budget is an estimate (ceil(characters / 4)): P10 reports it as an estimate and checks the
+   model's real context window. Open (P10).
+6. The wiring check proves the plumbing only; model and licence checked by the author. Open (P10
+   model choice).
+7. Weak red run, compensated by mutations. Closed.
+8. Remove llm.api_key_ref (kept by C-194) and the Pydantic line in CLAUDE.md (done in P7b). Closed.
+9. Ollama left running on the author's machine; the installer can be deleted. Open (user).
+```
+
+The P7a author's input to the review, as written before the verdict:
 
 ```text
 P7a mini-gate: NOT DECIDED. Status written by the P7a author as an input to the external review.
@@ -333,7 +353,34 @@ loopback fake server, not the real one; the wiring check ran once on one machine
 Carry-forward: C-183 to C-187 Proposed; ADR-006 Proposed.
 ```
 
-## P7b — From LLM patch to Candidate State (pending external review)
+## P7b — From LLM patch to Candidate State — passed with limits (verdict on PR #29)
+
+```text
+P7b: passed with limits (verdict on PR #29). Recorded in P8a (C-199); limits recorded in P8a-2.
+Limits of the verdict (open items, with the package that closes each):
+1. C-189 to C-193 and C-195 Proposed: the authors decide. Open.
+2. Untested branch: a non-var. reference as a credential value (for example password = local.x ->
+   POLICY_VIOLATION) needs a test. Open (add it in this fix round, see Step 4). [Test added in
+   P8a-2: tests.unit.test_llm_patch_validator.TestCredentialsAndIds
+   .test_a_secret_argument_from_a_local_value_is_a_policy_violation.]
+3. The invented-id check sees whole string literals only (an id split inside a template passes).
+   Open (stated limit).
+4. A MODIFY may drop the parent's lifecycle block. 14 of the 288 dev scenarios have a lifecycle
+   block in S0. Open (P10 decides).
+5. The tree hash is checked when the request is built, not at evaluation time: P10 builds and
+   evaluates each LLM candidate in one step and deletes the build. Open (P10).
+6. The candidate directory copies every parent file: P10 passes configuration-only parents.
+   Open (P10).
+7. Experiment scope for LLM candidates not fixed yet: one scope per scenario, the same for every
+   condition, recorded in advance. Open (P10).
+8. The wiring run proves the path only (the 1.5B model kept public SSH; DAIL rejected it). Open
+   (P10 model choice).
+9. Delete-only patches need a comment as patch text: P10 reports how often models fail on this.
+   Open (P10).
+10. llm.api_key_ref stays (C-194). Open (unused).
+```
+
+The P7b author's input to the review, as written before the verdict:
 
 ```text
 P7b mini-gate: NOT DECIDED. Status written by the P7b author as an input to the external review.
@@ -366,7 +413,14 @@ Carry-forward: C-189 to C-193 and C-195 Proposed; ADR-006 Proposed. The P7a mini
 is unchanged: no verdict text for P7a was pasted in this package.
 ```
 
-## P7 — LLM Integration (pending external review)
+## P7 — LLM Integration — passed with limits (verdict on PR #29)
+
+```text
+P7 gate (Doc 15 §14.2) and milestone M4 (Doc 15 §24): passed with limits (verdict on PR #29).
+Recorded in P8a (C-199). The limits are those of the P7b verdict, listed in the P7b section.
+```
+
+The gate map written by the P7b author as an input to the review:
 
 ```text
 P7 gate (Doc 15 §14.2) and milestone M4 (Doc 15 §24): NOT DECIDED. Each item and the tests that
@@ -408,7 +462,72 @@ M4 "No model output can bypass promotion" ..... test_llm_candidate_e2e.TestSecur
 No item is marked passed here; the external review decides.
 ```
 
-## P8–P10 — NOT STARTED
+## P8a — The experiment harness (pending external review)
+
+```text
+P8a mini-gate: NOT DECIDED. Status written by the P8a author as an input to the external review.
+What exists:
+  experiments/ (standard library, mypy-checked): loader (TerraPreserve read only; manifest pin
+  665b326a..., every scenario_json_sha256 and step content_hash recomputed; the test split refused;
+  execution fields only), definition (Experiment §5, Trial §6, lifecycle §7, deterministic ids),
+  conditions (C-198), trial (one attempt: fresh store and lineage, S0 through the baseline flow,
+  each step a FIXED_PATCH through EvaluationOrchestrator, early termination C-200), records,
+  write-once artifacts (§41 plus an attempts level), runner (plan, run, resume, failure classes),
+  CLI python -m experiments run|summary. README in experiments/.
+  core/promotion: decide(open_targets=...) and check_open_targets (C-196); explicit required set
+  (PromotionPolicy.explicit_required_set, stateless_policy, rules dail-stateless-1, C-205); the
+  open target's FAIL is VERIFIED evidence through proofs, binding and commit; PromotionEvidence
+  records open_targets (absent from the record when empty, so existing hashes are unchanged).
+  core/application: StatefulFullScopePolicy and StatelessScopePolicy; EvaluationRequest.open_targets;
+  EvaluationOrchestrator(identity_strategy=DEFAULT_STRATEGY) (C-208); EvaluationResult.identity and
+  .work; BaselineRequest.allow_no_invariants (C-206). core/domain: TrustedState.establish_baseline
+  (allow_no_invariants=False) (C-206).
+Dev run (12 Nov 2026, the author's machine): experiment p8a-dev-harness-check version 1,
+  protocol_version draft, id fdbef60c-9b45-53dd-8e6a-5c6b765505cc; DAIL e8f43c3 (clean tree);
+  TerraPreserve terrapreserve-v1.0 (27f0ee4), manifest sha256 665b326a... verified; registry v1.1
+  (stored version 2); Python 3.12.10, Windows 11. 224 dev targets x A, B, C, C' = 896 trials,
+  896 COMPLETED, 0 FAILED, 0 harness or input failures; wall time 903 s.
+  Transitions evaluated / TRUNCATED: A 280 / 0, B 273 / 7, C 224 / 56, C' 224 / 56.
+  Transitions with an open target: A 56, B 56, C 28, C' 28.
+  Work (gate, invariant, applicable baseline, not-applicable baseline): A 560, 140, 0, 0;
+  B 546, 1092, 56, 10; C 448, 510, 56, 10; C' 448, 510, 62, 16.
+  Decisions per condition and family (PROMOTE/REJECT; no RETRY or ESCALATE occurred):
+  A: F1 28/0, F2 14/14, F3 28/0, F4 28/0, F5 28/0, F6 28/0, F7 28/0, F8 84/0.
+  B: F1 14/14, F2 14/14, F3 11/17, F4 14/14, F5 13/15, F6 9/19, F7 14/14, F8 63/14.
+  C: F1 14/14, F2 14/14, F3 11/17, F4 14/14, F5 13/15, F6 9/19, F7 14/14, F8 0/28.
+  C': F1 14/14, F2 14/14, F3 11/17, F4 14/14, F5 9/19, F6 9/19, F7 14/14, F8 0/28.
+  These are harness counts, not results; no label was opened and nothing was scored (P8b).
+Second dev run (P8a-2, 13 Nov 2026, after C-210 and C-211): experiment p8a-dev-harness-check-2
+  version 1, protocol_version draft, id ec2b4fa8-4398-5f70-be4c-5edf9cd1e0ef (the first run is kept
+  as it is); DAIL e1bde5e (clean tree); TerraPreserve and manifest as above; scope policies
+  dail-scope-2, stateful-full-scope-2, stateless-scope-2. 896 trials, 896 COMPLETED, 0 FAILED,
+  0 harness or input failures; wall time 330 s.
+  Transitions evaluated / TRUNCATED: A 280 / 0, B 273 / 7, C 273 / 7, C' 273 / 7.
+  Transitions with an open target: A 56, B 56, C 56, C' 56.
+  Work (gate, invariant, applicable baseline, not-applicable baseline; of the invariant items,
+  NOT_PROTECTED_IN_PARENT): A 560, 140, 0, 0, 0; B 546, 1092, 56, 10, 0; C 546, 681, 56, 10, 54;
+  C' 546, 681, 62, 16, 54 (U_t items in 53 transitions each under C and C').
+  Decisions per condition and family (PROMOTE/REJECT; no RETRY or ESCALATE): A and B as in the
+  first run; C and C' as in the first run except F8: C 63/14, C' 63/14.
+  Changed against the first run (same scenario, condition and step; counts only): A 0, B 0,
+  C 77, C' 77, all in F8: REJECT -> PROMOTE 28, TRUNCATED -> PROMOTE 35, TRUNCATED -> REJECT 14,
+  for each of C and C'. Nothing was tuned to the outcome.
+Mechanism found in the first run (C-209, closed by C-210): under C and C' every F8 trajectory is rejected at step 1 with
+  INSUFFICIENT_EVIDENCE on the open target, because impact does not list it and a VIOLATED
+  reference cannot carry; C-196's stated purpose is not reached there. Nothing was tuned.
+Tests: tests.unit.test_p8a_open_targets, test_p8a_open_targets_e2e, test_p8a_conditions,
+  test_experiment_loader, test_experiment_harness, test_experiment_terrapreserve (opt-in,
+  TERRAPRESERVE_ROOT), tests.contract.test_experiment_blinding; test_identity_strategy amended
+  (C-208). Mutation checks: 18 of 18 harness, loader and promotion mutants caught (M5 only after a
+  test was added), and 2 of 2 for the amended identity test.
+Limits: the open-target rule blocked C and C' on F8 (C-209, closed by C-210 in P8a-2); condition-added work items
+  carry a stand-in reason code (C-207 (1)); automatic promotion is enabled by the reviewed
+  experiments/config/promotion.toml in the harness's copy of the configuration only (C-207 (3));
+  repetition 1, no seeds; one machine.
+Carry-forward: C-200 to C-204 and C-207 Proposed; C-209 closed by C-210; P8b scores the stored records.
+```
+
+## P8b–P10 — NOT STARTED
 
 P9 (AWS integration) and milestone M6 (AWS Demonstration) are removed (C-71, Decided by the advisor,
 11 Nov 2026): AWS stays fully offline, with no deployment, no AWS account and no calibration against

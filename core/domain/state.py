@@ -663,11 +663,17 @@ class TrustedState:
         invariant_registry_version: int,
         now: datetime,
         state_id: str | None = None,
+        allow_no_invariants: bool = False,
     ) -> TrustedState:
         """The baseline, version 0: no parent and no promotion decision (C-32). It is created only
-        when the baseline protocol accepts it, with current invariant evidence (Doc 06 §24)."""
+        when the baseline protocol accepts it, with current invariant evidence (Doc 06 §24).
+
+        ``allow_no_invariants`` (default off) lets the invariant set be empty: only the experiment
+        harness sets it, for condition A on a change request (C-206)."""
+        if not isinstance(allow_no_invariants, bool):
+            raise DomainValidationError("establish_baseline: allow_no_invariants must be a bool")
         proofs = list(invariant_proofs)
-        if not proofs:
+        if not proofs and not allow_no_invariants:
             raise DomainValidationError(
                 "establish_baseline: at least one invariant proof is required (Doc 06 §24)"
             )

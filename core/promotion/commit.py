@@ -463,7 +463,14 @@ def _attempt(
     definitions = _definitions(uow, plan)
     results = {r.verification_id: r for r in verification.results}
     problems = binding_problems(
-        uow.evidence, plan, candidate, current, definitions, results, evidence_ids
+        uow.evidence,
+        plan,
+        candidate,
+        current,
+        definitions,
+        results,
+        evidence_ids,
+        open_targets=outcome.evidence.open_targets,
     )
     if problems:
         raise _Invalid("the evidence does not bind to the new state: " + "; ".join(problems))
@@ -541,6 +548,7 @@ def _revalidate(
             now=outcome.decision.created_at,
             attempt_number=attempt_number,
             oracle_verdicts=oracle_verdicts,
+            open_targets=outcome.evidence.open_targets,
         )
     except DomainValidationError as refusal:
         raise _Invalid(f"decide refuses its inputs now: {refusal}") from refusal
@@ -583,7 +591,14 @@ def _build(
     decision = outcome.decision
     binding_id = ids.evidence_id_for(decision.decision_id)
     evaluations = evaluate_from_results(
-        plan, candidate, current, definitions, results, evidence_ids, binding_id
+        plan,
+        candidate,
+        current,
+        definitions,
+        results,
+        evidence_ids,
+        binding_id,
+        open_targets=outcome.evidence.open_targets,
     )
     proofs = build_proofs(
         plan, candidate, current, impact, evaluations, binding_evidence_id=binding_id

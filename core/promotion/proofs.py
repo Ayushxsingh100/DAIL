@@ -14,12 +14,14 @@ that plan into the ``InvariantProof`` objects that ``TrustedState.promote`` acce
 Every proof also carries the id of the promotion binding record (C-164). A plan entry without an
 evaluation or an evidence id, a result that is not a PASS, a version that differs from the parent's
 reference (the lifecycle has no path for a version change) and a plan that leaves out an invariant
-of the parent are refused: fail closed. Standard library and ``core.domain`` only (R18).
+of the parent are refused: fail closed. The one exception is an open target (C-196, P8a): its
+VERIFIED entry names a FAIL, and its evaluation ends VIOLATED; any other FAIL is still refused.
+Standard library and ``core.domain`` only (R18).
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 
 from core.domain.enums import VerificationResult
 from core.domain.errors import DomainValidationError
@@ -53,6 +55,7 @@ def evaluate_from_results(
     results: Mapping[str, VerificationResultRecord],
     evidence_ids: Mapping[str, str],
     binding_evidence_id: str,
+    open_targets: Collection[str] = (),
 ) -> dict[str, InvariantEvaluation]:
     """The evaluation of every VERIFIED entry of ``plan``, by invariant id.
 
@@ -75,7 +78,12 @@ def evaluate_from_results(
                 f"proof plan: {entry.target_id} names result {entry.verification_id}, which has no "
                 "stored result or no evidence record"
             )
-        if record.result is not VerificationResult.PASS:
+        allowed = (
+            (VerificationResult.PASS, VerificationResult.FAIL)
+            if entry.invariant_id in open_targets
+            else (VerificationResult.PASS,)
+        )
+        if record.result not in allowed:
             raise DomainValidationError(
                 f"proof plan: {entry.target_id} is VERIFIED by a {record.result.value} result"
             )
