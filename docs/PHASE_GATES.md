@@ -555,7 +555,26 @@ Limits: the open-target rule blocked C and C' on F8 (C-209, closed by C-210 in P
 Carry-forward: C-200 to C-204 and C-207 Proposed; C-209 closed by C-210; P8b scores the stored records.
 ```
 
-## P8b — Scoring, metrics and the dev report (pending external review)
+## P8b — Scoring, metrics and the dev report — passed with limits (verdict on PR #31)
+
+```text
+P8b: passed with limits (verdict on PR #31). Recorded in P10a (13 Nov 2026).
+Limits of the verdict (open items, with the package that closes each):
+The verdict's own wording of each limit was not pasted into P10a; the lines below give what the
+P10a work package says of each.
+1. C-212 to C-215 and C-217 Proposed. [Closed: Decided by the authors on 13 Nov 2026, "accepted as
+   built after external review", recorded in P10a.]
+2. The extractor version (P10a Section 3.1). [Closed in P10a:
+   EXTRACTOR_VERSION is extractor-2, METRICS_VERSION is metrics-draft-1; every metric record and
+   report carries both, and a test pins the hash of the extractor modules.]
+3. tests/unit/test_e2e_concurrency.py, the named interleavings (P10a Section 3.1). [Closed in P10a:
+   the "A_done"/"B_done" markers are added; 50 loaded runs are reported in the P10a section.]
+4.-8. NOT YET RECORDED: the text of the verdict's limits 4 to 8 was not pasted into P10a; they are
+   recorded when the user pastes it.
+```
+
+The P8b author's input to the review, as written before the verdict (the run-2 numbers in it are
+superseded by run 3, C-216):
 
 ```text
 P8b mini-gate: NOT DECIDED. Status written by the P8b author as an input to the external review.
@@ -575,6 +594,7 @@ Fix round P8b-2 (13 Nov 2026, after the external review of PR #31 at 86a1e5a): b
   136 common transitions, 0 differences. An extractor reading found in the fix round (C-217 (1)):
   unproven required checks now count in the UNKNOWN/UNSUPPORTED rates.
   The numbers below this paragraph are those of the first P8b report (run 2), kept as written.
+  [Superseded by run 3 (C-216).]
 What exists:
   experiments/scoring (the only label reader: labels with the manifest and scenario hash checks,
   per-transition truth, the identity truth table identity-truth-1 written from D4_OPERATORS.md,
@@ -605,10 +625,12 @@ Limits: metrics-draft-1 is a draft (P10 freezes the definitions before the test 
 Carry-forward: C-212 to C-215 Proposed.
 ```
 
-## P8 — Experiment Harness (pending external review)
+## P8 — Experiment Harness — passed with limits (verdict on PR #31)
 
 ```text
-P8 gate (Doc 15 §15.3) and milestone M5 (Doc 15 §25): NOT DECIDED. Each item and what bears on it:
+P8 gate (Doc 15 §15.3) and milestone M5 (Doc 15 §25): passed with limits (verdict on PR #31).
+Recorded in P10a (13 Nov 2026). The limits are those of the P8b verdict, listed in the P8b section.
+The P8b author's map of each item, as written before the verdict:
 §15.3 "Trials are reproducible" ........ tests.unit.test_experiment_harness.TestReproducibility
     (records identical across runs, concurrency, corrupted labels); the 20-trial re-run
     (P8_DEV_PILOT.md section 13); the reviewer's independent re-run of both dev runs (PR #30).
