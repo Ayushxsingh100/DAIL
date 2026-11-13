@@ -18,3 +18,47 @@ seed = 20261113
 max_output_tokens = 2048
 timeout_seconds = 900.0
 num_ctx = 16384
+
+# The dev model pilot (P10a Step 6), checked on 13 Nov 2026. Three publishers; each licence is the
+# model's own "license" layer on its Ollama library page and the text `ollama show --license` printed.
+[model.qwen2_5-coder-7b]
+tag = "qwen2.5-coder:7b"
+digest = "dae161e27b0e90dd1856c8bb3209201fd6736d8eb66298e75ed87571486f4364"
+quantization = "Q4_K_M"
+size = "4.7 GB (7.6B parameters; context length 32768)"
+licence = "Apache-2.0"
+licence_source = "ollama.com/library/qwen2.5-coder:7b, license blob 832dd9e00a68 (Apache License 2.0), and ollama show --license (13 Nov 2026)"
+temperature = 0.0
+top_p = 1.0
+seed = 20261113
+max_output_tokens = 2048
+timeout_seconds = 1800.0
+num_ctx = 16384
+
+[model.granite3_3-8b]
+tag = "granite3.3:8b"
+digest = "fd429f23b90980ed1bef53b990894e7b0199331f6ae90c5650240a7d5b70f1f7"
+quantization = "Q4_K_M"
+size = "4.9 GB (8.2B parameters; context length 131072)"
+licence = "Apache-2.0"
+licence_source = "ollama.com/library/granite3.3:8b, license blob 4a99a6dd617d (Apache License 2.0), and ollama show --license (13 Nov 2026)"
+temperature = 0.0
+top_p = 1.0
+seed = 20261113
+max_output_tokens = 2048
+timeout_seconds = 1800.0
+num_ctx = 16384
+
+[model.phi4-mini-3_8b]
+tag = "phi4-mini:3.8b"
+digest = "78fad5d182a7c33065e153a5f8ba210754207ba9d91973f57dffa7f487363753"
+quantization = "Q4_K_M"
+size = "2.5 GB (3.8B parameters; context length 131072)"
+licence = "MIT"
+licence_source = "ollama.com/library/phi4-mini:3.8b, license blob fa8235e5b48f (MIT License, Microsoft Corporation), and ollama show --license (13 Nov 2026)"
+temperature = 0.0
+top_p = 1.0
+seed = 20261113
+max_output_tokens = 2048
+timeout_seconds = 1800.0
+num_ctx = 16384
