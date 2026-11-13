@@ -22,6 +22,8 @@ class WorkRow:
     applicable: bool
     origin: str
     selected_reason: str | None
+    verifier_id: str | None = None
+    reason: str | None = None  # the result's reason (for example invariant.unknown)
 
 
 @dataclass(frozen=True)
@@ -75,6 +77,8 @@ def transitions_from_result(
                         bool(w["applicable"]),
                         w["origin"],
                         w.get("selected_reason"),
+                        w.get("verifier_id"),
+                        w.get("reason"),
                     )
                     for w in t.get("work") or ()
                 ),

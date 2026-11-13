@@ -420,6 +420,7 @@ def extract(
         if s.t.decision == "PROMOTE" and s.truth.unsafe
     ]
     x.lists["clusters"] = _clusters(scored_items)
+    x.lists["non_pass_checks"] = _non_pass(scored_items)
     x.lists["prefix_sizes"] = {
         "common_prefix_all": len(prefix_all),
         "common_prefix_B_C": len(keys.get("B", set()) & keys.get("C", set())),
@@ -606,6 +607,62 @@ def _clusters(scored_items: Mapping[str, Sequence[_Scored]]) -> list[dict[str, A
             rows.items(), key=lambda kv: (ORDER.index(kv[0][0]), kv[0][1], kv[0][2])
         )
     ]
+
+
+def _kind(target_id: str) -> str:
+    """INVARIANT:<id>, RESOURCE:<type>, or the gate's name."""
+    if target_id.startswith("INVARIANT:"):
+        return "INVARIANT:" + target_id.split(":")[1]
+    if target_id.startswith("RESOURCE:"):
+        return "RESOURCE:" + target_id.removeprefix("RESOURCE:").split(".", 1)[0]
+    return target_id
+
+
+def _non_pass(scored_items: Mapping[str, Sequence[_Scored]]) -> list[dict[str, Any]]:
+    """Every required check with a fresh non-PASS result, counted by condition, kind, verifier,
+    result and reason (P8b-2): a systemic error shows here instead of inside a rate."""
+    counts: Counter[tuple[str, str, str, str, str]] = Counter()
+    for condition, items in scored_items.items():
+        for s in items:
+            rows = {w.target_id: w for w in s.t.work}
+            for target_id, source in s.t.required:
+                w = rows.get(target_id)
+                if source == "VERIFIED" and w is not None and w.result != "PASS":
+                    key = (
+                        condition,
+                        _kind(target_id),
+                        w.verifier_id or "",
+                        w.result,
+                        w.reason or "",
+                    )
+                    counts[key] += 1
+    return [
+        {"condition": c, "kind": k, "verifier_id": v, "result": r, "reason": why, "count": n}
+        for (c, k, v, r, why), n in sorted(
+            counts.items(), key=lambda kv: (ORDER.index(kv[0][0]), kv[0][1:])
+        )
+    ]
+
+
+BASELINE_INVARIANT: Final = {
+    "aws_security_group": "INV-SEC-001",
+    "aws_security_group_rule": "INV-SEC-001",
+    "aws_db_instance": "INV-SEC-003",
+}
+
+
+def baseline_guard(report: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Baseline items with reason ``invariant.unknown`` although the run's definitions hold the
+    invariant they belong to (P8b-2): each is a systemic error, never a measured outcome."""
+    held = set(report.get("definitions_held") or ())
+    found = []
+    for row in report["lists"].get("non_pass_checks", []):
+        kind = row["kind"]
+        if not kind.startswith("RESOURCE:") or row["reason"] != "invariant.unknown":
+            continue
+        if BASELINE_INVARIANT.get(kind.removeprefix("RESOURCE:")) in held:
+            found.append(dict(row))
+    return found
 
 
 def to_json(x: Extraction) -> dict[str, Any]:

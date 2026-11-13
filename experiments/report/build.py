@@ -83,6 +83,9 @@ def build_report(
         "reproducibility_summary": dict(reproducibility or {}),
         "artifact_refs": list(artifact_refs or []),
         "conditions": conditions,
+        "definitions_held": sorted(
+            ((definition.get("pins") or {}).get("verifiers") or {}).get("invariants") or {}
+        ),
         "lists": data["lists"],
         "confusion": data["confusion"],
     }

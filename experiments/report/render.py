@@ -174,6 +174,30 @@ def render_markdown(report: Mapping[str, Any]) -> str:
         ["Rate", *[NAMES[c] for c in conds]],
         ([lab, *[cell(ix.get(n, c)) for c in conds]] for lab, n in OUTCOMES),
     )
+    lines += [
+        "",
+        "Non-PASS required checks (fresh results), by condition, kind, verifier, result and "
+        "reason:",
+        "",
+    ]
+    non_pass = lists.get("non_pass_checks", [])
+    if non_pass:
+        lines += _table(
+            ["Condition", "Kind", "Verifier", "Result", "Reason", "Count"],
+            (
+                [
+                    NAMES[r["condition"]],
+                    r["kind"],
+                    r["verifier_id"],
+                    r["result"],
+                    r["reason"] or "—",
+                    str(r["count"]),
+                ]
+                for r in non_pass
+            ),
+        )
+    else:
+        lines.append("none")
     lines += ["", "## 6. Work by kind (oracle excluded)", ""]
     lines += _table(
         ["Kind", *[NAMES[c] for c in conds]],
