@@ -65,7 +65,7 @@ def wilson(k: int, n: int) -> tuple[float | None, float | None]:
     z2 = Z95 * Z95
     centre = (p + z2 / (2 * n)) / (1 + z2 / n)
     half = Z95 * math.sqrt(p * (1 - p) / n + z2 / (4 * n * n)) / (1 + z2 / n)
-    return centre - half, centre + half
+    return max(0.0, centre - half), min(1.0, centre + half)  # rounding never leaves [0, 1]
 
 
 @dataclass
