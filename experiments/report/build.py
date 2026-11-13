@@ -44,6 +44,7 @@ def build_report(
     statuses: Mapping[str, str],
     extraction: Extraction,
     reproducibility: Mapping[str, Any] | None = None,
+    preface: list[str] | None = None,
     artifact_refs: list[str] | None = None,
 ) -> dict[str, Any]:
     data = to_json(extraction)
@@ -81,6 +82,7 @@ def build_report(
         "secondary_metrics": [m for m in metrics if m["metric_name"] not in PRIMARY],
         "failures": failures,
         "reproducibility_summary": dict(reproducibility or {}),
+        "preface": list(preface or []),
         "artifact_refs": list(artifact_refs or []),
         "conditions": conditions,
         "definitions_held": sorted(

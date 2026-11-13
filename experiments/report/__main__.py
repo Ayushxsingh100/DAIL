@@ -117,6 +117,9 @@ def cmd_extract(args: argparse.Namespace) -> int:
         extraction=extraction,
         reproducibility=reproducibility,
         artifact_refs=refs[:1] + [f"{len(refs) - 1} trial result records under trials/"],
+        preface=(
+            Path(args.preface).read_text(encoding="utf-8").splitlines() if args.preface else None
+        ),
     )
     out = layout.experiment_dir / "report" / EXTRACTOR_VERSION
     out.mkdir(parents=True, exist_ok=True)
@@ -202,6 +205,7 @@ def main(argv: list[str] | None = None) -> int:
         if name == "extract":
             command.add_argument("--doc", default="")
             command.add_argument("--repro", default="", help="a JSON file of reproducibility facts")
+            command.add_argument("--preface", default="", help="a text file shown at the top")
         if name == "compare":
             command.add_argument("--other", required=True)
     args = parser.parse_args(argv)
