@@ -24,7 +24,7 @@ from tests.fixture_catalog import REPO_ROOT
 from tests.metrics_builders import GATES, scenarios
 
 PINNED: dict[str, str] = {
-    "extractor-2": "PIN-ME",
+    "extractor-2": "7a0fec10865e69672727ac801751520d835097ae078388c553f325457b9a1fc9",
 }
 EXTRACTOR_PACKAGES = ("experiments/metrics", "experiments/scoring")
 CRLF, LF = b"\r\n", b"\n"

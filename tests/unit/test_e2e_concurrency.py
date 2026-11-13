@@ -138,7 +138,8 @@ class RaceCase(OrchestratorCase):
 
 class TestNamedInterleavings(RaceCase):
     def test_one_runs_to_the_end_before_the_other_starts(self) -> None:
-        a, b = self.race(["A"] * STAGE_POINTS + ["B"] * STAGE_POINTS)
+        # "A_done": B may not pass its first checkpoint while A is still committing (P10a 3.1)
+        a, b = self.race(["A"] * STAGE_POINTS + ["A_done"] + ["B"] * STAGE_POINTS)
         self.assert_one_winner(a, b)
         self.assertIs(a.kind, ResultKind.PROMOTED)
         # the late one never asked for a commit: it was rejected before any request
@@ -150,7 +151,7 @@ class TestNamedInterleavings(RaceCase):
         self.assertNotIn("STATE_PROMOTED", types)
 
     def test_the_other_way_round(self) -> None:
-        a, b = self.race(["B"] * STAGE_POINTS + ["A"] * STAGE_POINTS)
+        a, b = self.race(["B"] * STAGE_POINTS + ["B_done"] + ["A"] * STAGE_POINTS)
         self.assert_one_winner(a, b)
         self.assertIs(b.kind, ResultKind.PROMOTED)
 
