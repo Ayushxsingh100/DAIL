@@ -22,7 +22,9 @@ from tests.metrics_builders import GATES, scenarios
 UNKNOWN_DEF = "invariant.unknown"
 
 
-def transition(rows: tuple[WorkRow, ...], required: tuple[tuple[str, str], ...]) -> Transition:
+def transition(
+    rows: tuple[WorkRow, ...], required: tuple[tuple[str, str | None], ...]
+) -> Transition:
     return Transition(
         "t", "Z", "C", 1, "EVALUATED", "REJECT", (), required, GATES + rows, frozenset(), (), None
     )
@@ -36,8 +38,9 @@ def baseline_row(address: str, result: str, reason: str | None) -> WorkRow:
 
 
 def report_for(rows: tuple[WorkRow, ...], held: list[str]) -> dict:  # type: ignore[type-arg]
+    # as DAIL records it: a check that is not proven (a FAIL or UNSUPPORTED) has no source
     required = (("CONSISTENCY", "VERIFIED"), ("STRUCTURAL", "VERIFIED")) + tuple(
-        (r.target_id, "VERIFIED") for r in rows
+        (r.target_id, "VERIFIED" if r.result == "PASS" else None) for r in rows
     )
     x = extract(
         experiment_id="e",

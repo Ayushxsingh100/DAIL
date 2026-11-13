@@ -178,6 +178,7 @@ def tr(
     pairs: Iterable[tuple[str | None, str | None, str, bool]] = (),
     required: Iterable[str] | None = None,
 ) -> Transition:
+    open_targets = tuple(open_targets)
     rows = tuple(work)
     if decision is None:
         return Transition(
@@ -197,7 +198,21 @@ def tr(
     run = [w for w in rows if w.target_type == "INVARIANT"]
     wanted = [target(n) for n in required] if required is not None else [w.target_id for w in run]
     req = [("CONSISTENCY", "VERIFIED"), ("STRUCTURAL", "VERIFIED")]
-    req += [(t, "VERIFIED") for t in wanted]
+    # as DAIL records it: VERIFIED only when the result proves the check (a PASS, or a FAIL on an
+    # open target, C-196); an unproven check has no source
+    results = {w.target_id: w.result for w in rows}
+    opened = {target(n) for n in open_targets}
+    req += [
+        (
+            t,
+            (
+                "VERIFIED"
+                if results.get(t) == "PASS" or (results.get(t) == "FAIL" and t in opened)
+                else None
+            ),
+        )
+        for t in wanted
+    ]
     req += [(target(n), "CARRIED_FORWARD") for n in carried]
     return Transition(
         f"{condition}-{scenario}",

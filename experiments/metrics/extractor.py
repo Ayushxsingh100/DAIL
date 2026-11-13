@@ -22,7 +22,8 @@ condition's scope policy, and U_t items; applicable and not-applicable baseline 
 W = gate + invariant + applicable baseline, its total, per-transition mean and median, and
 Save(C vs B) = 1 - sum W_C / sum W_B on the common prefix of B and C; decision rates per evaluated
 transition; UNKNOWN and UNSUPPORTED per required check (a carried-forward check has no result and is
-neither); TRUNCATED transitions per transition; the oracle agreement of B (confusion per invariant
+neither; a check that is not proven has source None in DAIL's records and its fresh result
+counts); TRUNCATED transitions per transition; the oracle agreement of B (confusion per invariant
 at S0 and every evaluated step, every disagreement listed); impact precision, recall and
 truth-change coverage for C and C' (pooled and per family; a truth change outside the verified set
 listed); identity error rate, UNCERTAIN share and evidence-transfer errors for C and C' over the
@@ -276,7 +277,9 @@ def _core(out: _Out, condition: str, items: Sequence[_Scored], scope: str) -> No
             results = {w.target_id: w.result for w in s.t.work}
             for target_id, source in s.t.required:
                 checks += 1
-                result = results.get(target_id) if source == "VERIFIED" else None
+                # a check that is not proven has source None in DAIL's records; only a carried
+                # one has no fresh result
+                result = results.get(target_id) if source != "CARRIED_FORWARD" else None
                 unknown += result == "UNKNOWN"
                 unsupported += result == "UNSUPPORTED"
         out.ratio("unknown_rate", condition, unknown, checks, scope=scope, stratum=stratum)
@@ -627,7 +630,7 @@ def _non_pass(scored_items: Mapping[str, Sequence[_Scored]]) -> list[dict[str, A
             rows = {w.target_id: w for w in s.t.work}
             for target_id, source in s.t.required:
                 w = rows.get(target_id)
-                if source == "VERIFIED" and w is not None and w.result != "PASS":
+                if source != "CARRIED_FORWARD" and w is not None and w.result != "PASS":
                     key = (
                         condition,
                         _kind(target_id),
