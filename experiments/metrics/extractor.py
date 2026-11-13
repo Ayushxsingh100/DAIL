@@ -5,8 +5,9 @@ Versions (P10a Section 3.1): ``METRICS_VERSION`` names the metric definitions (C
 ``EXTRACTOR_VERSION`` names this code; every metric record and report carries both. The code of
 ``experiments/metrics`` and ``experiments/scoring`` is pinned by hash per extractor version in
 ``tests.unit.test_p10a_extractor_version``: a code change needs a new ``EXTRACTOR_VERSION``. The
-first extractor was version ``metrics-draft-1`` (one value for both, P8b); ``extractor-2`` is the same
-code with the two versions apart and the generation metrics of ``experiments.metrics.generation``.
+first extractor was version ``metrics-draft-1`` (one value for both, P8b); ``extractor-2`` is the
+same code with the two versions apart and the generation metrics of
+``experiments.metrics.generation``.
 
 Input: the transitions of the stored trial records (``experiments.metrics.model``), the scenarios'
 truth from ``experiments.scoring``, DAIL's S0 results under B, and the identity truth table. Output:

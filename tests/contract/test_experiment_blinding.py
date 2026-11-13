@@ -18,15 +18,16 @@ name or a keyword argument. A self-test feeds sources that read each field, so a
 longer fail is caught.
 
 P10a (work package Section 3.3): "Extend the blinding contract test: ``experiments/generation/``
-names no label field and no ``description``, ``intent``, ``mutation_record`` or later step, and never
-opens ``step_1`` or beyond. Show the test failing on a mutant." (c) Every module of
+names no label field and no ``description``, ``intent``, ``mutation_record`` or later step, and
+never opens ``step_1`` or beyond. Show the test failing on a mutant." (c) Every module of
 ``experiments/generation/`` is checked for the label fields and for ``description`` (TerraPreserve's
 ``target.description``); a later step is any string naming ``step_<n>`` with n >= 1, and any use of
 a scenario's ``steps`` other than ``steps[0]`` or ``steps[:1]`` (an index, a loop, a slice past S0).
 The invariant's own registry statement reaches the task through ``experiments.task_text``, which
 reads a DAIL ``Invariant`` only. (d) No generation module imports ``experiments.scoring``,
-``.metrics`` or ``.report``. A dynamic check is in ``tests.unit.test_p10a_generation.TestNoLaterStep``:
-generation, replay and export run with the later step directories deleted.
+``.metrics`` or ``.report``. A dynamic check is in
+``tests.unit.test_p10a_generation.TestNoLaterStep``: generation, replay and export run with the
+later step directories deleted.
 """
 
 from __future__ import annotations

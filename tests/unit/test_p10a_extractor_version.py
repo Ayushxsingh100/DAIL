@@ -1,10 +1,10 @@
 """The extractor version, apart from the metric definitions version (P10a work package Section 3.1;
 closes the P8b verdict's limit 2).
 
-Section 3.1: "``EXTRACTOR_VERSION`` becomes its own value (``extractor-2``), separate from the metric
-definitions version (``metrics-draft-1``). Every ``MetricRecord`` and report carries both. A test
-fails if the extractor's code hash changes without a version change (pin the hash of the extractor
-modules in a test)."
+Section 3.1: "``EXTRACTOR_VERSION`` becomes its own value (``extractor-2``), separate from the
+metric definitions version (``metrics-draft-1``). Every ``MetricRecord`` and report carries both. A
+test fails if the extractor's code hash changes without a version change (pin the hash of the
+extractor modules in a test)."
 
 The extractor modules are the code that turns stored records into metric records:
 ``experiments/metrics/`` and the scoring it reads truth through (``experiments/scoring/``, with its
@@ -24,7 +24,7 @@ from tests.fixture_catalog import REPO_ROOT
 from tests.metrics_builders import GATES, scenarios
 
 PINNED: dict[str, str] = {
-    "extractor-2": "7a0fec10865e69672727ac801751520d835097ae078388c553f325457b9a1fc9",
+    "extractor-2": "5b4a598940e59fa3d2b3fe1b48360135d174db65124df7b7830757800e80a25b",
 }
 EXTRACTOR_PACKAGES = ("experiments/metrics", "experiments/scoring")
 CRLF, LF = b"\r\n", b"\n"

@@ -1,8 +1,10 @@
 """Configuration, policy and record types of the LLM channel (Doc 10 §16-§18, §20-§24, §32, §34).
 
 * ``FailureClass`` is §24; ``RETRYABLE`` is the ``retry_on`` set §23 allows.
-* ``LLMConfig`` is §16 plus ``seed`` (C-182 pins every experiment model by temperature and seed).
-  All of it is recorded on every request (§17).
+* ``LLMConfig`` is §16 plus ``seed`` (C-182 pins every experiment model by temperature and seed)
+  and, optionally, ``num_ctx``: the model's context window as the local server is asked to use it
+  (P10a; P7a verdict limit 5). All of it is recorded on every request (§17); ``num_ctx`` only when
+  set, so the records of a configuration without it are unchanged.
 * ``RetryPolicy`` is §23; ``max_attempts`` is bounded (1 to 10): "Never retry indefinitely."
 * ``BudgetConfig`` is §18.
 * ``LLMRequest`` is §20 plus the attempt number, the trusted-state hash (§34 "Persist fixture/state
@@ -96,8 +98,11 @@ class LLMConfig:
     retry_policy_id: str
     prompt_version: str
     response_schema_version: str
+    num_ctx: int | None = None  # P10a: the context window, when the model needs it set
 
     def __post_init__(self) -> None:
+        if self.num_ctx is not None:
+            _integer(self.num_ctx, "LLMConfig.num_ctx", 1)
         for name in (
             "provider",
             "model_name",
@@ -121,7 +126,9 @@ class LLMConfig:
         )
 
     def to_dict(self) -> dict[str, Any]:
+        extra = {} if self.num_ctx is None else {"num_ctx": self.num_ctx}
         return {
+            **extra,
             "provider": self.provider,
             "model_name": self.model_name,
             "model_version": self.model_version,

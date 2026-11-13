@@ -1,11 +1,12 @@
-"""LLM candidates for the experiment (P10a work package Section 3.3; decisions 3 to 5, C-218 to C-220).
+"""LLM candidates for the experiment (P10a work package Section 3.3; decisions 3 to 5, C-218 to
+C-220).
 
 Expected values come from the quoted text:
 
 Decision 4: "repair scenarios only (``target.kind = "repair"``) ... The task given to the model is a
-fixed template per target invariant: "Repair ``<invariant id>``: ``<the registry's one-line statement
-of the invariant>``. Keep every other protected invariant satisfied. Make the smallest change."
-TerraPreserve's ``target.description`` and ``intent`` are never given to the model."
+fixed template per target invariant: "Repair ``<invariant id>``: ``<the registry's one-line
+statement of the invariant>``. Keep every other protected invariant satisfied. Make the smallest
+change." TerraPreserve's ``target.description`` and ``intent`` are never given to the model."
 Decision 5: "``AllowedChangeScope`` = every resource address of S0, every supported type, no
 attribute restriction, and all four operations. It is the same for every condition and is recorded
 with each candidate."
@@ -165,11 +166,13 @@ class TestTask(Case):
         from core.domain.registry_v1_1 import registry_v1_1_invariants
         from experiments.generation.task import objective_for
 
-        (definition,) = [
+        (definition,) = (
             d
-            for d in registry_v1_1_invariants(datetime(2026, 1, 1, tzinfo=UTC), source="a.s", destination="b.d")
+            for d in registry_v1_1_invariants(
+                datetime(2026, 1, 1, tzinfo=UTC), source="a.s", destination="b.d"
+            )
             if d.invariant_id == "INV-SEC-001"
-        ]
+        )
         self.assertEqual(
             objective_for(definition),
             f"Repair INV-SEC-001: {definition.description} Keep every other protected invariant "
@@ -220,9 +223,10 @@ class TestDigest(Case):
         with self.assertRaises(ModelRefused):
             self.generate([], provider=provider, models=[(pin(), provider, installed("c" * 64))])
         self.assertEqual(provider.calls, [])
-        self.assertFalse((self.out / "candidates").exists() and any(
-            p.name == "attempt.json" for p in (self.out / "candidates").rglob("*")
-        ))
+        self.assertFalse(
+            (self.out / "candidates").exists()
+            and any(p.name == "attempt.json" for p in (self.out / "candidates").rglob("*"))
+        )
 
     def test_a_missing_model_is_refused(self) -> None:
         from experiments.generation.models import ModelRefused, check_installed
@@ -255,7 +259,9 @@ class TestFreezing(Case):
                 self.assertEqual(hashlib.sha256((base / name).read_bytes()).hexdigest(), digest)
         # the request and response records of every attempt, retries included (P7's records)
         records = sorted(p.name for p in (self.attempt_dir(summary, F4) / "records").iterdir())
-        self.assertEqual(records, ["request-1.json", "request-2.json", "response-1.json", "response-2.json"])
+        self.assertEqual(
+            records, ["request-1.json", "request-2.json", "response-1.json", "response-2.json"]
+        )
 
     def test_a_frozen_generation_is_never_regenerated(self) -> None:
         from experiments.generation.run import GenerationError
@@ -288,9 +294,12 @@ class TestFreezing(Case):
     def test_the_switch_is_on_only_in_the_reviewed_copy(self) -> None:
         from experiments.generation.run import EXPERIMENT_LLM_FILE, generation_config
 
-        self.assertIs(load_config(REPO_ROOT / "config", "experiment", environ={}).get(
-            "llm.generation_enabled"
-        ), False)
+        self.assertIs(
+            load_config(REPO_ROOT / "config", "experiment", environ={}).get(
+                "llm.generation_enabled"
+            ),
+            False,
+        )
         self.assertIs(generation_config().get("llm.generation_enabled"), True)
         self.assertEqual(EXPERIMENT_LLM_FILE, REPO_ROOT / "experiments" / "config" / "llm.toml")
         summary = self.generate([ok(VALID)])
@@ -321,7 +330,9 @@ class TestReplay(Case):
         summary = self.generate([ok(VALID)])
         responses = self.attempt_dir(summary) / "records" / "response-1.json"
         record = json.loads(responses.read_text("utf-8"))
-        record["raw_response"] = record["raw_response"].replace('name        = \\"app\\"', 'name = \\"app2\\"')
+        record["raw_response"] = record["raw_response"].replace(
+            'name        = \\"app\\"', 'name = \\"app2\\"'
+        )
         responses.chmod(0o666)
         responses.write_text(json.dumps(record), "utf-8")
         replayed = self.replay(summary)
@@ -364,9 +375,12 @@ class TestExport(Case):
         self.assertTrue(all(n.endswith(".tf") for n in names), names)
         self.assertEqual(sorted(entry["files"]), names)
         self.assertEqual(entry["generation_id"], summary.generation_id)
-        self.assertEqual(entry["tree_hash"], json.loads(
-            (self.attempt_dir(summary) / "attempt.json").read_text("utf-8")
-        )["candidate_tree_hash"])
+        self.assertEqual(
+            entry["tree_hash"],
+            json.loads((self.attempt_dir(summary) / "attempt.json").read_text("utf-8"))[
+                "candidate_tree_hash"
+            ],
+        )
         main = (directory / "main.tf").read_text("utf-8")
         self.assertNotIn("app_ssh_public", main)
 
@@ -432,9 +446,9 @@ class TestProviderFailures(Case):
         self.assertEqual(row["failure_source"], "provider")
         summary2 = self.generate(
             [ok(repair('resource "aws_lambda_function" "f" {\n}\n', ["aws_lambda_function.f"]))],
-            spec=__import__("experiments.generation.run", fromlist=["GenerationSpec"]).GenerationSpec(
-                name="p10a-test", version="2"
-            ),
+            spec=__import__(
+                "experiments.generation.run", fromlist=["GenerationSpec"]
+            ).GenerationSpec(name="p10a-test", version="2"),
         )
         (row2,) = summary2.attempts
         self.assertEqual(row2["failure_class"], "UNSUPPORTED")

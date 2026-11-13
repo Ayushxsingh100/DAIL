@@ -1,0 +1,7 @@
+# The harness's reviewed LLM file (P10a Section 3.3; the same way as C-207 (3) for promotion).
+# experiments.generation.run.generation_config() copies config/ and puts this file in place of
+# config/base/llm.toml for candidate generation only; config/ keeps generation off everywhere.
+# Every generation definition pins this file's SHA-256 (experiment_llm_config_sha256).
+generation_enabled = true
+# the local Ollama server only (C-71, C-182, C-218)
+provider = "ollama"
