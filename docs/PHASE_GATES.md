@@ -497,7 +497,22 @@ Dev run (12 Nov 2026, the author's machine): experiment p8a-dev-harness-check ve
   C: F1 14/14, F2 14/14, F3 11/17, F4 14/14, F5 13/15, F6 9/19, F7 14/14, F8 0/28.
   C': F1 14/14, F2 14/14, F3 11/17, F4 14/14, F5 9/19, F6 9/19, F7 14/14, F8 0/28.
   These are harness counts, not results; no label was opened and nothing was scored (P8b).
-Mechanism found (C-209, Open): under C and C' every F8 trajectory is rejected at step 1 with
+Second dev run (P8a-2, 13 Nov 2026, after C-210 and C-211): experiment p8a-dev-harness-check-2
+  version 1, protocol_version draft, id ec2b4fa8-4398-5f70-be4c-5edf9cd1e0ef (the first run is kept
+  as it is); DAIL e1bde5e (clean tree); TerraPreserve and manifest as above; scope policies
+  dail-scope-2, stateful-full-scope-2, stateless-scope-2. 896 trials, 896 COMPLETED, 0 FAILED,
+  0 harness or input failures; wall time 330 s.
+  Transitions evaluated / TRUNCATED: A 280 / 0, B 273 / 7, C 273 / 7, C' 273 / 7.
+  Transitions with an open target: A 56, B 56, C 56, C' 56.
+  Work (gate, invariant, applicable baseline, not-applicable baseline; of the invariant items,
+  NOT_PROTECTED_IN_PARENT): A 560, 140, 0, 0, 0; B 546, 1092, 56, 10, 0; C 546, 681, 56, 10, 54;
+  C' 546, 681, 62, 16, 54 (U_t items in 53 transitions each under C and C').
+  Decisions per condition and family (PROMOTE/REJECT; no RETRY or ESCALATE): A and B as in the
+  first run; C and C' as in the first run except F8: C 63/14, C' 63/14.
+  Changed against the first run (same scenario, condition and step; counts only): A 0, B 0,
+  C 77, C' 77, all in F8: REJECT -> PROMOTE 28, TRUNCATED -> PROMOTE 35, TRUNCATED -> REJECT 14,
+  for each of C and C'. Nothing was tuned to the outcome.
+Mechanism found in the first run (C-209, closed by C-210): under C and C' every F8 trajectory is rejected at step 1 with
   INSUFFICIENT_EVIDENCE on the open target, because impact does not list it and a VIOLATED
   reference cannot carry; C-196's stated purpose is not reached there. Nothing was tuned.
 Tests: tests.unit.test_p8a_open_targets, test_p8a_open_targets_e2e, test_p8a_conditions,
