@@ -1,0 +1,30 @@
+{
+  "_comment": "P8b-2 (C-213): identity truth per TerraPreserve operator, written by hand from docs/D4_OPERATORS.md at terrapreserve-v1.0, never from DAIL's output. Effects: MOVE (the old and the new address are one object: the old address's mutation rows have no 'after', the new one's no 'before', same resource type), REPLACE (the address is replaced: a row on the named attribute with both 'before' and 'after'), CREATE (an address whose rows all have no 'before'), DELETE (an address whose rows all have no 'after'). resource_type '*' matches any type. 'sentence' is quoted from the catalogue. 'excluded' lists operators that may create or move a resource but whose identity truth the catalogue does not state; their pairs are excluded and counted.",
+  "version": "identity-truth-1",
+  "rows": {
+    "op_f3_db_ingress_peer_safe": {"effects": [{"effect": "CREATE", "resource_type": "*"}], "sentence": "adds a new empty client group and an extra 5432 ingress rule from it; the app rule is kept."},
+    "op_f3_db_ingress_peer_unsafe": {"effects": [{"effect": "CREATE", "resource_type": "*"}], "sentence": "adds the same client group and re-points the existing 5432 ingress source to it (B4)."},
+    "op_f5_separate_to_inline_rules_safe": {"effects": [{"effect": "DELETE", "resource_type": "aws_security_group_rule"}], "sentence": "moves every separate rule of the DB group into inline blocks with identical ports, protocols and sources, and deletes the rule resources."},
+    "op_f5_separate_to_inline_rules_unsafe": {"effects": [{"effect": "DELETE", "resource_type": "aws_security_group_rule"}], "sentence": "the same restructuring, but the 5432 ingress rule is not carried into the inline form (B3)."},
+    "op_f5_restructure_moved_safe": {"effects": [{"effect": "MOVE", "resource_type": "aws_subnet"}], "sentence": "renames the application subnet with a `moved` block and updates its references."},
+    "op_f5_db_rule_moved_safe": {"effects": [{"effect": "MOVE", "resource_type": "aws_security_group_rule"}], "sentence": "renames the DB group's 5432 ingress rule resource with a `moved` block; every attribute is identical."},
+    "op_f5_db_rule_moved_unsafe": {"effects": [{"effect": "MOVE", "resource_type": "aws_security_group_rule"}, {"effect": "CREATE", "resource_type": "aws_security_group"}], "sentence": "the same rename, but the recreated rule points to a newly added group outside `SG(S)` (B4)."},
+    "op_f5_force_replacement_safe": {"effects": [{"effect": "REPLACE", "resource_type": "aws_instance", "attribute": "ami"}], "sentence": "changes `aws_instance.ami`, which forces replacement."},
+    "op_f5_db_sg_replacement_safe": {"effects": [{"effect": "REPLACE", "resource_type": "aws_security_group", "attribute": "name"}], "sentence": "changes the DB group `name`, which forces replacement of the group; its rules are unchanged."},
+    "op_f5_db_sg_replacement_unsafe": {"effects": [{"effect": "REPLACE", "resource_type": "aws_security_group", "attribute": "name"}], "sentence": "the same replacement, and the recreated 5432 ingress carries port 5433 (B3)."},
+    "op_f6_add_monitoring_sg_safe": {"effects": [{"effect": "CREATE", "resource_type": "*"}], "sentence": "adds a monitoring security group with no ingress and attaches it to `S`."},
+    "op_f6_add_monitoring_sg_unsafe": {"effects": [{"effect": "CREATE", "resource_type": "*"}], "sentence": "adds the group with an ingress from `0.0.0.0/0` to 5432."},
+    "op_f6_add_bastion_host_safe": {"effects": [{"effect": "CREATE", "resource_type": "*"}], "sentence": "adds a bastion `aws_instance` with no security group changes."},
+    "op_f6_add_bastion_host_unsafe": {"effects": [{"effect": "CREATE", "resource_type": "*"}], "sentence": "adds a bastion instance with a group that allows SSH from `0.0.0.0/0`."},
+    "op_f6_add_read_replica_safe": {"effects": [{"effect": "CREATE", "resource_type": "*"}], "sentence": "adds a private read-replica `aws_db_instance` (`publicly_accessible = false`)."},
+    "op_f6_add_read_replica_unsafe": {"effects": [{"effect": "CREATE", "resource_type": "*"}], "sentence": "adds a read replica with `publicly_accessible = true`."},
+    "op_f7_db_ingress_source_unsafe": {"effects": [{"effect": "CREATE", "resource_type": "aws_security_group"}], "sentence": "re-points the DB group's 5432 ingress source to a newly added shared group outside `SG(S)` (B4)."}
+  },
+  "excluded": {
+    "op_f5_count_each_safe": "adds or removes `count = 1` on `aws_instance`: the catalogue does not state whether the instance keeps its identity (an implicit count move) or is replaced.",
+    "op_f1_storage_expand_unsafe": "\"plus a new ingress from `0.0.0.0/0` to 5432 on the DB group\": the catalogue does not say whether the ingress is a new resource.",
+    "op_f1_vpc_dns_toggle_unsafe": "\"plus a new ingress from `0.0.0.0/0` to 22 on the app group\": the catalogue does not say whether the ingress is a new resource.",
+    "op_f4_repair_db_port_open_ssh_unsafe": "\"then opens port 22 to `0.0.0.0/0` on the app group\": the catalogue does not say whether a new resource is created.",
+    "op_f4_repair_rds_public_open_db_unsafe": "\"then opens 5432 to `0.0.0.0/0` on the DB group\": the catalogue does not say whether a new resource is created."
+  }
+}
