@@ -24,7 +24,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any, Final
 
 from core.application.orchestrator import EvaluationResult, ResultKind
-from core.domain.impact import ImpactReport, VerificationWorkItem
+from core.domain.impact import ImpactReport, ReasonCode, VerificationWorkItem
 from core.domain.state import TrustedState
 from core.domain.verification import VerificationReport
 from experiments.conditions import REGISTRY_RECORD
@@ -36,6 +36,7 @@ NOT_EVALUATED: Final = "NOT_EVALUATED"
 EVALUATED: Final = "EVALUATED"
 TRUNCATED: Final = "TRUNCATED"
 GATE_TYPE: Final = "STRUCTURAL"
+NOT_PROTECTED_IN_PARENT: Final = ReasonCode.NOT_PROTECTED_IN_PARENT.value
 # A random id is drawn for these reports (they are not derived from the request); the stored
 # copy leaves it out and keeps the content hash, so two runs store the same bytes (C-207).
 _RANDOM_IDS: Final = ("report_id", "graph_id")
@@ -59,12 +60,25 @@ def state_summary(state: TrustedState) -> dict[str, Any]:
     }
 
 
+def _counts() -> dict[str, int]:
+    return {
+        "gate": 0,
+        "invariant": 0,
+        "baseline_applicable": 0,
+        "baseline_not_applicable": 0,
+        "not_protected_in_parent": 0,  # U_t items (C-210), also counted under "invariant"
+    }
+
+
 def _work(
-    report: VerificationReport, impact: ImpactReport
+    report: VerificationReport,
+    impact: ImpactReport,
+    selected: Sequence[VerificationWorkItem] | None,
 ) -> tuple[list[dict[str, Any]], dict[str, int]]:
     listed = {item.target_id for item in impact.verification_work}
+    reasons = {item.target_id: item.reason.value for item in selected or ()}
     rows = []
-    counts = {"gate": 0, "invariant": 0, "baseline_applicable": 0, "baseline_not_applicable": 0}
+    counts = _counts()
     for r in sorted(report.results, key=lambda x: x.target_id):
         kind = r.target_type.value
         if kind == GATE_TYPE:
@@ -74,6 +88,8 @@ def _work(
             origin = "impact" if r.target_id in listed else "condition"
             if kind == "INVARIANT":
                 counts["invariant"] += 1
+                if reasons.get(r.target_id) == NOT_PROTECTED_IN_PARENT:
+                    counts["not_protected_in_parent"] += 1
             elif r.applicable:
                 counts["baseline_applicable"] += 1
             else:
@@ -90,6 +106,7 @@ def _work(
                 "verifier_version": r.verifier_version,
                 "evidence_level": r.evidence_level,
                 "origin": origin,
+                "selected_reason": reasons.get(r.target_id),  # the work item's reason (C-211)
             }
         )
     return rows, counts
@@ -145,9 +162,9 @@ def transition_record(
     """The record of one evaluated transition (see the module docstring)."""
     impact, report, identity = result.impact, result.verification, result.identity
     work: list[dict[str, Any]] = []
-    counts = {"gate": 0, "invariant": 0, "baseline_applicable": 0, "baseline_not_applicable": 0}
+    counts = _counts()
     if report is not None and impact is not None:
-        work, counts = _work(report, impact)
+        work, counts = _work(report, impact, result.work)
     return {
         **base,
         "record": "transition",
@@ -222,12 +239,7 @@ def truncated_record(*, base: Mapping[str, Any], step: int) -> dict[str, Any]:
         "decision": None,
         "required": [],
         "work": [],
-        "work_counts": {
-            "gate": 0,
-            "invariant": 0,
-            "baseline_applicable": 0,
-            "baseline_not_applicable": 0,
-        },
+        "work_counts": _counts(),
         "identity": None,
         "impact": None,
         "new_state": None,

@@ -436,7 +436,7 @@ class _Run:
         )
         self._passed("after_impact")
         self.stage = "verification"
-        work = o._scope_policy.select(impact, r.definitions)
+        work = o._scope_policy.select(impact, r.definitions, parent_refs=parent.invariant_refs)
         self.work = tuple(work)
         inputs = VerificationInputs(
             candidate_resources=outcome.resources,

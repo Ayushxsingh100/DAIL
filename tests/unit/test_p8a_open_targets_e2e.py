@@ -86,12 +86,29 @@ class TestOpenTargetsEndToEnd(OrchestratorCase):
         self.assertIs(result.kind, ResultKind.REJECTED)
         self.assertEqual(self.current().state_id, self.v0.state_id)
 
-    def test_an_unchanged_target_has_no_fresh_result_and_blocks(self) -> None:
-        # the baseline itself: nothing reaches INV-SEC-001, it is VIOLATED, so it cannot carry
-        result = self.evaluate(self.request(self.v0, BASELINE_DIR, open_targets=(SEC1,)))
+    def test_an_open_target_with_no_fresh_result_blocks(self) -> None:
+        # C-196 "a missing result blocks". Since C-210 DailScopePolicy re-checks every VIOLATED
+        # invariant, so a scope policy that schedules impact's work only (the work set before
+        # C-210) is used here to leave the target without a result: VIOLATED, it cannot carry.
+        class ImpactOnly:
+            def select(self, report, protected, **_):  # type: ignore[no-untyped-def]
+                del protected
+                return report.verification_work
+
+        result = self.evaluate(
+            self.request(self.v0, BASELINE_DIR, open_targets=(SEC1,)), scope_policy=ImpactOnly()
+        )
         self.assertIs(result.kind, ResultKind.REJECTED)
         assert result.decision is not None
         self.assertEqual(result.decision.reason.value, "INSUFFICIENT_EVIDENCE")
+
+    def test_an_unchanged_open_target_is_rechecked_by_dail(self) -> None:
+        # C-210: nothing reaches INV-SEC-001, but it is VIOLATED in the parent, so DAIL checks it;
+        # its fresh FAIL keeps it VIOLATED and the open target does not block (C-196)
+        result = self.evaluate(self.request(self.v0, BASELINE_DIR, open_targets=(SEC1,)))
+        self.assertIs(result.kind, ResultKind.PROMOTED)
+        assert result.state is not None
+        self.assertIs(self.status(result.state, SEC1), InvariantStatus.VIOLATED)
 
     def test_a_protected_target_is_refused_before_anything_is_stored(self) -> None:
         with self.assertRaises(PromotionInputError):

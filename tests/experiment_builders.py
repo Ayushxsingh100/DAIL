@@ -31,15 +31,16 @@ from tests.fixture_catalog import REPO_ROOT
 
 SPEC = REPO_ROOT / "tests" / "fixtures" / "terrapreserve_mini" / "scenarios.json"
 COPIED = ("main.tf", "versions.tf")
-F2, F8, F1, F4, RESERVE, F8_BROKEN = (
+F2, F8, F1, F4, RESERVE, F8_BROKEN, F8_UNTOUCHED = (
     "tp-mini-F2-0001",
     "tp-mini-F8-0002",
     "tp-mini-F1-0003",
     "tp-mini-F4-0004",
     "tp-mini-F2-0005",
     "tp-mini-F8-0006",
+    "tp-mini-F8-0007",
 )
-TARGETS = (F1, F2, F4, F8, F8_BROKEN)
+TARGETS = (F1, F2, F4, F8, F8_BROKEN, F8_UNTOUCHED)
 
 
 def sha256(data: bytes) -> str:

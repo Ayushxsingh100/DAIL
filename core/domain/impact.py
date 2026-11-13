@@ -82,6 +82,9 @@ class ReasonCode(StrEnum):
     NO_PRIOR_EVIDENCE = "NO_PRIOR_EVIDENCE"
     INVARIANT_VERSION_CHANGED = "INVARIANT_VERSION_CHANGED"
     VERIFIER_CHANGED = "VERIFIER_CHANGED"
+    # C-211 (P8a-2): the reasons of invariant work that a scope policy adds; impact never uses them
+    CONDITION_SCOPE = "CONDITION_SCOPE"
+    NOT_PROTECTED_IN_PARENT = "NOT_PROTECTED_IN_PARENT"
 
 
 AFFECTED_CODES: Final = frozenset(
@@ -105,6 +108,7 @@ UNCERTAIN_CODES: Final = frozenset(
 UNCERTAINTY_CODES: Final = frozenset(
     {ReasonCode.UNRESOLVED_CONTENT, ReasonCode.WALK_INCOMPLETE, ReasonCode.ENDPOINT_ABSENT}
 )
+POLICY_CODES: Final = frozenset({ReasonCode.CONDITION_SCOPE, ReasonCode.NOT_PROTECTED_IN_PARENT})
 UNAFFECTED_CODES: Final = frozenset(
     {
         ReasonCode.NO_CHANGE_IN_FOOTPRINT,
@@ -136,6 +140,12 @@ REASON_DEFINITIONS: Final[Mapping[ReasonCode, str]] = MappingProxyType(
         ReasonCode.NO_PRIOR_EVIDENCE: "No prior proof exists to carry forward.",
         ReasonCode.INVARIANT_VERSION_CHANGED: "Only a proof of another invariant version exists.",
         ReasonCode.VERIFIER_CHANGED: "The prior proof was made by another verifier or version.",
+        ReasonCode.CONDITION_SCOPE: (
+            "The experiment condition's scope policy requires this check (not impact's work)."
+        ),
+        ReasonCode.NOT_PROTECTED_IN_PARENT: (
+            "The invariant is not PROTECTED in the parent state, so it is checked again (C-210)."
+        ),
     }
 )
 
@@ -757,7 +767,7 @@ class VerificationWorkItem:
             raise DomainValidationError(
                 "VerificationWorkItem: CREATED_BASELINE is exactly the reason of resource work"
             )
-        if not is_baseline and self.reason not in AFFECTED_CODES | UNCERTAIN_CODES:
+        if not is_baseline and self.reason not in AFFECTED_CODES | UNCERTAIN_CODES | POLICY_CODES:
             raise DomainValidationError(f"VerificationWorkItem: bad reason {self.reason.value}")
 
     def sort_key(self) -> tuple[str, str]:
@@ -931,6 +941,11 @@ class ImpactReport:
         seen_invariants: set[tuple[str, int]] = set()
         seen_resources: set[str] = set()
         for item in work:
+            if item.reason in POLICY_CODES:
+                raise DomainValidationError(
+                    f"ImpactReport.verification_work: {item.target_id} has the scope-policy reason "
+                    f"{item.reason.value}, which impact never gives (C-211)"
+                )
             if item.target_type is WorkTargetType.INVARIANT:
                 _, _, rest = item.target_id.partition(":")
                 invariant_id, _, version = rest.rpartition(":")

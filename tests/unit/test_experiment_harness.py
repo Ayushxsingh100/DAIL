@@ -48,7 +48,17 @@ from experiments.runner import (
     read_result,
     run_experiment,
 )
-from tests.experiment_builders import F1, F2, F4, F8, F8_BROKEN, TARGETS, TempDirs, mini_root
+from tests.experiment_builders import (
+    F1,
+    F2,
+    F4,
+    F8,
+    F8_BROKEN,
+    F8_UNTOUCHED,
+    TARGETS,
+    TempDirs,
+    mini_root,
+)
 
 A, B, C, CP = Condition.A, Condition.B, Condition.C, Condition.C_PRIME
 ALL_CONDITIONS = (A, B, C, CP)
@@ -270,6 +280,32 @@ class TestConditions(unittest.TestCase):
                 self.assertEqual(last["decision"]["type"], "PROMOTE")
                 self.assertEqual(first["new_state"]["invariants"][SEC1]["status"], "VIOLATED")
                 self.assertEqual(last["new_state"]["invariants"][SEC1]["status"], "PROTECTED")
+
+    def test_a_middle_step_that_does_not_touch_the_target_promotes_everywhere(self) -> None:
+        # C-210 (closes C-209): DAIL re-checks the VIOLATED target although impact does not list it
+        for condition in ALL_CONDITIONS:
+            with self.subTest(condition=condition):
+                result = read_result(self.layout, self.exp.trial_id(F8_UNTOUCHED, condition))
+                first, last = result["transitions"]
+                self.assertEqual(first["decision"]["type"], "PROMOTE")
+                self.assertEqual(first["new_state"]["invariants"][SEC1]["status"], "VIOLATED")
+                self.assertEqual(last["decision"]["type"], "PROMOTE")
+                self.assertEqual(last["new_state"]["invariants"][SEC1]["status"], "PROTECTED")
+
+    def test_the_not_protected_items_are_recorded(self) -> None:
+        for condition in (C, CP):
+            with self.subTest(condition=condition):
+                first = read_result(self.layout, self.exp.trial_id(F8_UNTOUCHED, condition))[
+                    "transitions"
+                ][0]
+                row = next(w for w in first["work"] if w["target_id"] == "INVARIANT:INV-SEC-001:2")
+                self.assertEqual(row["origin"], "condition")
+                self.assertEqual(row["selected_reason"], "NOT_PROTECTED_IN_PARENT")
+                self.assertEqual(first["work_counts"]["not_protected_in_parent"], 1)
+        b_first = read_result(self.layout, self.exp.trial_id(F2, B))["transitions"][0]
+        added = [w for w in b_first["work"] if w["origin"] == "condition"]
+        self.assertTrue(added)
+        self.assertEqual({w["selected_reason"] for w in added}, {"CONDITION_SCOPE"})
 
     def test_a_rejected_middle_step_truncates_the_rest(self) -> None:
         for condition in (B, C, CP):

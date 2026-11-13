@@ -60,6 +60,18 @@
       ]
     },
     {
+      "scenario_id": "tp-mini-F8-0007",
+      "family": "F8",
+      "template_id": "tpl-mini",
+      "v1_role": "target",
+      "target": {"kind": "repair", "invariant_id": "INV-SEC-001", "description": "Close public SSH in two steps; the first does not touch the security groups."},
+      "steps": [
+        {"from": "fixtures/canonical_regression/baseline", "edits": []},
+        {"from": "fixtures/canonical_regression/baseline", "edits": [["instance_type               = \"t3.micro\"", "instance_type               = \"t3.small\""]]},
+        {"from": "fixtures/canonical_regression/patch_safe", "edits": []}
+      ]
+    },
+    {
       "scenario_id": "tp-mini-F2-0005",
       "family": "F2",
       "template_id": "tpl-mini",
