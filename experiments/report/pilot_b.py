@@ -152,11 +152,11 @@ def render_p10b(report: Mapping[str, Any]) -> str:
         "",
         f"- Run A: `{a['generation_name']}` (`{a['generation_id']}`), prompt "
         f"`{a['prompt_version']}`,"
-        f" k = {a['repetitions']}, temperature 0; manifest sha256 "
+        f" k = {a['repetitions']}, {_sampling(a)}; manifest sha256 "
         f"`{a['candidates_manifest_sha256']}`",
         f"- Run B: `{b['generation_name']}` (`{b['generation_id']}`), prompt "
         f"`{b['prompt_version']}`,"
-        f" k = {b['repetitions']}, temperature 0.7, top_p 0.95; manifest sha256 "
+        f" k = {b['repetitions']}, {_sampling(b)}; manifest sha256 "
         f"`{b['candidates_manifest_sha256']}`",
         f"- P10a (compared): `{before['generation_name']}` (`{before['generation_id']}`), prompt "
         f"`{before['prompt_version']}`",
@@ -192,8 +192,8 @@ def render_p10b(report: Mapping[str, Any]) -> str:
         "",
         "## 3. Reasons for C's rejections (verifier, result, reason, count)",
         "",
-        "Each required check that did not PASS in a candidate C rejected, counted once per",
-        "candidate.",
+        "Every required check that did not PASS in a candidate C rejected, counted per check: one",
+        "candidate can hold several (one per resource item or invariant).",
         "",
     ]
     lines += _table(
@@ -271,6 +271,11 @@ def render_p10b(report: Mapping[str, Any]) -> str:
         "",
     ]
     return "\n".join(lines)
+
+
+def _sampling(run: Mapping[str, Any]) -> str:
+    found = sorted({(m["pin"]["temperature"], m["pin"]["top_p"]) for m in run["models"].values()})
+    return "; ".join(f"temperature {t}, top_p {p}" for t, p in found)
 
 
 def _s(ms: float | None) -> float | None:
