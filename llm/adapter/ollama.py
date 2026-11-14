@@ -10,7 +10,8 @@ https://github.com/ollama/ollama/blob/v0.40.16/docs/api.md,
 
 * ``POST /api/chat`` with ``model``, ``messages`` (system, user), ``stream: false``, ``format`` (the
   JSON schema of ``LLMRepairResponse``: "Format can be ``json`` or a JSON schema") and ``options``
-  (``temperature``, ``top_p``, ``seed``, ``num_predict``). The reply is one object with
+  (``temperature``, ``top_p``, ``seed``, ``num_predict``, and ``num_ctx`` when the configuration
+  sets it, P10a). The reply is one object with
   ``message.content``, ``done``, ``prompt_eval_count`` and ``eval_count``.
 * ``GET /api/tags`` (``name``, ``digest``, ``details.quantization_level``) and ``GET /api/version``.
 * Errors are ``{"error": "<error message>"}`` with 400, 404, 429, 500 or 502.
@@ -145,6 +146,8 @@ class OllamaProvider:
         }
         if config.seed is not None:
             options["seed"] = config.seed
+        if config.num_ctx is not None:
+            options["num_ctx"] = config.num_ctx
         body = {
             "model": config.model_name,
             "messages": [

@@ -13,7 +13,12 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, Final
 
-from experiments.metrics.extractor import EXTRACTOR_VERSION, Extraction, to_json
+from experiments.metrics.extractor import (
+    EXTRACTOR_VERSION,
+    METRICS_VERSION,
+    Extraction,
+    to_json,
+)
 
 REPORT_KEYS: Final = (
     "experiment_id",
@@ -73,6 +78,7 @@ def build_report(
         "experiment_id": definition.get("experiment_id"),
         "experiment_name": definition.get("name"),
         "experiment_version": definition.get("version"),
+        "metrics_version": METRICS_VERSION,
         "extractor_version": EXTRACTOR_VERSION,
         "trial_count": len(statuses),
         "included_count": len(statuses) - len(failures),

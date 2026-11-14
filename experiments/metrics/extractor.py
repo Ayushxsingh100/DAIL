@@ -1,5 +1,13 @@
-"""The metric extractor, version ``metrics-draft-1`` (P8b work package Section 4; Doc 13 §25-§35,
-Appendix B; C-212 to C-214).
+"""The metric extractor ``extractor-2``, for the metric definitions ``metrics-draft-1`` (P8b work
+package Section 4; Doc 13 §25-§35, Appendix B; C-212 to C-214).
+
+Versions (P10a Section 3.1): ``METRICS_VERSION`` names the metric definitions (C-212) and
+``EXTRACTOR_VERSION`` names this code; every metric record and report carries both. The code of
+``experiments/metrics`` and ``experiments/scoring`` is pinned by hash per extractor version in
+``tests.unit.test_p10a_extractor_version``: a code change needs a new ``EXTRACTOR_VERSION``. The
+first extractor was version ``metrics-draft-1`` (one value for both, P8b); ``extractor-2`` is the
+same code with the two versions apart and the generation metrics of
+``experiments.metrics.generation``.
 
 Input: the transitions of the stored trial records (``experiments.metrics.model``), the scenarios'
 truth from ``experiments.scoring``, DAIL's S0 results under B, and the identity truth table. Output:
@@ -51,7 +59,8 @@ from experiments.scoring.identity import IdentityTable, judge, true_pairs
 from experiments.scoring.labels import ScenarioLabels
 from experiments.scoring.truth import TransitionTruth, transition_truth
 
-EXTRACTOR_VERSION: Final = "metrics-draft-1"
+METRICS_VERSION: Final = "metrics-draft-1"  # the metric definitions (C-212)
+EXTRACTOR_VERSION: Final = "extractor-2"  # this code (P10a Section 3.1)
 NAMESPACE: Final = uuid.uuid5(uuid.NAMESPACE_URL, "dail/experiments/metrics")
 Z95: Final = 1.959963984540054
 ORDER: Final = ("A", "B", "C", "C_PRIME")
@@ -130,6 +139,7 @@ class _Out:
                 "value": value,
                 "unit": unit,
                 "wilson95": interval,
+                "metrics_version": METRICS_VERSION,
                 "extractor_version": EXTRACTOR_VERSION,
             }
         )
@@ -670,6 +680,7 @@ def baseline_guard(report: Mapping[str, Any]) -> list[dict[str, Any]]:
 
 def to_json(x: Extraction) -> dict[str, Any]:
     return {
+        "metrics_version": METRICS_VERSION,
         "extractor_version": EXTRACTOR_VERSION,
         "experiment_id": x.experiment_id,
         "metrics": x.metrics,

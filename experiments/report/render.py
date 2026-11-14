@@ -122,7 +122,12 @@ def render_markdown(report: Mapping[str, Any]) -> str:
         "",
         f"- Experiment: `{report['experiment_name']}` version {report['experiment_version']}, "
         f"id `{report['experiment_id']}`",
-        f"- Extractor: `{report['extractor_version']}`",
+        f"- Extractor: `{report['extractor_version']}`"
+        + (
+            f"; metric definitions: `{report['metrics_version']}`"
+            if "metrics_version" in report  # P10a; a P8b report has one version
+            else ""
+        ),
         f"- Trials: {report['trial_count']} (included {report['included_count']}, "
         f"excluded {report['excluded_count']})",
         f"- Common prefix of all conditions: {prefix['common_prefix_all']} transitions; "

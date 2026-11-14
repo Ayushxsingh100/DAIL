@@ -12,7 +12,8 @@ order; the first that fails decides, and its failure class follows C-192:
     (a limit of the parser, C-93)                                                UNSUPPORTED
  3  only ``resource`` blocks at the top level (with two labels)                  POLICY_VIOLATION
  4  ``provisioner``, ``connection`` inside a block; a ``lifecycle`` that is not   POLICY_VIOLATION
-    the parent's (whitespace-normalized); ``dynamic``                            UNSUPPORTED
+    the parent's (whitespace-normalized), including a MODIFY block that drops
+    the parent's ``lifecycle`` (C-221, validator 2); ``dynamic``                 UNSUPPORTED
  5  boundaries (C-188, C-189): blocks and ``changed_addresses`` agree, no         INVALID_OUTPUT
     block twice, no DELETE of an address the parent does not have
  6  scope (C-190): type outside the supported model                              UNSUPPORTED
@@ -77,7 +78,7 @@ from llm.adapter.context import SUPPORTED_TYPES
 from llm.schemas.records import FailureClass
 from llm.schemas.repair_response import LLMRepairResponse, RepairStatus
 
-VALIDATOR_VERSION: Final = "dail-patch-validator-1"
+VALIDATOR_VERSION: Final = "dail-patch-validator-2"  # 2: the lifecycle rule (C-221)
 PATCH_FILE: Final = "dail_llm_patch.tf"
 F = FailureClass
 OP = OperationType
@@ -318,10 +319,14 @@ class PatchValidator:
                 for i in block.body.items
                 if isinstance(i, Block) and i.type == "lifecycle"
             ]
-            if lifecycles and lifecycles != self._parent_lifecycles(_address(block)):
+            # compared as in validator 1; since validator 2 (C-221) a block for an address whose
+            # parent block has a lifecycle block must also contain it unchanged
+            parent = self._parent_lifecycles(_address(block))
+            if (lifecycles or parent) and lifecycles != parent:
                 raise _Refuse(
                     F.POLICY_VIOLATION,
-                    f"{_address(block)}: a lifecycle block is allowed only as the parent's",
+                    f"{_address(block)}: a lifecycle block is allowed only as the parent's, and a "
+                    "MODIFY must keep the parent's lifecycle block",
                 )
 
     def _parent_decl(self, address: str) -> ResourceDecl | None:

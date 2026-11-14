@@ -1,0 +1,14 @@
+{
+ "granite3_3-8b": {
+  "library page": "ollama.com/library/granite3.3:8b: publisher IBM Research; licence Apache 2.0; license layer 4a99a6dd617d (Apache License 2.0)",
+  "ollama show --license": "Apache License, Version 2.0, January 2004 (13 Nov 2026)"
+ },
+ "phi4-mini-3_8b": {
+  "library page": "ollama.com/library/phi4-mini:3.8b: references Microsoft Phi-4-mini-instruct; license layer fa8235e5b48f (MIT License, Copyright (c) Microsoft Corporation); the page text names no licence outside that layer",
+  "ollama show --license": "Microsoft. Copyright (c) Microsoft Corporation. MIT License (13 Nov 2026)"
+ },
+ "qwen2_5-coder-7b": {
+  "library page": "ollama.com/library/qwen2.5-coder:7b: license layer 832dd9e00a68 (Apache License 2.0); the tags page names no licence",
+  "ollama show --license": "Apache License, Version 2.0, January 2004 (13 Nov 2026)"
+ }
+}

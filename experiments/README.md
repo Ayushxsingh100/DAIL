@@ -78,3 +78,69 @@ $DAIL_EXPERIMENT_ROOT/experiment/<experiment_id>/
   for scoring, which is P8b.
 - **Test split:** the loader refuses `split = "test"`. The test split, `$TERRAPRESERVE_PRIVATE` and
   the test ids are not read before P10, after the protocol is frozen.
+
+## LLM candidates (P10a)
+
+`experiments/generation/` generates repair candidates with free open-weight models on the local
+Ollama server, freezes every attempt, replays the valid ones through DAIL under A, B, C and C′, and
+exports them for TerraPreserve's oracle. Everything stays on this machine (C-71, C-218). No label,
+`description`, `intent`, `mutation_record` or step after S0 is read
+(`tests/contract/test_experiment_blinding.py`, checks (c) and (d)).
+
+```bash
+python3.12 -m experiments.generation generate --name p10a-pilot --models KEY,... --per-family 4 --k 1
+python3.12 -m experiments.generation replay --name p10a-pilot --replay-name replay-1
+python3.12 -m experiments.generation export --name p10a-pilot
+python3.12 -m experiments.report pilot --name p10a-pilot --replay-name replay-1 \
+    --licence-checks checks.json --doc docs/P10A_MODEL_PILOT
+```
+
+- **Scenarios and task (C-219):** repair scenarios only (F2, F4, F8). The model is given S0, the
+  fixed task "Repair `<id>`: `<the registry's statement>`. Keep every other protected invariant
+  satisfied. Make the smallest change." (`experiments/task_text.py`), and P7's context
+  (`build_context`, focus = the target invariant's scope resources).
+- **Scope (C-220):** every resource address of S0, every supported type, no attribute restriction,
+  all four operations; recorded with every candidate and every replay.
+- **Parent:** S0 through the baseline flow with the registry-v1.1 definitions, from a
+  configuration-only copy (`*.tf`, `*.tf.json`) of the step directory.
+- **Generation:** `llm/adapter/generate.py` only (prompt `dail-repair-prompt-2`, parser 2, validator
+  `dail-patch-validator-2`, which refuses a MODIFY that drops the parent's `lifecycle` block, C-221).
+  Retry policy `p10a-retry-2`: at most two calls, again only after TRANSIENT_ERROR or
+  INVALID_OUTPUT. The seed of repetition k is the pinned seed + k − 1.
+- **Switch:** `llm.generation_enabled` is on only in the harness's copy of the configuration, by the
+  reviewed `experiments/config/llm.toml` (as C-207 (3) does for promotion); `config/` keeps it off.
+- **Models:** pinned in the reviewed `experiments/config/models.toml` by tag, digest, temperature,
+  top_p, seed, max_output_tokens, timeout and num_ctx (the budget's context window). A model whose
+  installed digest is not the pinned one is refused before anything is written.
+
+```text
+$DAIL_EXPERIMENT_ROOT/candidates/<generation_id>/
+  definition.json                      what was asked (write once)
+  <model>/model.json                   the pin and the installed facts
+  <model>/<scenario_id>/<k>/
+    records/request-<n>.json           P7's LLMRequest of each call
+    records/response-<n>.json          P7's LLMResponse of each call (raw reply redacted)
+    patch.tf                           a valid candidate's patch only
+    timing.json                        wall-clock time
+    attempt.json                       status, failure class and source, parent, scope, hashes
+  candidates_manifest.json             every attempt with the SHA-256 of each file
+  replay/<replay name>/                one store per candidate and condition; replay.json
+  oracle_export/                       the built .tf files per valid candidate; oracle_export.json
+  pilot_report/<replay name>/          the pilot report (python -m experiments.report pilot)
+```
+
+- **Freezing:** every file is written once. A generation whose manifest exists is frozen and never
+  regenerated or edited; an attempt directory without `attempt.json` (an interrupted call) is never
+  completed or overwritten. A REGENERATE (Doc 13 §47) is a new name or version, so a new
+  `generation_id`.
+- **Replay:** each valid candidate is evaluated as a one-step candidate from S0 under every condition
+  through `LLMEvaluationRequest`. In the same call the validator rebuilds the directory from the
+  frozen reply, the rebuilt tree hash is compared with the frozen one, and the build is deleted. A
+  mismatch gets no decision. Invalid attempts are listed as generation failures, never as
+  decisions.
+- **Export:** for every valid candidate, the built `.tf` files and nothing else, with ids and hashes
+  (tree hash and the D4-09 content hash) in `oracle_export.json`. TerraPreserve labels them in its
+  own package; DAIL never does.
+- **Failure source:** a failed attempt's class is the provider's when there was no reply (a
+  connection failure, a timeout, Ollama's 400/404 as UNSUPPORTED), the budget's for
+  CONTEXT_INSUFFICIENT, and the model's otherwise (P7a verdict limit 4).

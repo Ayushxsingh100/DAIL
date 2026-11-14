@@ -555,7 +555,26 @@ Limits: the open-target rule blocked C and C' on F8 (C-209, closed by C-210 in P
 Carry-forward: C-200 to C-204 and C-207 Proposed; C-209 closed by C-210; P8b scores the stored records.
 ```
 
-## P8b — Scoring, metrics and the dev report (pending external review)
+## P8b — Scoring, metrics and the dev report — passed with limits (verdict on PR #31)
+
+```text
+P8b: passed with limits (verdict on PR #31). Recorded in P10a (13 Nov 2026).
+Limits of the verdict (open items, with the package that closes each):
+The verdict's own wording of each limit was not pasted into P10a; the lines below give what the
+P10a work package says of each.
+1. C-212 to C-215 and C-217 Proposed. [Closed: Decided by the authors on 13 Nov 2026, "accepted as
+   built after external review", recorded in P10a.]
+2. The extractor version (P10a Section 3.1). [Closed in P10a:
+   EXTRACTOR_VERSION is extractor-2, METRICS_VERSION is metrics-draft-1; every metric record and
+   report carries both, and a test pins the hash of the extractor modules.]
+3. tests/unit/test_e2e_concurrency.py, the named interleavings (P10a Section 3.1). [Closed in P10a:
+   the "A_done"/"B_done" markers are added; 50 loaded runs are reported in the P10a section.]
+4.-8. NOT YET RECORDED: the text of the verdict's limits 4 to 8 was not pasted into P10a; they are
+   recorded when the user pastes it.
+```
+
+The P8b author's input to the review, as written before the verdict (the run-2 numbers in it are
+superseded by run 3, C-216):
 
 ```text
 P8b mini-gate: NOT DECIDED. Status written by the P8b author as an input to the external review.
@@ -575,6 +594,7 @@ Fix round P8b-2 (13 Nov 2026, after the external review of PR #31 at 86a1e5a): b
   136 common transitions, 0 differences. An extractor reading found in the fix round (C-217 (1)):
   unproven required checks now count in the UNKNOWN/UNSUPPORTED rates.
   The numbers below this paragraph are those of the first P8b report (run 2), kept as written.
+  [Superseded by run 3 (C-216).]
 What exists:
   experiments/scoring (the only label reader: labels with the manifest and scenario hash checks,
   per-transition truth, the identity truth table identity-truth-1 written from D4_OPERATORS.md,
@@ -605,10 +625,12 @@ Limits: metrics-draft-1 is a draft (P10 freezes the definitions before the test 
 Carry-forward: C-212 to C-215 Proposed.
 ```
 
-## P8 — Experiment Harness (pending external review)
+## P8 — Experiment Harness — passed with limits (verdict on PR #31)
 
 ```text
-P8 gate (Doc 15 §15.3) and milestone M5 (Doc 15 §25): NOT DECIDED. Each item and what bears on it:
+P8 gate (Doc 15 §15.3) and milestone M5 (Doc 15 §25): passed with limits (verdict on PR #31).
+Recorded in P10a (13 Nov 2026). The limits are those of the P8b verdict, listed in the P8b section.
+The P8b author's map of each item, as written before the verdict:
 §15.3 "Trials are reproducible" ........ tests.unit.test_experiment_harness.TestReproducibility
     (records identical across runs, concurrency, corrupted labels); the 20-trial re-run
     (P8_DEV_PILOT.md section 13); the reviewer's independent re-run of both dev runs (PR #30).
@@ -641,6 +663,56 @@ P9 (AWS integration) and milestone M6 (AWS Demonstration) are removed (C-71, Dec
 11 Nov 2026): AWS stays fully offline, with no deployment, no AWS account and no calibration against
 live AWS; the oracle and DAIL are configuration-level only. The packages after P6c are P6d, P7a, P7b,
 P8a, P8b and P10.
+
+## P10a — LLM candidates for the experiment (pending external review)
+
+```text
+P10a mini-gate: NOT DECIDED. Status written by the P10a author as an input to the external review.
+Decisions (authors, 13 Nov 2026): C-218 where candidates are generated, C-219 repair scenarios and
+  the fixed task, C-220 the scope, C-221 the lifecycle rule; C-212 to C-215 and C-217 Decided.
+  Readings: C-222 Proposed.
+What exists:
+  llm/validation/patch.py dail-patch-validator-2: a MODIFY that drops the parent's lifecycle block
+  is POLICY_VIOLATION (closes P7b verdict limit 4). LLMConfig.num_ctx (optional) sent as Ollama's
+  num_ctx option.
+  experiments/generation: task (S0-only GenerationInput, the fixed task, the decision-5 scope,
+  focus), models (pins by tag and digest, refusal of another digest, budget from num_ctx), parent
+  (S0 through the baseline flow from a configuration-only copy, P7b limit 6), run (generate through
+  llm/adapter/generate.py and freeze every attempt; candidates_manifest.json), replay (rebuild in the
+  same call, tree hash checked, build deleted, P7b limit 5; scope recorded, P7b limit 7), export
+  (the built .tf files and oracle_export.json). experiments/config/llm.toml switches generation on in
+  the harness's copy only; experiments/config/models.toml holds the pins. experiments/metrics/
+  generation.py (failure source provider/budget/model, P7a limit 4; server token counts apart from
+  the ceil(characters / 4) estimate, P7a limit 5). EXTRACTOR_VERSION extractor-2 apart from
+  METRICS_VERSION metrics-draft-1, its code pinned by hash (P8b limit 2).
+  Blinding contract (c), (d): generation names no label field, description or later step and
+  reads steps[0] only; mutants caught (a steps[1] read, a description key).
+Concurrency (P8b limit 3): tests/unit/test_e2e_concurrency.py with the A_done/B_done markers passed
+  50 of 50 runs while a loader kept all 18 CPUs busy (56-146 s per run). The file at 4f3d131 also
+  passed 50 of 50 in the same conditions: the timing failure was not reproduced here, so the fix
+  has no observed red run.
+Wiring run (13 Nov 2026, opt-in test tests.unit.test_p10a_wiring, qwen2.5-coder:1.5b, tp-v1-F2-0027,
+  k = 1): generation, freezing, replay and export ran end to end; the model's reply was invalid HCL
+  on both calls (INVALID_OUTPUT, model), so replay and export had no candidate.
+Dev model pilot (13-14 Nov 2026, the author's machine, CPU only; DAIL 34f0153, clean tree): generation
+  p10a-dev-pilot (d4507101...), manifest sha256 de1bb7b3...; 12 dev repair scenarios (4 lowest ids of
+  F2, F4, F8) x 3 models, k = 1, temperature 0, seed 20261113. docs/P10A_MODEL_PILOT.md is generated
+  from the records. Valid patches: qwen2.5-coder:7b 7/12, granite3.3:8b 3/12, phi4-mini:3.8b 10/12;
+  no provider or budget failure. Replay: 80 of 80 rebuilds matched the frozen tree hash; DAIL
+  decisions on the 20 valid candidates: A PROMOTE 6 / REJECT 14; B, C, C' REJECT 20. Under C, 12 were
+  REQUIRED_UNSUPPORTED (mostly group.mixed and group.retained_inline: inline ingress on a group
+  that also has rule resources) and 8 REQUIRED_CHECK_FAILED. No model is judged: there are no
+  labels. Timing: one phi4-mini call (tp-v1-F2-0029) lasted 39 393 s, overnight, almost certainly
+  across a sleep of the machine (the call timeout is 1 800 s); the record is kept as it is.
+  Without that attempt phi4-mini's mean per attempt is 73.2 s and the 36-scenario projection
+  0.73 / 2.20 / 3.66 h for k = 1 / 3 / 5 (qwen2.5-coder:7b 1.19 / 3.56 / 5.93 h; granite3.3:8b
+  2.55 / 7.66 / 12.77 h).
+  Export: 20 candidates, none refused.
+Limits: one machine, one run per model, k = 1; the projection assumes test scenarios like these;
+  the export is not labelled (TerraPreserve's package); the P8b verdict's limits 4-8 are not
+  recorded (their text was not pasted).
+Carry-forward: C-222 Proposed; P10b freezes models, k, the retry policy and the metrics.
+```
 
 ## Temporary exceptions
 

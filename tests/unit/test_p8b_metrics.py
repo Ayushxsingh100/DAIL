@@ -232,11 +232,15 @@ class TestRecords(Case):
                 "denominator",
                 "value",
                 "unit",
+                "metrics_version",
                 "extractor_version",
             ):
                 self.assertIn(key, record)
-            self.assertEqual(record["extractor_version"], "metrics-draft-1")
-        self.assertEqual(EXTRACTOR_VERSION, "metrics-draft-1")
+            # P10a Section 3.1: the definitions stay metrics-draft-1; the extractor has its own
+            # version (it was the same value in P8b)
+            self.assertEqual(record["metrics_version"], "metrics-draft-1")
+            self.assertEqual(record["extractor_version"], EXTRACTOR_VERSION)
+        self.assertEqual(EXTRACTOR_VERSION, "extractor-2")
 
     def test_the_extractor_is_deterministic(self) -> None:
         from experiments.metrics.extractor import dumps_metrics
