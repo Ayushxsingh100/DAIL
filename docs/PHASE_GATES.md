@@ -569,8 +569,21 @@ P10a work package says of each.
    report carries both, and a test pins the hash of the extractor modules.]
 3. tests/unit/test_e2e_concurrency.py, the named interleavings (P10a Section 3.1). [Closed in P10a:
    the "A_done"/"B_done" markers are added; 50 loaded runs are reported in the P10a section.]
-4.-8. NOT YET RECORDED: the text of the verdict's limits 4 to 8 was not pasted into P10a; they are
-   recorded when the user pastes it.
+4. The identity truth table leaves out 5 operators (40 pairs per condition). Among them is
+   `op_f5_count_each_safe`: under DAIL's own decided semantics (C-76), adding `count = 1` is an
+   implicit move, so the authors may add that row. H3 must report the exclusions.
+5. C's 3 identity and evidence-transfer errors are the AMI replacements that DAIL v1 calls MODIFIED
+   (C-130: the replace list holds only the security-group `name`). This is a stated limitation for
+   the paper.
+6. The 6 DAIL–oracle disagreements are all DAIL UNSUPPORTED where the oracle says PASS (F5-0319,
+   F6-0350), and they account for C's 2 false rejections.
+7. Everything in P8b is a dev pilot under draft definitions. No unsafe promotion under C and 0 of
+   98 regressions missed on dev are not findings. P10 freezes the protocol, the metric definitions
+   and the extractor version, adds the inferential analysis, and only then opens the test split.
+8. The P8b section of PHASE_GATES still shows the superseded run-2 numbers above the run-3
+   paragraph. Mark them as superseded wherever they are quoted.
+   [P10b: marked in the P8b section, its reproducibility line and the P8 gate map.]
+(Limits 4 to 8 recorded word for word in P10b, 14 Nov 2026.)
 ```
 
 The P8b author's input to the review, as written before the verdict (the run-2 numbers in it are
@@ -603,7 +616,7 @@ What exists:
   ExperimentReport of §33 and its Markdown); python -m experiments.report extract|select|compare.
   Blinding contract: (a) no module outside experiments/scoring names a label field; (b) no execution
   module imports experiments.scoring, .metrics or .report (both shown failing on a mutant).
-Dev report (13 Nov 2026): docs/P8_DEV_PILOT.md, generated from p8a-dev-harness-check-2
+Dev report (13 Nov 2026) [superseded by run 3, C-216]: docs/P8_DEV_PILOT.md, generated from p8a-dev-harness-check-2
   (ec2b4fa8...), 896 trials, 1120 transitions, 1835 metric records; metric_records.json sha256
   9f4d3d65..., report.json sha256 6fd62e2d...; a second extract wrote byte-identical files.
   Headline (all evaluated transitions; numerator / denominator): unsafe promoted / promoted
@@ -613,8 +626,8 @@ Dev report (13 Nov 2026): docs/P8_DEV_PILOT.md, generated from p8a-dev-harness-c
   A 0/280, B, C, C' 7/280. Unsafe promotions under C: none. Truth changes outside the verified
   set: 0. DAIL-oracle disagreements under B: 6 (all DAIL UNSUPPORTED, oracle PASS; 2 scenarios).
   Identity errors / true pairs: C 3/80, C' 23/80 (40 pairs excluded per condition).
-  These are dev numbers of a draft protocol, not findings (C-214).
-Reproducibility: p8b-repro-check (308471ba...), 20 scenarios x 4 conditions = 80 trials on the
+  These are dev numbers of a draft protocol, not findings (C-214). [superseded by run 3, C-216]
+Reproducibility [superseded by run 3, C-216]: p8b-repro-check (308471ba...), 20 scenarios x 4 conditions = 80 trials on the
   same code; 136 transitions in common with run 2, 0 decision and 0 invariant-result differences.
 Tests: tests.unit.test_p8b_metrics (hand-computed record set), test_p8b_scoring_report,
   tests.contract.test_experiment_blinding. Mutation checks: 12 of 12 metric mutants caught (3 only
@@ -649,7 +662,8 @@ The P8b author's map of each item, as written before the verdict:
 M5 "Experiments run reproducibly" ...... as §15.3 "Trials are reproducible".
 M5 "Baselines work" .................... conditions A and B (tests.unit.test_p8a_conditions,
     test_experiment_harness.TestConditions; P8_DEV_PILOT.md section 1).
-M5 "Metrics generated" ................. metric_records.json (1835 records) of run 2.
+M5 "Metrics generated" ................. metric_records.json (1835 records) of run 2
+    [superseded by run 3, C-216]; run 3's report (docs/P8_DEV_PILOT.md) replaces it.
 M5 "Trial artifacts linked" ............ correlation ids and artifact_refs
     (test_experiment_harness.TestConditions.test_a_transition_records_what_section_4_3_lists,
     report artifact_refs).
@@ -664,7 +678,16 @@ P9 (AWS integration) and milestone M6 (AWS Demonstration) are removed (C-71, Dec
 live AWS; the oracle and DAIL are configuration-level only. The packages after P6c are P6d, P7a, P7b,
 P8a, P8b and P10.
 
-## P10a — LLM candidates for the experiment (pending external review)
+## P10a — LLM candidates for the experiment — passed with limits (verdict on PR #32)
+
+```text
+P10a: passed with limits (verdict on PR #32). Recorded in P10b (14 Nov 2026); merged as 839c2d3.
+Limits of the verdict (open items):
+1.-7. NOT YET RECORDED: the text of the verdict's limits 1 to 7 was not in the merge commit or on
+   the PR and was not pasted into P10b; they are recorded when the user pastes it.
+```
+
+The P10a author's input to the review, as written before the verdict:
 
 ```text
 P10a mini-gate: NOT DECIDED. Status written by the P10a author as an input to the external review.
