@@ -67,7 +67,7 @@ class TestVersions(unittest.TestCase):
                 self.assertEqual(rendered_digest(version), digest)
 
     def test_a_template_change_without_a_new_version_fails(self) -> None:
-        name = "SYSTEM_TEMPLATE_V3"
+        name = "SUPPORTED_MODEL_RULES_V3"
         original = getattr(templates, name)
         try:
             setattr(templates, name, original + " ")

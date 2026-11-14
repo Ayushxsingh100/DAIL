@@ -138,3 +138,72 @@ def model_metrics(
             "decisions": dict(sorted(decisions.items())),
         }
     return out
+
+
+# --- P10b (extractor-3) ---------------------------------------------------------------
+
+
+def rejection_reasons(
+    replays: Iterable[Mapping[str, Any]], condition: str
+) -> dict[str, list[dict[str, Any]]]:
+    """Per model: the required checks that did not PASS in the candidates ``condition`` rejected,
+    counted by (verifier, result, reason), most frequent first (P10b Run A)."""
+    counts: dict[str, Counter[tuple[str, str, str | None]]] = {}
+    for r in replays:
+        if r["condition"] != condition or r["decision"] != "REJECT" or r["transition"] is None:
+            continue
+        required = {c["target_id"] for c in r["transition"]["required"]}
+        cell = counts.setdefault(r["model_key"], Counter())
+        for w in r["transition"]["work"]:
+            if w["target_id"] in required and w["result"] not in (None, "PASS"):
+                cell[(w["verifier_id"], w["result"], w["reason"])] += 1
+    return {
+        model: [
+            {"verifier_id": v, "result": res, "reason": why, "count": n}
+            for (v, res, why), n in sorted(
+                cell.items(), key=lambda kv: (-kv[1], kv[0][0], kv[0][1], str(kv[0][2]))
+            )
+        ]
+        for model, cell in sorted(counts.items())
+    }
+
+
+def distinct_patches(attempts: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Per model: how many distinct valid patches (by ``patch_sha256``) each scenario's samples gave
+    (P10b Run B)."""
+    out: dict[str, dict[str, Any]] = {}
+    for model in sorted({a["model_key"] for a in attempts}):
+        mine = [a for a in attempts if a["model_key"] == model]
+        per: dict[str, set[str]] = {}
+        samples: Counter[str] = Counter()
+        for a in mine:
+            samples[a["scenario_id"]] += 1
+            found = per.setdefault(a["scenario_id"], set())
+            if a["status"] == "PATCH" and a["patch_sha256"] is not None:
+                found.add(a["patch_sha256"])
+        counts = {sid: len(found) for sid, found in sorted(per.items())}
+        by = Counter(str(n) for n in counts.values())
+        out[model] = {
+            "per_scenario": counts,
+            "scenarios_by_distinct": dict(sorted(by.items())),
+            "samples_per_scenario": max(samples.values()) if samples else 0,
+            "mean_distinct": _mean([float(n) for n in counts.values()]),
+        }
+    return out
+
+
+def experiment_projection(
+    mean_seconds_per_attempt: Mapping[str, float | None], *, scenarios: int, k: int
+) -> dict[str, Any]:
+    """The time of ``scenarios`` x every model x ``k``, one model at a time (P10b Run B)."""
+    per = {
+        m: None if v is None else v * scenarios * k
+        for m, v in sorted(mean_seconds_per_attempt.items())
+    }
+    return {
+        "scenarios": scenarios,
+        "k": k,
+        "per_model_seconds": per,
+        "total_seconds": sum(v for v in per.values() if v is not None),
+        "models_without_a_mean": [m for m, v in per.items() if v is None],
+    }

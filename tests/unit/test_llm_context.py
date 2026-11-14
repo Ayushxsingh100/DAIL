@@ -238,8 +238,9 @@ class TestBudget(unittest.TestCase):
 
 class TestPrompts(unittest.TestCase):
     def test_version_and_stable_hash(self) -> None:
-        # P7b (C-193): version 2 is current; version 1 stays reproducible
-        self.assertEqual(PROMPT_VERSION, "dail-repair-prompt-2")
+        # P7b (C-193): version 2 was current; P10b (C-223): version 3 is current; versions 1 and 2
+        # stay reproducible (tests.unit.test_p10b_prompt_v3 checks both renderings)
+        self.assertEqual(PROMPT_VERSION, "dail-repair-prompt-3")
         v1 = "dail-repair-prompt-1"
         self.assertEqual(template_hash(v1), PROMPT_HASHES[v1])
         self.assertEqual(render(canonical_context(), version=v1).prompt_version, v1)
