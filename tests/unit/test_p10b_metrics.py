@@ -111,3 +111,24 @@ class TestVersion(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestP10bDocument(unittest.TestCase):
+    """Section 3: "Write the pilot report as ``docs/P10B_MODEL_PILOT.md``, generated from the stored
+    records." The committed Markdown is the rendering of the committed JSON."""
+
+    def test_the_document_is_the_rendering_of_its_json(self) -> None:
+        import json
+
+        from experiments.report.pilot_b import render_p10b
+        from tests.fixture_catalog import REPO_ROOT
+
+        report = json.loads((REPO_ROOT / "docs" / "P10B_MODEL_PILOT.json").read_text("utf-8"))
+        doc = (REPO_ROOT / "docs" / "P10B_MODEL_PILOT.md").read_text("utf-8")
+        self.assertEqual(doc.replace("\r\n", "\n"), render_p10b(report))
+        self.assertEqual(report["run_a"]["prompt_version"], "dail-repair-prompt-3")
+        self.assertEqual(report["p10a"]["prompt_version"], "dail-repair-prompt-2")
+        self.assertEqual(report["run_b"]["repetitions"], 3)
+        for model in report["run_b"]["models"].values():
+            self.assertEqual((model["pin"]["temperature"], model["pin"]["top_p"]), (0.7, 0.95))
+        self.assertIn("summary", report["interruptions"])
