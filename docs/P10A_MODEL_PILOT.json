@@ -1,0 +1,387 @@
+{
+ "candidates_manifest_sha256": "de1bb7b33de2f13799c22ac9be374c3321793a661719005a6587b1f5cb077937",
+ "conditions": [
+  "A",
+  "B",
+  "C",
+  "C_PRIME"
+ ],
+ "environment": {
+  "dail_commit": "34f0153e09c403bc69f247d852b5be6582c72981",
+  "dail_worktree_clean": "true",
+  "ollama_version": "0.40.16",
+  "terrapreserve_commit": "27f0ee4010852546e231fb24a35cd03ba4cc5772",
+  "terrapreserve_tag": "terrapreserve-v1.0"
+ },
+ "extractor_version": "extractor-2",
+ "generation_id": "d4507101-113d-5753-806d-593ee99b3255",
+ "generation_name": "p10a-dev-pilot",
+ "generation_version": "1",
+ "metrics_version": "metrics-draft-1",
+ "models": [
+  {
+   "installed": {
+    "digest": "fd429f23b90980ed1bef53b990894e7b0199331f6ae90c5650240a7d5b70f1f7",
+    "name": "granite3.3:8b",
+    "quantization": "Q4_K_M"
+   },
+   "key": "granite3_3-8b",
+   "licence_check": {
+    "library page": "ollama.com/library/granite3.3:8b: publisher IBM Research; licence Apache 2.0; license layer 4a99a6dd617d (Apache License 2.0)",
+    "ollama show --license": "Apache License, Version 2.0, January 2004 (13 Nov 2026)"
+   },
+   "metrics": {
+    "attempts": 12,
+    "calls": 19,
+    "decisions": {
+     "A": {
+      "PROMOTE": 2,
+      "REJECT": 1
+     },
+     "B": {
+      "REJECT": 3
+     },
+     "C": {
+      "REJECT": 3
+     },
+     "C_PRIME": {
+      "REJECT": 3
+     }
+    },
+    "extractor_version": "extractor-2",
+    "failure_classes": {
+     "budget": {},
+     "model": {
+      "INVALID_OUTPUT": 6,
+      "POLICY_VIOLATION": 3
+     },
+     "provider": {}
+    },
+    "latency_ms": {
+     "calls_with_a_reply": 19,
+     "max": 381234.8076999988,
+     "mean": 161303.52561052667
+    },
+    "metrics_version": "metrics-draft-1",
+    "projection_seconds": {
+     "36 scenarios x k=1": 9196.38732180011,
+     "36 scenarios x k=3": 27589.16196540033,
+     "36 scenarios x k=5": 45981.93660900055
+    },
+    "retries": 7,
+    "statuses": {
+     "FAILED": 9,
+     "PATCH": 3
+    },
+    "tokens": {
+     "estimate_rule": "estimate: ceil(characters / 4) of the rendered prompt",
+     "estimated_input_max": 2497,
+     "estimated_input_mean": 2169.4166666666665,
+     "provider_input_mean_per_call": 2617.4736842105262,
+     "provider_input_total": 49732,
+     "provider_output_mean_per_call": 318.05263157894734,
+     "provider_output_total": 6043,
+     "provider_source": "the local server's prompt_eval_count and eval_count"
+    },
+    "valid_patch_rate": {
+     "denominator": 12,
+     "numerator": 3,
+     "value": 0.25,
+     "wilson95": [
+      0.08894166839405471,
+      0.5323053349335657
+     ]
+    },
+    "wall_seconds": {
+     "max_per_attempt": 602.5069887999998,
+     "mean_per_attempt": 255.4552033833364,
+     "total": 3065.4624406000366
+    }
+   },
+   "pin": {
+    "digest": "fd429f23b90980ed1bef53b990894e7b0199331f6ae90c5650240a7d5b70f1f7",
+    "key": "granite3_3-8b",
+    "licence": "Apache-2.0",
+    "licence_source": "ollama.com/library/granite3.3:8b, license blob 4a99a6dd617d (Apache License 2.0), and ollama show --license (13 Nov 2026)",
+    "max_output_tokens": 2048,
+    "num_ctx": 16384,
+    "quantization": "Q4_K_M",
+    "seed": 20261113,
+    "size": "4.9 GB (8.2B parameters; context length 131072)",
+    "tag": "granite3.3:8b",
+    "temperature": 0.0,
+    "timeout_seconds": 1800.0,
+    "top_p": 1.0
+   }
+  },
+  {
+   "installed": {
+    "digest": "78fad5d182a7c33065e153a5f8ba210754207ba9d91973f57dffa7f487363753",
+    "name": "phi4-mini:3.8b",
+    "quantization": "Q4_K_M"
+   },
+   "key": "phi4-mini-3_8b",
+   "licence_check": {
+    "library page": "ollama.com/library/phi4-mini:3.8b: references Microsoft Phi-4-mini-instruct; license layer fa8235e5b48f (MIT License, Copyright (c) Microsoft Corporation); the page text names no licence outside that layer",
+    "ollama show --license": "Microsoft. Copyright (c) Microsoft Corporation. MIT License (13 Nov 2026)"
+   },
+   "metrics": {
+    "attempts": 12,
+    "calls": 14,
+    "decisions": {
+     "A": {
+      "PROMOTE": 4,
+      "REJECT": 6
+     },
+     "B": {
+      "REJECT": 10
+     },
+     "C": {
+      "REJECT": 10
+     },
+     "C_PRIME": {
+      "REJECT": 10
+     }
+    },
+    "extractor_version": "extractor-2",
+    "failure_classes": {
+     "budget": {},
+     "model": {
+      "INVALID_OUTPUT": 1,
+      "UNSUPPORTED": 1
+     },
+     "provider": {}
+    },
+    "latency_ms": {
+     "calls_with_a_reply": 14,
+     "max": 39393100.985,
+     "mean": 2871190.8395428522
+    },
+    "metrics_version": "metrics-draft-1",
+    "projection_seconds": {
+     "36 scenarios x k=1": 120596.81232360001,
+     "36 scenarios x k=3": 361790.43697080004,
+     "36 scenarios x k=5": 602984.061618
+    },
+    "retries": 2,
+    "statuses": {
+     "FAILED": 2,
+     "PATCH": 10
+    },
+    "tokens": {
+     "estimate_rule": "estimate: ceil(characters / 4) of the rendered prompt",
+     "estimated_input_max": 2497,
+     "estimated_input_mean": 2169.4166666666665,
+     "provider_input_mean_per_call": 2328.6428571428573,
+     "provider_input_total": 32601,
+     "provider_output_mean_per_call": 198.64285714285714,
+     "provider_output_total": 2781,
+     "provider_source": "the local server's prompt_eval_count and eval_count"
+    },
+    "valid_patch_rate": {
+     "denominator": 12,
+     "numerator": 10,
+     "value": 0.8333333333333334,
+     "wilson95": [
+      0.5519691377470266,
+      0.9530348578161463
+     ]
+    },
+    "wall_seconds": {
+     "max_per_attempt": 39393.308214900004,
+     "mean_per_attempt": 3349.9114534333335,
+     "total": 40198.9374412
+    }
+   },
+   "pin": {
+    "digest": "78fad5d182a7c33065e153a5f8ba210754207ba9d91973f57dffa7f487363753",
+    "key": "phi4-mini-3_8b",
+    "licence": "MIT",
+    "licence_source": "ollama.com/library/phi4-mini:3.8b, license blob fa8235e5b48f (MIT License, Microsoft Corporation), and ollama show --license (13 Nov 2026)",
+    "max_output_tokens": 2048,
+    "num_ctx": 16384,
+    "quantization": "Q4_K_M",
+    "seed": 20261113,
+    "size": "2.5 GB (3.8B parameters; context length 131072)",
+    "tag": "phi4-mini:3.8b",
+    "temperature": 0.0,
+    "timeout_seconds": 1800.0,
+    "top_p": 1.0
+   }
+  },
+  {
+   "installed": {
+    "digest": "dae161e27b0e90dd1856c8bb3209201fd6736d8eb66298e75ed87571486f4364",
+    "name": "qwen2.5-coder:7b",
+    "quantization": "Q4_K_M"
+   },
+   "key": "qwen2_5-coder-7b",
+   "licence_check": {
+    "library page": "ollama.com/library/qwen2.5-coder:7b: license layer 832dd9e00a68 (Apache License 2.0); the tags page names no licence",
+    "ollama show --license": "Apache License, Version 2.0, January 2004 (13 Nov 2026)"
+   },
+   "metrics": {
+    "attempts": 12,
+    "calls": 13,
+    "decisions": {
+     "A": {
+      "REJECT": 7
+     },
+     "B": {
+      "REJECT": 7
+     },
+     "C": {
+      "REJECT": 7
+     },
+     "C_PRIME": {
+      "REJECT": 7
+     }
+    },
+    "extractor_version": "extractor-2",
+    "failure_classes": {
+     "budget": {},
+     "model": {
+      "INVALID_OUTPUT": 1,
+      "NO_SOLUTION": 1,
+      "POLICY_VIOLATION": 3
+     },
+     "provider": {}
+    },
+    "latency_ms": {
+     "calls_with_a_reply": 13,
+     "max": 176824.0048000007,
+     "mean": 109500.03884615468
+    },
+    "metrics_version": "metrics-draft-1",
+    "projection_seconds": {
+     "36 scenarios x k=1": 4272.5386514999045,
+     "36 scenarios x k=3": 12817.615954499714,
+     "36 scenarios x k=5": 21362.693257499523
+    },
+    "retries": 1,
+    "statuses": {
+     "FAILED": 5,
+     "PATCH": 7
+    },
+    "tokens": {
+     "estimate_rule": "estimate: ceil(characters / 4) of the rendered prompt",
+     "estimated_input_max": 2497,
+     "estimated_input_mean": 2169.4166666666665,
+     "provider_input_mean_per_call": 2344.769230769231,
+     "provider_input_total": 30482,
+     "provider_output_mean_per_call": 227.0,
+     "provider_output_total": 2951,
+     "provider_source": "the local server's prompt_eval_count and eval_count"
+    },
+    "valid_patch_rate": {
+     "denominator": 12,
+     "numerator": 7,
+     "value": 0.5833333333333334,
+     "wilson95": [
+      0.31951131254954973,
+      0.8067396863412435
+     ]
+    },
+    "wall_seconds": {
+     "max_per_attempt": 176.83589969999593,
+     "mean_per_attempt": 118.68162920833068,
+     "total": 1424.1795504999682
+    }
+   },
+   "pin": {
+    "digest": "dae161e27b0e90dd1856c8bb3209201fd6736d8eb66298e75ed87571486f4364",
+    "key": "qwen2_5-coder-7b",
+    "licence": "Apache-2.0",
+    "licence_source": "ollama.com/library/qwen2.5-coder:7b, license blob 832dd9e00a68 (Apache License 2.0), and ollama show --license (13 Nov 2026)",
+    "max_output_tokens": 2048,
+    "num_ctx": 16384,
+    "quantization": "Q4_K_M",
+    "seed": 20261113,
+    "size": "4.7 GB (7.6B parameters; context length 32768)",
+    "tag": "qwen2.5-coder:7b",
+    "temperature": 0.0,
+    "timeout_seconds": 1800.0,
+    "top_p": 1.0
+   }
+  }
+ ],
+ "parser_version": "dail-llm-parser-2",
+ "prompt_version": "dail-repair-prompt-2",
+ "record": "p10a_model_pilot",
+ "repetitions": 1,
+ "replay_name": "replay-1",
+ "replay_sha256": "d666a5882b3fca5786716e0ea30850dfe9f034f034f86ed0e3d5d02f7299d34f",
+ "retry_policy": {
+  "backoff_seconds": 0.0,
+  "max_attempts": 2,
+  "policy_id": "p10a-retry-2",
+  "prompt_adjustment_policy": "none",
+  "retry_on": [
+   "INVALID_OUTPUT",
+   "TRANSIENT_ERROR"
+  ]
+ },
+ "scenarios": [
+  {
+   "family": "F2",
+   "scenario_id": "tp-v1-F2-0027",
+   "target_invariant_id": "INV-SEC-001"
+  },
+  {
+   "family": "F2",
+   "scenario_id": "tp-v1-F2-0028",
+   "target_invariant_id": "INV-SEC-002"
+  },
+  {
+   "family": "F2",
+   "scenario_id": "tp-v1-F2-0029",
+   "target_invariant_id": "INV-SEC-003"
+  },
+  {
+   "family": "F2",
+   "scenario_id": "tp-v1-F2-0032",
+   "target_invariant_id": "INV-SEC-003"
+  },
+  {
+   "family": "F4",
+   "scenario_id": "tp-v1-F4-0079",
+   "target_invariant_id": "INV-SEC-001"
+  },
+  {
+   "family": "F4",
+   "scenario_id": "tp-v1-F4-0080",
+   "target_invariant_id": "INV-SEC-002"
+  },
+  {
+   "family": "F4",
+   "scenario_id": "tp-v1-F4-0081",
+   "target_invariant_id": "INV-SEC-003"
+  },
+  {
+   "family": "F4",
+   "scenario_id": "tp-v1-F4-0084",
+   "target_invariant_id": "INV-SEC-003"
+  },
+  {
+   "family": "F8",
+   "scenario_id": "tp-v1-F8-0183",
+   "target_invariant_id": "INV-SEC-001"
+  },
+  {
+   "family": "F8",
+   "scenario_id": "tp-v1-F8-0184",
+   "target_invariant_id": "INV-SEC-001"
+  },
+  {
+   "family": "F8",
+   "scenario_id": "tp-v1-F8-0185",
+   "target_invariant_id": "INV-SEC-001"
+  },
+  {
+   "family": "F8",
+   "scenario_id": "tp-v1-F8-0188",
+   "target_invariant_id": "INV-SEC-001"
+  }
+ ],
+ "validator_version": "dail-patch-validator-2"
+}

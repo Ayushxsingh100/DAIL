@@ -262,7 +262,9 @@ def render_pilot(report: Mapping[str, Any]) -> str:
             [
                 m["key"],
                 *[
-                    ", ".join(f"{k} {v}" for k, v in m["metrics"]["decisions"].get(c, {}).items())
+                    ", ".join(
+                        f"{k} {v}" for k, v in sorted(m["metrics"]["decisions"].get(c, {}).items())
+                    )
                     or "none"
                     for c in conditions
                 ],
