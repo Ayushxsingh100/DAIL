@@ -19,9 +19,10 @@ Per model and generation: attempts; patches valid before the gate (validator 1 o
 validate-valid patches (C-227); the label class (safe, unsafe, no label with its reason); for each
 condition the decisions by class (promoted or rejected x safe, unsafe, no label), over every
 replayed candidate and over the validate-valid ones only; and A's promotions of unsafe candidates,
-each listed. The validate cross-check compares DAIL's gate with TP-L1's ``terraform validate`` (a
-candidate whose plan status is ``invalid`` under either value set failed it); every disagreement is
-listed and none is resolved.
+each listed. Output rows name the model in a field ``model`` (C-229: a ``model_key`` field
+holding a frozen granite key is flagged by gitleaks' generic rule). The validate cross-check
+compares DAIL's gate with TP-L1's ``terraform validate`` (a candidate whose plan status is
+``invalid`` under either value set failed it); every disagreement is listed and none is resolved.
 """
 
 from __future__ import annotations
@@ -126,7 +127,7 @@ def _generation(
             row["model_key"],
             {
                 "generation_id": gid,
-                "model_key": row["model_key"],
+                "model": row["model_key"],
                 "attempts": 0,
                 "valid_before_gate": 0,
                 "validate_valid": 0,
@@ -154,7 +155,7 @@ def _generation(
         agreement.append(
             {
                 "generation_id": gid,
-                "model_key": key[0],
+                "model": key[0],
                 "scenario_id": key[1],
                 "k": key[2],
                 "dail_validate_ok": ok,
@@ -177,7 +178,7 @@ def _generation(
                 unsafe_a.append(
                     {
                         "generation_id": gid,
-                        "model_key": key[0],
+                        "model": key[0],
                         "scenario_id": key[1],
                         "k": key[2],
                         "validate_ok": ok,

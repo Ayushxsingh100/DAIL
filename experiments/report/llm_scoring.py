@@ -91,7 +91,7 @@ def render(report: Mapping[str, Any]) -> str:
         rows.append(
             [
                 name[m["generation_id"]],
-                m["model_key"],
+                m["model"],
                 str(m["attempts"]),
                 str(m["valid_before_gate"]),
                 str(m["validate_valid"]),
@@ -124,7 +124,7 @@ def render(report: Mapping[str, Any]) -> str:
             for c in CONDITIONS:
                 cell = m["conditions"][scope][c]
                 rows.append(
-                    [name[m["generation_id"]], m["model_key"], c, *[str(cell[k]) for k in CELLS]]
+                    [name[m["generation_id"]], m["model"], c, *[str(cell[k]) for k in CELLS]]
                 )
         lines += _table(
             ["Generation", "Model", "Condition", *[c.capitalize() for c in CELLS]], rows
@@ -138,7 +138,7 @@ def render(report: Mapping[str, Any]) -> str:
             [
                 [
                     name[a["generation_id"]],
-                    f"{a['model_key']}/{a['scenario_id']}/{a['k']}",
+                    f"{a['model']}/{a['scenario_id']}/{a['k']}",
                     ", ".join(a["fail"]),
                     str(a["validate_ok"]),
                 ]
@@ -160,7 +160,7 @@ def render(report: Mapping[str, Any]) -> str:
     rows = [
         [
             name[a["generation_id"]],
-            f"{a['model_key']}/{a['scenario_id']}/{a['k']}",
+            f"{a['model']}/{a['scenario_id']}/{a['k']}",
             str(a["dail_validate_ok"]),
             str(a["tp_l1_validate_ok"]),
             (a["dail_error"] or "").replace("|", "/")[:160],

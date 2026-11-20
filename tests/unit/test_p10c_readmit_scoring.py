@@ -268,7 +268,7 @@ class TestScoring(Pilot):
         repo, commit = self.tp_repo()
         report = self.score(repo, commit, "gate-s")
         (row,) = report["models"]
-        self.assertEqual((row["generation_id"], row["model_key"]), (self.gid, "fake-coder-1b"))
+        self.assertEqual((row["generation_id"], row["model"]), (self.gid, "fake-coder-1b"))
         self.assertEqual(row["attempts"], 2)
         self.assertEqual(row["valid_before_gate"], 2)
         self.assertEqual(row["validate_valid"], 1)

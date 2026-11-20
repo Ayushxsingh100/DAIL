@@ -805,6 +805,41 @@ Carry-forward: C-225, C-226 Proposed; the authors decide the prompt question bef
   freeze.
 ```
 
+## P10c — The `terraform validate` gate, and scoring the dev LLM pilots (pending external review)
+
+```text
+P10c mini-gate: NOT DECIDED. Status written by the P10c author as an input to the external review.
+Base: 883d496 (the PR #33 merge). Decisions: C-227 (C-99 completed for LLM candidates) and C-228
+  (the LLM track is descriptive), Decided (authors, 20 Nov 2026); C-222, C-225, C-226 Decided;
+  C-229 (model keys) and C-230 (readings) Proposed.
+What exists: llm/validation/patch.py dail-patch-validator-3: the caller's terraform validate runner
+  on the built candidate, after the build and before normalization; a failure is INVALID_OUTPUT with
+  Terraform's error text and no candidate; a runner that cannot run raises and leaves no build.
+  llm/adapter/generate.py refuses a validator without a runner; experiments.generation refuses to
+  generate without one. experiments/terraform_validate.py: Terraform 1.15.8 and hashicorp/aws 6.53.0
+  checked at start (seed init from the filesystem mirror), a scratch copy of the configuration files
+  per check, init -backend=false and validate -json, no credentials, proxies closed.
+  experiments/generation/readmit.py (the gate on frozen candidates, results written once beside the
+  frozen records); experiments/scoring/llm_pilot.py (TP-L1 labels from a TerraPreserve commit, hash
+  checks, decisions by class, the validate cross-check); extractor-4; model keys for new records
+  checked against gitleaks 8.24.3's generic-api-key rule (tests/unit/test_p10c_model_keys.py).
+Real Terraform (opt-in test, 20 Nov 2026): the canonical baseline validates; "::/0" in cidr_blocks
+  fails with 'Error: "::/0" is not a valid IPv4 CIDR block (main.tf:113)'; versions as pinned.
+Re-admission (gate-1, 20 Nov 2026, the author's machine): every frozen valid candidate rebuilt and
+  matched its frozen tree hash (20, 19, 33). Valid patches before -> after the gate:
+  P10a granite 3 -> 2, phi4-mini 10 -> 1, qwen 7 -> 0 (of 12 each); Run A granite 7 -> 1,
+  phi4-mini 7 -> 0, qwen 5 -> 0 (of 12); Run B granite 8 -> 2, phi4-mini 17 -> 0, qwen 8 -> 2
+  (of 36). In all, 72 -> 8. DAIL's gate agrees with TP-L1's terraform validate on 72 of 72.
+Scoring (docs/P10C_LLM_PILOT_SCORING.md, TP-L1 labels at TerraPreserve b9d4cce, C-230): no safe
+  candidate; 5 unsafe (all rejected under B, C and C'; also under A); under A, 28 no-label
+  candidates were promoted before the gate and 2 of the 8 validate-valid ones; A promoted no unsafe
+  candidate. Descriptive only (C-228).
+Limits: TP-L1 is not merged; the labels are those of its PR head (C-230). The re-admission uses
+  the patch validator to rebuild, so a rebuild difference would show as a tree-hash mismatch (none
+  occurred).
+Carry-forward: C-229, C-230 Proposed.
+```
+
 ## Temporary exceptions
 
 None.

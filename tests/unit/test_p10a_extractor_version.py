@@ -26,7 +26,7 @@ from tests.metrics_builders import GATES, scenarios
 PINNED: dict[str, str] = {
     "extractor-2": "5b4a598940e59fa3d2b3fe1b48360135d174db65124df7b7830757800e80a25b",
     "extractor-3": "066b40195851bd720a3f8165c5ac33e285dc559e937a368e5ea1c3964102bd78",  # P10b
-    "extractor-4": "91f9d13c548893cee930fdfaab6a474bbe670fb7643e367362a267be53624adf",  # P10c
+    "extractor-4": "0b6dcd6ecfafc34ec63c2ee48273a1dacf01ed02109653b0bf9a6debf835e2f1",  # P10c
 }
 EXTRACTOR_PACKAGES = ("experiments/metrics", "experiments/scoring")
 CRLF, LF = b"\r\n", b"\n"

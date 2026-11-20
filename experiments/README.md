@@ -144,3 +144,28 @@ $DAIL_EXPERIMENT_ROOT/candidates/<generation_id>/
 - **Failure source:** a failed attempt's class is the provider's when there was no reply (a
   connection failure, a timeout, Ollama's 400/404 as UNSUPPORTED), the budget's for
   CONTEXT_INSUFFICIENT, and the model's otherwise (P7a verdict limit 4).
+
+## The `terraform validate` gate (P10c, C-227)
+
+- **Generation** builds no candidate without the pinned `terraform validate`
+  (`dail-patch-validator-3`). Set `DAIL_TERRAFORM_MIRROR` to a filesystem mirror that holds
+  `hashicorp/aws` 6.53.0 and put Terraform 1.15.8 on `PATH`; the runner
+  (`experiments/terraform_validate.py`) refuses to start otherwise. It runs `init -backend=false`
+  and `validate` only, in a scratch copy, with no credentials.
+- **Frozen candidates** made before the gate are re-admitted, not regenerated:
+
+  ```bash
+  python3.12 -m experiments.generation readmit --name p10a-dev-pilot --gate-name gate-1
+  ```
+
+  The results are written once under `candidates/<generation_id>/validate_gate/<gate name>/`.
+- **Scoring against TerraPreserve's TP-L1 labels** (labels read from a TerraPreserve commit by
+  `experiments/scoring/llm_pilot.py` only):
+
+  ```bash
+  python3.12 -m experiments.report llm-scoring --name p10c \
+      --generations p10a-dev-pilot,p10b-run-a,p10b-run-b --tp-root "$TERRAPRESERVE_ROOT" \
+      --tp-commit <commit> --gate-name gate-1 --doc docs/P10C_LLM_PILOT_SCORING
+  ```
+- **Model keys** of new records (`model-…`, `…-sample`) are checked against gitleaks 8.24.3's
+  generic secret rule (C-229), so new records need no `.gitleaksignore` entry.
