@@ -3,3 +3,13 @@ dc9ab1cf3138811756bb1bfd286bd36c58c6d4ec:fixtures/verification/rds_publicly_acce
 dc9ab1cf3138811756bb1bfd286bd36c58c6d4ec:fixtures/verification/rds_publicly_accessible_pass_v1/expected.json:generic-api-key:3
 29007c0770073656b4fba67f81c1a0f4e02e5151:docs/P10A_MODEL_PILOT.json:generic-api-key:28
 29007c0770073656b4fba67f81c1a0f4e02e5151:docs/P10A_MODEL_PILOT.json:generic-api-key:103
+f611a3b7ce4bc8c685141ec34a07485358d48087:docs/P10B_INTERRUPTIONS.json:generic-api-key:6
+f611a3b7ce4bc8c685141ec34a07485358d48087:docs/P10B_INTERRUPTIONS.json:generic-api-key:15
+f611a3b7ce4bc8c685141ec34a07485358d48087:docs/P10B_MODEL_PILOT.json:generic-api-key:8
+f611a3b7ce4bc8c685141ec34a07485358d48087:docs/P10B_MODEL_PILOT.json:generic-api-key:17
+f611a3b7ce4bc8c685141ec34a07485358d48087:docs/P10B_MODEL_PILOT.json:generic-api-key:130
+f611a3b7ce4bc8c685141ec34a07485358d48087:docs/P10B_MODEL_PILOT.json:generic-api-key:201
+f611a3b7ce4bc8c685141ec34a07485358d48087:docs/P10B_MODEL_PILOT.json:generic-api-key:530
+f611a3b7ce4bc8c685141ec34a07485358d48087:docs/P10B_MODEL_PILOT.json:generic-api-key:601
+f611a3b7ce4bc8c685141ec34a07485358d48087:docs/P10B_MODEL_PILOT.json:generic-api-key:936
+f611a3b7ce4bc8c685141ec34a07485358d48087:docs/P10B_MODEL_PILOT.json:generic-api-key:1007

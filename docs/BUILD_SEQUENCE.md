@@ -34,7 +34,8 @@ The build is split into 18 work packages (N-06 in `DECISIONS_REGISTER.md`). Ever
 | 22 | Dec 12–14 (built 12 Nov 2026) | P8a experiment harness: conditions A, B, C, C′ (C-198), open targets (C-196), the TerraPreserve loader with hash pins and label blinding, trials, records and artifacts, the dev-split harness check (C-196 to C-208) |
 | 23 | Dec 15–18 (built 13 Nov 2026) | P8b metrics and reports: scoring (the only label reader), the extractor metrics-draft-1, the ExperimentReport, docs/P8_DEV_PILOT.md (C-212 to C-215) → P8 gate, M5 |
 | 24 | (built 13 Nov 2026) | P10a LLM candidates for the experiment: experiments/generation (generate, freeze, replay, oracle export), validator 2 (lifecycle, C-221), extractor-2, the dev model pilot docs/P10A_MODEL_PILOT.md (C-218 to C-222) |
-| 25–28 | Dec 19–Jan 2 | P10b protocol freeze; P10c main run on the test split; P10d statistics, QA report, release gates |
+| 25 | (built 14-20 Nov 2026) | P10b prompt v3 (C-223), models and k = 3 (C-224), the second dev pilot docs/P10B_MODEL_PILOT.md (C-225, C-226) |
+| 26–28 | Dec 19–Jan 2 | protocol freeze; main run on the test split; statistics, QA report, release gates |
 | 29 | Jan 3–4 | TerraPreserve v1.1 (real LLM patches) |
 
 Critical path: P1a → P6b.

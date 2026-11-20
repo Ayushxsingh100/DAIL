@@ -1,4 +1,4 @@
-"""The metric extractor ``extractor-2``, for the metric definitions ``metrics-draft-1`` (P8b work
+"""The metric extractor ``extractor-3``, for the metric definitions ``metrics-draft-1`` (P8b work
 package Section 4; Doc 13 §25-§35, Appendix B; C-212 to C-214).
 
 Versions (P10a Section 3.1): ``METRICS_VERSION`` names the metric definitions (C-212) and
@@ -7,7 +7,8 @@ Versions (P10a Section 3.1): ``METRICS_VERSION`` names the metric definitions (C
 ``tests.unit.test_p10a_extractor_version``: a code change needs a new ``EXTRACTOR_VERSION``. The
 first extractor was version ``metrics-draft-1`` (one value for both, P8b); ``extractor-2`` is the
 same code with the two versions apart and the generation metrics of
-``experiments.metrics.generation``.
+``experiments.metrics.generation``; ``extractor-3`` (P10b) adds the pilot metrics
+``rejection_reasons``, ``distinct_patches`` and ``experiment_projection`` there.
 
 Input: the transitions of the stored trial records (``experiments.metrics.model``), the scenarios'
 truth from ``experiments.scoring``, DAIL's S0 results under B, and the identity truth table. Output:
@@ -60,7 +61,7 @@ from experiments.scoring.labels import ScenarioLabels
 from experiments.scoring.truth import TransitionTruth, transition_truth
 
 METRICS_VERSION: Final = "metrics-draft-1"  # the metric definitions (C-212)
-EXTRACTOR_VERSION: Final = "extractor-2"  # this code (P10a Section 3.1)
+EXTRACTOR_VERSION: Final = "extractor-3"  # this code (P10a Section 3.1; 3: P10b pilot metrics)
 NAMESPACE: Final = uuid.uuid5(uuid.NAMESPACE_URL, "dail/experiments/metrics")
 Z95: Final = 1.959963984540054
 ORDER: Final = ("A", "B", "C", "C_PRIME")

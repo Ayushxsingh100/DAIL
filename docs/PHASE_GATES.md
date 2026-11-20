@@ -569,8 +569,21 @@ P10a work package says of each.
    report carries both, and a test pins the hash of the extractor modules.]
 3. tests/unit/test_e2e_concurrency.py, the named interleavings (P10a Section 3.1). [Closed in P10a:
    the "A_done"/"B_done" markers are added; 50 loaded runs are reported in the P10a section.]
-4.-8. NOT YET RECORDED: the text of the verdict's limits 4 to 8 was not pasted into P10a; they are
-   recorded when the user pastes it.
+4. The identity truth table leaves out 5 operators (40 pairs per condition). Among them is
+   `op_f5_count_each_safe`: under DAIL's own decided semantics (C-76), adding `count = 1` is an
+   implicit move, so the authors may add that row. H3 must report the exclusions.
+5. C's 3 identity and evidence-transfer errors are the AMI replacements that DAIL v1 calls MODIFIED
+   (C-130: the replace list holds only the security-group `name`). This is a stated limitation for
+   the paper.
+6. The 6 DAIL–oracle disagreements are all DAIL UNSUPPORTED where the oracle says PASS (F5-0319,
+   F6-0350), and they account for C's 2 false rejections.
+7. Everything in P8b is a dev pilot under draft definitions. No unsafe promotion under C and 0 of
+   98 regressions missed on dev are not findings. P10 freezes the protocol, the metric definitions
+   and the extractor version, adds the inferential analysis, and only then opens the test split.
+8. The P8b section of PHASE_GATES still shows the superseded run-2 numbers above the run-3
+   paragraph. Mark them as superseded wherever they are quoted.
+   [P10b: marked in the P8b section, its reproducibility line and the P8 gate map.]
+(Limits 4 to 8 recorded word for word in P10b, 14 Nov 2026.)
 ```
 
 The P8b author's input to the review, as written before the verdict (the run-2 numbers in it are
@@ -603,7 +616,7 @@ What exists:
   ExperimentReport of §33 and its Markdown); python -m experiments.report extract|select|compare.
   Blinding contract: (a) no module outside experiments/scoring names a label field; (b) no execution
   module imports experiments.scoring, .metrics or .report (both shown failing on a mutant).
-Dev report (13 Nov 2026): docs/P8_DEV_PILOT.md, generated from p8a-dev-harness-check-2
+Dev report (13 Nov 2026) [superseded by run 3, C-216]: docs/P8_DEV_PILOT.md, generated from p8a-dev-harness-check-2
   (ec2b4fa8...), 896 trials, 1120 transitions, 1835 metric records; metric_records.json sha256
   9f4d3d65..., report.json sha256 6fd62e2d...; a second extract wrote byte-identical files.
   Headline (all evaluated transitions; numerator / denominator): unsafe promoted / promoted
@@ -613,8 +626,8 @@ Dev report (13 Nov 2026): docs/P8_DEV_PILOT.md, generated from p8a-dev-harness-c
   A 0/280, B, C, C' 7/280. Unsafe promotions under C: none. Truth changes outside the verified
   set: 0. DAIL-oracle disagreements under B: 6 (all DAIL UNSUPPORTED, oracle PASS; 2 scenarios).
   Identity errors / true pairs: C 3/80, C' 23/80 (40 pairs excluded per condition).
-  These are dev numbers of a draft protocol, not findings (C-214).
-Reproducibility: p8b-repro-check (308471ba...), 20 scenarios x 4 conditions = 80 trials on the
+  These are dev numbers of a draft protocol, not findings (C-214). [superseded by run 3, C-216]
+Reproducibility [superseded by run 3, C-216]: p8b-repro-check (308471ba...), 20 scenarios x 4 conditions = 80 trials on the
   same code; 136 transitions in common with run 2, 0 decision and 0 invariant-result differences.
 Tests: tests.unit.test_p8b_metrics (hand-computed record set), test_p8b_scoring_report,
   tests.contract.test_experiment_blinding. Mutation checks: 12 of 12 metric mutants caught (3 only
@@ -649,7 +662,8 @@ The P8b author's map of each item, as written before the verdict:
 M5 "Experiments run reproducibly" ...... as §15.3 "Trials are reproducible".
 M5 "Baselines work" .................... conditions A and B (tests.unit.test_p8a_conditions,
     test_experiment_harness.TestConditions; P8_DEV_PILOT.md section 1).
-M5 "Metrics generated" ................. metric_records.json (1835 records) of run 2.
+M5 "Metrics generated" ................. metric_records.json (1835 records) of run 2
+    [superseded by run 3, C-216]; run 3's report (docs/P8_DEV_PILOT.md) replaces it.
 M5 "Trial artifacts linked" ............ correlation ids and artifact_refs
     (test_experiment_harness.TestConditions.test_a_transition_records_what_section_4_3_lists,
     report artifact_refs).
@@ -664,7 +678,16 @@ P9 (AWS integration) and milestone M6 (AWS Demonstration) are removed (C-71, Dec
 live AWS; the oracle and DAIL are configuration-level only. The packages after P6c are P6d, P7a, P7b,
 P8a, P8b and P10.
 
-## P10a — LLM candidates for the experiment (pending external review)
+## P10a — LLM candidates for the experiment — passed with limits (verdict on PR #32)
+
+```text
+P10a: passed with limits (verdict on PR #32). Recorded in P10b (14 Nov 2026); merged as 839c2d3.
+Limits of the verdict (open items):
+1.-7. NOT YET RECORDED: the text of the verdict's limits 1 to 7 was not in the merge commit or on
+   the PR and was not pasted into P10b; they are recorded when the user pastes it.
+```
+
+The P10a author's input to the review, as written before the verdict:
 
 ```text
 P10a mini-gate: NOT DECIDED. Status written by the P10a author as an input to the external review.
@@ -712,6 +735,46 @@ Limits: one machine, one run per model, k = 1; the projection assumes test scena
   the export is not labelled (TerraPreserve's package); the P8b verdict's limits 4-8 are not
   recorded (their text was not pasted).
 Carry-forward: C-222 Proposed; P10b freezes models, k, the retry policy and the metrics.
+```
+
+## P10b — Prompt v3 and the second dev pilot (pending external review)
+
+```text
+P10b mini-gate: NOT DECIDED. Status written by the P10b author as an input to the external review.
+Base: 839c2d3 (the PR #32 merge). Decisions: C-223 prompt v3 (with the user's two added statements
+  from registry §2.6), C-224 models and k = 3 (Decided, authors, 14 Nov 2026); C-225 sampling
+  (Proposed, P10b-1); readings C-226 (Proposed).
+What exists: llm/prompts/templates.py dail-repair-prompt-3 (v2's text plus SUPPORTED_MODEL_RULES_V3,
+  composed at use time; hash 80e4dfb3...), now the current version; v1 and v2 render byte-identical
+  to 839c2d3 (tests.unit.test_p10b_prompt_v3). k = 3 pins (-k3) in experiments/config/models.toml.
+  extractor-3 (rejection_reasons, distinct_patches, experiment_projection); python -m
+  experiments.report pilot-b; docs/P10B_MODEL_PILOT.md generated from the records.
+Second dev pilot (14 Nov 2026, the author's machine, CPU only): Run A p10b-run-a (7fe30836...,
+  manifest 104ae6b9...), the P10a scenarios and models, prompt v3, k = 1, temperature 0, DAIL
+  fe1017e; Run B p10b-run-b (77da54da..., manifest 8cb4a4d7...), k = 3, temperature 0.7, top_p 0.95,
+  DAIL 9407f22 (differs from fe1017e only in the report code). Both clean trees.
+  Valid patches: Run A granite 7/12, phi4-mini 7/12, qwen 5/12 (P10a: 3, 10, 7);
+  Run B granite 8/36, phi4-mini 17/36, qwen 8/36. No provider or budget failure.
+  DAIL decisions on the valid candidates: Run A A PROMOTE 5 / REJECT 14, B, C, C' REJECT 19;
+  Run B A PROMOTE 17 / REJECT 16, B, C, C' REJECT 33.
+  C's rejections by decision reason: P10a REQUIRED_UNSUPPORTED 12 of 20; Run A 14 of 19; Run B 24
+  of 33. Prompt v3 did not reduce the UNSUPPORTED share (qwen: group.mixed 12 in both P10a and
+  Run A; granite: rule.unsupported 9 in Run A). As the work package says, this is reported and no
+  v4 is written.
+  Distinct valid patches among a scenario's 3 samples (Run B): mean granite 0.67, phi4-mini 1.17,
+  qwen 0.67.
+  Interruptions (docs/P10B_INTERRUPTIONS.json, from the Windows event log): Run A none. Run B: modern
+  standby 10:24-12:38 UTC and a sleep 13:13-13:14 UTC despite the keep-awake request (which does not
+  stop standby from the lid or power button); two granite attempts overlap them (8431 s and 676 s).
+  The records are kept. Projection 36 x 3 models x k = 3 (Run B means): granite 13.42 h, phi4-mini
+  1.74 h, qwen 2.21 h, total 17.37 h; without the two interrupted attempts granite 6.18 h (mean
+  205.9 s over 34 attempts) and the total about 10.13 h.
+  Export: every valid candidate of both runs (Run A 19, Run B 33), in the P10a format.
+Limits: the prompt was tuned on dev (allowed by C-223) and did not reach its aim; one machine, one
+  run; no labels, so no model is judged; the P10a verdict's limits 1-7 are not recorded (their text
+  was not pasted).
+Carry-forward: C-225, C-226 Proposed; the authors decide the prompt question before the protocol
+  freeze.
 ```
 
 ## Temporary exceptions

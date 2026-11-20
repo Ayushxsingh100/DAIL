@@ -53,6 +53,10 @@ def collect_pilot(root: Path, generation_id: str, replay_name: str) -> dict[str,
     models = {p.parent.name: read_record(p) for p in sorted(base.glob("*/model.json"))}
     replay_path = base / "replay" / replay_name / "replay.json"
     replay = read_record(replay_path)
+    # every result with its transition, for the reasons of a condition's rejections (P10b)
+    replay_full = [
+        read_record(p) for p in sorted((base / "replay" / replay_name).glob("*/*/*/*/result.json"))
+    ]
     return {
         "generation_id": generation_id,
         "definition": definition,
@@ -64,6 +68,7 @@ def collect_pilot(root: Path, generation_id: str, replay_name: str) -> dict[str,
         "timings": timings,
         "models": models,
         "replay": replay,
+        "replay_full": replay_full,
     }
 
 

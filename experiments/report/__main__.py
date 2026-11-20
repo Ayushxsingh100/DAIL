@@ -32,6 +32,7 @@ from experiments.metrics.extractor import EXTRACTOR_VERSION, dumps_metrics, extr
 from experiments.metrics.model import Transition, transitions_from_result, trial_outcome
 from experiments.report.build import build_report
 from experiments.report.pilot import build_pilot, collect_pilot, render_pilot
+from experiments.report.pilot_b import build_p10b, render_p10b
 from experiments.report.render import render_markdown
 from experiments.runner import Layout, read_events, read_result
 from experiments.scoring.identity import load_identity_table
@@ -219,10 +220,36 @@ def cmd_pilot(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_pilot_b(args: argparse.Namespace) -> int:
+    """P10b: Run A against P10a, and Run B (``docs/P10B_MODEL_PILOT``)."""
+    root = _env("DAIL_EXPERIMENT_ROOT")
+
+    def collected(name: str) -> dict[str, Any]:
+        return collect_pilot(root, name_id("generation", name, "1"), args.replay_name)
+
+    report = build_p10b(
+        run_a=collected(args.run_a),
+        run_b=collected(args.run_b),
+        p10a=collected(args.p10a),
+        interruptions=json.loads(Path(args.interruptions).read_text(encoding="utf-8")),
+    )
+    out = root / "candidates" / name_id("generation", args.run_b, "1") / "pilot_report_p10b"
+    try:
+        write_or_same(out / "pilot_b.json", report)
+    except ArtifactError as changed:
+        raise SystemExit(str(changed)) from None
+    (out / "pilot_b.md").write_text(render_p10b(report), encoding="utf-8", newline="\n")
+    if args.doc:
+        Path(f"{args.doc}.json").write_bytes(dumps(report))
+        Path(f"{args.doc}.md").write_text(render_p10b(report), encoding="utf-8", newline="\n")
+    print(json.dumps({"pilot_report": str(out)}))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m experiments.report")
     commands = parser.add_subparsers(dest="command", required=True)
-    for name in ("extract", "select", "compare", "pilot"):
+    for name in ("extract", "select", "compare", "pilot", "pilot-b"):
         command = commands.add_parser(name)
         command.add_argument("--name", required=True)
         command.add_argument("--version", default="1")
@@ -232,6 +259,11 @@ def main(argv: list[str] | None = None) -> int:
             command.add_argument("--preface", default="", help="a text file shown at the top")
         if name == "compare":
             command.add_argument("--other", required=True)
+        if name == "pilot-b":
+            for flag in ("--run-a", "--run-b", "--p10a", "--interruptions"):
+                command.add_argument(flag, required=True)
+            command.add_argument("--replay-name", default="replay-1")
+            command.add_argument("--doc", default="")
         if name == "pilot":
             command.add_argument("--replay-name", required=True)
             command.add_argument("--licence-checks", required=True)
@@ -242,6 +274,7 @@ def main(argv: list[str] | None = None) -> int:
         "select": cmd_select,
         "compare": cmd_compare,
         "pilot": cmd_pilot,
+        "pilot-b": cmd_pilot_b,
     }[args.command]
     return handler(args)
 

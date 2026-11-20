@@ -112,7 +112,7 @@ def config(**changes: Any) -> LLMConfig:
         "max_output_tokens": 1024,
         "timeout_seconds": 30.0,
         "retry_policy_id": "retry-3",
-        "prompt_version": "dail-repair-prompt-2",
+        "prompt_version": "dail-repair-prompt-3",  # the current version (C-223)
         "response_schema_version": RESPONSE_SCHEMA_VERSION,
     }
     values.update(changes)
