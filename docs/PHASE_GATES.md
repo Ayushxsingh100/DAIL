@@ -737,6 +737,46 @@ Limits: one machine, one run per model, k = 1; the projection assumes test scena
 Carry-forward: C-222 Proposed; P10b freezes models, k, the retry policy and the metrics.
 ```
 
+## P10b — Prompt v3 and the second dev pilot (pending external review)
+
+```text
+P10b mini-gate: NOT DECIDED. Status written by the P10b author as an input to the external review.
+Base: 839c2d3 (the PR #32 merge). Decisions: C-223 prompt v3 (with the user's two added statements
+  from registry §2.6), C-224 models and k = 3 (Decided, authors, 14 Nov 2026); C-225 sampling
+  (Proposed, P10b-1); readings C-226 (Proposed).
+What exists: llm/prompts/templates.py dail-repair-prompt-3 (v2's text plus SUPPORTED_MODEL_RULES_V3,
+  composed at use time; hash 80e4dfb3...), now the current version; v1 and v2 render byte-identical
+  to 839c2d3 (tests.unit.test_p10b_prompt_v3). k = 3 pins (-k3) in experiments/config/models.toml.
+  extractor-3 (rejection_reasons, distinct_patches, experiment_projection); python -m
+  experiments.report pilot-b; docs/P10B_MODEL_PILOT.md generated from the records.
+Second dev pilot (14 Nov 2026, the author's machine, CPU only): Run A p10b-run-a (7fe30836...,
+  manifest 104ae6b9...), the P10a scenarios and models, prompt v3, k = 1, temperature 0, DAIL
+  fe1017e; Run B p10b-run-b (77da54da..., manifest 8cb4a4d7...), k = 3, temperature 0.7, top_p 0.95,
+  DAIL 9407f22 (differs from fe1017e only in the report code). Both clean trees.
+  Valid patches: Run A granite 7/12, phi4-mini 7/12, qwen 5/12 (P10a: 3, 10, 7);
+  Run B granite 8/36, phi4-mini 17/36, qwen 8/36. No provider or budget failure.
+  DAIL decisions on the valid candidates: Run A A PROMOTE 5 / REJECT 14, B, C, C' REJECT 19;
+  Run B A PROMOTE 17 / REJECT 16, B, C, C' REJECT 33.
+  C's rejections by decision reason: P10a REQUIRED_UNSUPPORTED 12 of 20; Run A 14 of 19; Run B 24
+  of 33. Prompt v3 did not reduce the UNSUPPORTED share (qwen: group.mixed 12 in both P10a and
+  Run A; granite: rule.unsupported 9 in Run A). As the work package says, this is reported and no
+  v4 is written.
+  Distinct valid patches among a scenario's 3 samples (Run B): mean granite 0.67, phi4-mini 1.17,
+  qwen 0.67.
+  Interruptions (docs/P10B_INTERRUPTIONS.json, from the Windows event log): Run A none. Run B: modern
+  standby 10:24-12:38 UTC and a sleep 13:13-13:14 UTC despite the keep-awake request (which does not
+  stop standby from the lid or power button); two granite attempts overlap them (8431 s and 676 s).
+  The records are kept. Projection 36 x 3 models x k = 3 (Run B means): granite 13.42 h, phi4-mini
+  1.74 h, qwen 2.21 h, total 17.37 h; without the two interrupted attempts granite 6.18 h (mean
+  205.9 s over 34 attempts) and the total about 10.13 h.
+  Export: every valid candidate of both runs (Run A 19, Run B 33), in the P10a format.
+Limits: the prompt was tuned on dev (allowed by C-223) and did not reach its aim; one machine, one
+  run; no labels, so no model is judged; the P10a verdict's limits 1-7 are not recorded (their text
+  was not pasted).
+Carry-forward: C-225, C-226 Proposed; the authors decide the prompt question before the protocol
+  freeze.
+```
+
 ## Temporary exceptions
 
 None.
