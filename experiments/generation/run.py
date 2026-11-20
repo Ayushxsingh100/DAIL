@@ -14,6 +14,9 @@ decision 5; the objective is the fixed task of decision 4.
 environment with no environment variable (as C-207 (3) does for promotion). ``config/`` keeps it
 off.
 
+**Terraform gate (C-227).** ``terraform`` is the caller's ``terraform validate`` runner; the patch
+validator runs it on every built candidate (validator 3). Without one, generation refuses to start.
+
 **Model check.** Before anything is written, every model's installed facts are checked against its
 pin (``models.check_installed``): one refusal stops the run.
 
@@ -82,7 +85,7 @@ from llm.adapter.provider import LLMProvider
 from llm.prompts.templates import PROMPT_VERSION, template_hash
 from llm.schemas.records import FailureClass, GenerationResult, GenerationStatus
 from llm.validation.parser import PARSER_VERSION
-from llm.validation.patch import VALIDATOR_VERSION, PatchValidator
+from llm.validation.patch import VALIDATOR_VERSION, PatchValidator, TerraformValidate
 
 REPO_ROOT: Final = Path(__file__).resolve().parents[2]
 EXPERIMENT_LLM_FILE: Final = REPO_ROOT / "experiments" / "config" / "llm.toml"
@@ -285,6 +288,7 @@ def _one(
     folder: Path,
     work: Path,
     generation_enabled: bool,
+    terraform: TerraformValidate,
 ) -> dict[str, Any]:
     pin, provider, _ = entry
     validator = PatchValidator(
@@ -294,6 +298,7 @@ def _one(
         work_root=work / "builds",
         variables=dict(given.variable_values),
         now=DAIL_CLOCK_BASE,
+        terraform_validate=terraform,
     )
     generator = Generator(
         provider=provider,
@@ -364,8 +369,13 @@ def generate_candidates(
     root: Path,
     generation_enabled: bool,
     environment: Mapping[str, str],
+    terraform: TerraformValidate | None,
 ) -> GenerationSummary:
     """Generate, freeze and list every attempt (see the module docstring)."""
+    if terraform is None:
+        raise GenerationError(
+            "no terraform validate runner: generation refuses to start (C-99, C-227)"
+        )
     if k < 1 or not inputs or not models:
         raise GenerationError("generation needs k >= 1, at least one scenario and one model")
     base = generation_dir(root, spec.generation_id)
@@ -385,7 +395,12 @@ def generate_candidates(
                 "new generation_id)"
             )
     try:
-        write_or_same(base / "definition.json", _definition(spec, inputs, models, k, environment))
+        terraform_facts = getattr(terraform, "versions", None)
+        definition = _definition(spec, inputs, models, k, environment)
+        definition["terraform_validate"] = (
+            None if terraform_facts is None else dict(terraform_facts)
+        )
+        write_or_same(base / "definition.json", definition)
         for pin, provider, installed in models:
             write_or_same(
                 base / pin.key / "model.json",
@@ -417,6 +432,7 @@ def generate_candidates(
                             folder=folder,
                             work=work,
                             generation_enabled=generation_enabled,
+                            terraform=terraform,
                         )
                     rows.append(_manifest_row(base, folder, record))
     manifest = {

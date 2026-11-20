@@ -22,12 +22,14 @@ WIRING_MODEL = "qwen2_5-coder-1_5b"
 
 
 @unittest.skipUnless(
-    os.environ.get("DAIL_OLLAMA_TEST") == "1" and os.environ.get("TERRAPRESERVE_ROOT"),
-    "opt-in: DAIL_OLLAMA_TEST=1 and TERRAPRESERVE_ROOT",
+    os.environ.get("DAIL_OLLAMA_TEST") == "1"
+    and os.environ.get("TERRAPRESERVE_ROOT")
+    and os.environ.get("DAIL_TERRAFORM_MIRROR"),
+    "opt-in: DAIL_OLLAMA_TEST=1, TERRAPRESERVE_ROOT and DAIL_TERRAFORM_MIRROR (C-227)",
 )
 class TestWiringRun(unittest.TestCase):
     def test_generate_freeze_replay_export(self) -> None:
-        from experiments.generation.__main__ import choose
+        from experiments.generation.__main__ import choose, terraform_runner
         from experiments.generation.export import export_for_oracle
         from experiments.generation.models import load_pins
         from experiments.generation.replay import replay_candidates
@@ -54,6 +56,7 @@ class TestWiringRun(unittest.TestCase):
                 root=root,
                 generation_enabled=generation_config().get("llm.generation_enabled") is True,
                 environment={"ollama_version": provider.server_version()},
+                terraform=terraform_runner(root),  # C-227
             )
             replay = replay_candidates(
                 root=root,

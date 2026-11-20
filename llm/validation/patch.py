@@ -24,6 +24,9 @@ order; the first that fails decides, and its failure class follows C-192:
  8  invented provider/runtime ids (§14) not in the parent text                   POLICY_VIOLATION
  9  build (C-189) in a fresh directory under ``work_root``; the parent is never
     written; the built directory must load (P3a-1)                               INVALID_OUTPUT
+ 9b the pinned ``terraform validate`` on the built directory, through the
+    caller's ``terraform_validate`` runner (C-99, C-227; validator 3); the
+    error text is recorded                                                       INVALID_OUTPUT
 10  references: every root in the patch blocks is declared in the candidate      INVALID_OUTPUT
 11  normalize (P3); INVALID                                                      INVALID_OUTPUT
     UNSUPPORTED                                                                  UNSUPPORTED
@@ -39,6 +42,15 @@ promotable candidate"). Nothing here is "fixed" or guessed: a patch is taken as 
 Where a parent block lives in a ``.tf.json`` file its bytes cannot be replaced as HCL: MODIFY and
 DELETE of it are UNSUPPORTED. A parent that already has a file named ``dail_llm_patch.tf`` is
 UNSUPPORTED for CREATE.
+
+Validator 3 (C-227): ``terraform_validate`` is a callable the caller supplies (it runs outside
+``core/``, C-99; ``experiments.terraform_validate.TerraformValidateRunner`` is the real one). It
+gets the built candidate directory, after the build and before normalization, and returns a
+``TerraformCheck``; a check that is not ``ok`` refuses the patch with INVALID_OUTPUT and its error
+text. A runner that cannot run raises; the exception is not turned into a model failure, and the
+build is removed. A validator without a runner does not run the check: ``llm.adapter.generate``
+refuses to generate with such a validator (fail closed); replaying frozen candidates may rebuild
+without it.
 """
 
 from __future__ import annotations
@@ -47,8 +59,8 @@ import dataclasses
 import re
 import shutil
 import tempfile
-from collections.abc import Iterator, Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Final
@@ -78,7 +90,8 @@ from llm.adapter.context import SUPPORTED_TYPES
 from llm.schemas.records import FailureClass
 from llm.schemas.repair_response import LLMRepairResponse, RepairStatus
 
-VALIDATOR_VERSION: Final = "dail-patch-validator-2"  # 2: the lifecycle rule (C-221)
+# 2: the lifecycle rule (C-221); 3: the terraform validate gate (C-227)
+VALIDATOR_VERSION: Final = "dail-patch-validator-3"
 PATCH_FILE: Final = "dail_llm_patch.tf"
 F = FailureClass
 OP = OperationType
@@ -89,6 +102,21 @@ _AWS_ID = re.compile(
     r"(?<![0-9A-Za-z-])(?:sg|subnet|vpc|igw|rtb|eni|i|ami)-(?:[0-9a-f]{17}|[0-9a-f]{8})(?![0-9A-Za-z])"
 )
 _BUILTIN_ROOTS: Final = frozenset({"count", "each", "self", "path", "terraform"})
+
+
+@dataclass(frozen=True)
+class TerraformCheck:
+    """The result of ``terraform validate`` on one built candidate (C-227)."""
+
+    ok: bool
+    error: str
+    versions: Mapping[str, str] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"ok": self.ok, "error": self.error, "versions": dict(self.versions)}
+
+
+TerraformValidate = Callable[[Path], TerraformCheck]
 
 
 @dataclass(frozen=True)
@@ -116,10 +144,12 @@ class ValidationOutcome:
     operations: tuple[tuple[str, OperationType], ...]
     patch_id: str | None
     validator_version: str = VALIDATOR_VERSION
+    terraform: Mapping[str, Any] | None = None  # the TerraformCheck, when the gate ran
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "validator_version": self.validator_version,
+            "terraform": None if self.terraform is None else dict(self.terraform),
             "failure_class": None if self.failure_class is None else self.failure_class.value,
             "errors": list(self.errors),
             "operations": [[address, op.value] for address, op in self.operations],
@@ -209,6 +239,7 @@ class PatchValidator:
         work_root: Path,
         variables: Mapping[str, object] | None,
         now: datetime,
+        terraform_validate: TerraformValidate | None = None,
     ) -> None:
         if not isinstance(scope, AllowedChangeScope):
             raise ValueError(
@@ -222,6 +253,7 @@ class PatchValidator:
         self.work_root = Path(work_root)
         self.variables = variables
         self.now = now
+        self.terraform_validate = terraform_validate
         parsed = load_configuration(self.parent_dir)
         if parsed.configuration is None or parsed.status is not ParseStatus.OK:
             raise ValueError(
@@ -260,6 +292,7 @@ class PatchValidator:
         patch_id = patch_id or new_uuid()
         built: Path | None = None
         operations: tuple[tuple[str, OperationType], ...] = ()
+        terraform: Mapping[str, Any] | None = None
         try:
             text = response.patch
             data = text.encode("utf-8")
@@ -271,13 +304,20 @@ class PatchValidator:
             self._credentials(blocks, data, text)
             self._ids(blocks)
             built = self._build(plan, data)
+            terraform = self._terraform(built)
             self._references(blocks, built)
             build = self._normalize_and_check(built, response, request_id, patch_id)
         except _Refuse as refuse:
             if built is not None:
                 shutil.rmtree(built.parent, ignore_errors=True)
-            return ValidationOutcome(refuse.failure, (str(refuse),), None, operations, None)
-        return ValidationOutcome(None, (), build, operations, patch_id)
+            return ValidationOutcome(
+                refuse.failure, (str(refuse),), None, operations, None, terraform=terraform
+            )
+        except BaseException:
+            if built is not None:  # a runner that cannot run: no build is left behind
+                shutil.rmtree(built.parent, ignore_errors=True)
+            raise
+        return ValidationOutcome(None, (), build, operations, patch_id, terraform=terraform)
 
     # --- checks -------------------------------------------------------------------------------
 
@@ -467,6 +507,20 @@ class PatchValidator:
                 raise _Refuse(F.UNSUPPORTED, f"the parent already has a file named {PATCH_FILE}")
             path.write_bytes(b"\n\n".join(created) + b"\n")
         return target
+
+    def _terraform(self, built: Path) -> Mapping[str, Any] | None:
+        """Check 9b (C-227): the pinned terraform validate on the built directory."""
+        if self.terraform_validate is None:
+            return None
+        check = self.terraform_validate(built)
+        if not isinstance(check, TerraformCheck):
+            raise TypeError("terraform_validate must return a TerraformCheck")
+        if not check.ok:
+            raise _Refuse(
+                F.INVALID_OUTPUT,
+                f"terraform validate failed (C-99, C-227): {check.error}",
+            )
+        return check.to_dict()
 
     def _references(self, blocks: Sequence[Block], built: Path) -> None:
         parsed = load_configuration(built)

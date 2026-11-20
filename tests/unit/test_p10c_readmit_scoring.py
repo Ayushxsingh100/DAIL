@@ -1,16 +1,16 @@
-"""Re-admission of frozen pilot candidates through the validate gate, and scoring against TP-L1's labels
-(P10c Sections 3.3-3.4; C-227, C-228, C-230).
+"""Re-admission of frozen pilot candidates through the validate gate, and scoring against TP-L1's
+labels (P10c Sections 3.3-3.4; C-227, C-228, C-230).
 
 Section 3.3: "a scoring step applies the validate gate to every frozen valid candidate of the three
 pilot generations ... It records the result beside the frozen record. Frozen files are never edited.
 Report valid patch rates before and after the gate, per model."
 Section 3.4: "for every frozen candidate, join DAIL's decisions under A, B, C and C' (from the
 P10a/P10b replays) with TP-L1's ``label.json`` (by generation id, model key, scenario, k), and check
-the hashes. Report per model and generation: attempts and validate-valid patches; oracle class (safe,
-unsafe, no label with reason); for each condition: promoted unsafe, promoted no-label, rejected unsafe
-and rejected no-label candidates, and promoted safe and rejected safe ones ...; A's promotions of
-unsafe candidates, each listed." Step 4: "cross-check DAIL's validate result with TP-L1's ... Every
-disagreement is listed, never resolved by hand."
+the hashes. Report per model and generation: attempts and validate-valid patches; oracle class
+(safe, unsafe, no label with reason); for each condition: promoted unsafe, promoted no-label,
+rejected unsafe and rejected no-label candidates, and promoted safe and rejected safe ones ...; A's
+promotions of unsafe candidates, each listed." Step 4: "cross-check DAIL's validate result with
+TP-L1's ... Every disagreement is listed, never resolved by hand."
 
 The mini generation (fake provider) freezes two candidates of tp-mini-F2-0001 under one model, both
 built when no gate existed (a fake runner that passes everything stands in for validator 2's era):
@@ -44,6 +44,8 @@ TAG, DIGEST = "fake-coder:1b", "b" * 64
 def passes_everything(candidate_dir: Path) -> Any:
     from llm.validation.patch import TerraformCheck
 
+    del candidate_dir
+
     return TerraformCheck(ok=True, error="", versions={"terraform": "fake"})
 
 
@@ -52,7 +54,9 @@ def ok(text: str) -> ProviderReply:
 
 
 def git(repo: Path, *args: str) -> str:
-    done = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, check=True)
+    done = subprocess.run(
+        ["git", "-C", str(repo), *args], capture_output=True, text=True, check=True
+    )
     return done.stdout.strip()
 
 
@@ -74,8 +78,12 @@ class Pilot(unittest.TestCase):
         cls.by_id = {s.scenario_id: s for s in cls.loaded.scenarios}
         cls.out = cls.dirs.new("dail-p10c-out-")
         cls.inputs = [generation_input(cls.by_id[F2])]
-        provider = FakeProvider([ok(repair(SG_APP_CLOSED, [SG_APP, SSH_RULE])),
-                                 ok(repair(SG_APP_IPV6, [SG_APP, SSH_RULE]))])  # fmt: skip
+        provider = FakeProvider(
+            [
+                ok(repair(SG_APP_CLOSED, [SG_APP, SSH_RULE])),
+                ok(repair(SG_APP_IPV6, [SG_APP, SSH_RULE])),
+            ]
+        )
         cls.summary = generate_candidates(
             spec=GenerationSpec(name="p10c-test", version="1"),
             inputs=cls.inputs,
@@ -88,13 +96,19 @@ class Pilot(unittest.TestCase):
         )
         cls.gid = cls.summary.generation_id
         cls.replay = replay_candidates(
-            root=cls.out, generation_id=cls.gid, scenarios=cls.by_id, conditions=CONDITIONS,
-            config=experiment_config(), replay_name="replay-1",
-        )  # fmt: skip
+            root=cls.out,
+            generation_id=cls.gid,
+            scenarios=cls.by_id,
+            conditions=CONDITIONS,
+            config=experiment_config(),
+            replay_name="replay-1",
+        )
         cls.export_index = export_for_oracle(root=cls.out, generation_id=cls.gid, inputs=cls.inputs)
         cls.base = cls.out / "candidates" / cls.gid
         cls.frozen = {
-            p: p.read_bytes() for p in cls.base.rglob("*") if p.is_file() and "replay" not in p.parts
+            p: p.read_bytes()
+            for p in cls.base.rglob("*")
+            if p.is_file() and "replay" not in p.parts
         }
 
     @classmethod
@@ -103,17 +117,28 @@ class Pilot(unittest.TestCase):
 
     def decision(self, k: int, condition: str) -> str | None:
         """Read from the stored replay record (not from the scoring code)."""
-        path = (self.base / "replay" / "replay-1" / "fake-coder-1b" / F2 / str(k) / condition
-                / "result.json")  # fmt: skip
+        path = (
+            self.base
+            / "replay"
+            / "replay-1"
+            / "fake-coder-1b"
+            / F2
+            / str(k)
+            / condition
+            / "result.json"
+        )
         return json.loads(path.read_text(encoding="utf-8"))["decision"]
 
     def readmit(self, name: str) -> Any:
         from experiments.generation.readmit import readmit
 
         return readmit(
-            root=self.out, generation_id=self.gid, inputs={g.scenario_id: g for g in self.inputs},
-            terraform=FakeTerraform(), name=name,
-        )  # fmt: skip
+            root=self.out,
+            generation_id=self.gid,
+            inputs={g.scenario_id: g for g in self.inputs},
+            terraform=FakeTerraform(),
+            name=name,
+        )
 
     def tp_repo(self, edit: Any = None) -> tuple[Path, str]:
         """A TerraPreserve-like repository whose commit holds TP-L1 label files for the export."""
@@ -124,31 +149,67 @@ class Pilot(unittest.TestCase):
         candidates = []
         for c in sorted(index["candidates"], key=lambda c: c["k"]):
             unsafe = c["k"] == 1
-            truth = {"INV-SEC-001": "FAIL", "INV-SEC-002": "PASS", "INV-SEC-003": "PASS",
-                     "INV-FUNC-001": "PASS"} if unsafe else {i: "UNSUPPORTED" for i in (
-                         "INV-SEC-001", "INV-SEC-002", "INV-SEC-003", "INV-FUNC-001")}  # fmt: skip
+            truth = (
+                {
+                    "INV-SEC-001": "FAIL",
+                    "INV-SEC-002": "PASS",
+                    "INV-SEC-003": "PASS",
+                    "INV-FUNC-001": "PASS",
+                }
+                if unsafe
+                else {
+                    i: "UNSUPPORTED"
+                    for i in ("INV-SEC-001", "INV-SEC-002", "INV-SEC-003", "INV-FUNC-001")
+                }
+            )
             label = {
-                "candidate_id": c["candidate_id"], "generation_id": self.gid, "model_key": c["model_key"],
-                "scenario_id": c["scenario_id"], "k": c["k"], "content_hash": c["content_hash"],
-                "tree_hash": c["tree_hash"], "files": c["files"], "export_sha256": export_sha,
+                "candidate_id": c["candidate_id"],
+                "generation_id": self.gid,
+                "model_key": c["model_key"],
+                "scenario_id": c["scenario_id"],
+                "k": c["k"],
+                "content_hash": c["content_hash"],
+                "tree_hash": c["tree_hash"],
+                "files": c["files"],
+                "export_sha256": export_sha,
                 "class": "unsafe" if unsafe else None,
                 "no_label_reason": None if unsafe else "unlabelable",
                 "reason": "x" if unsafe else "terraform validate failed (registry 2.8 ...): ...",
                 "invariant_truth": {"primary": truth, "alternate": truth},
-                "plan_status": {v: ["planned", "planned" if unsafe else "invalid"]
-                                for v in ("primary", "alternate")},  # fmt: skip
-                "validate_errors": {v: None if unsafe else 'Error: "::/0" is not a valid IPv4 CIDR block'
-                                    for v in ("primary", "alternate")},  # fmt: skip
+                "plan_status": {
+                    v: ["planned", "planned" if unsafe else "invalid"]
+                    for v in ("primary", "alternate")
+                },
+                "validate_errors": {
+                    v: None if unsafe else 'Error: "::/0" is not a valid IPv4 CIDR block'
+                    for v in ("primary", "alternate")
+                },
             }
             candidates.append(edit(label) if edit else label)
-        raw = (json.dumps({"generation_id": self.gid, "export_sha256": export_sha,
-                           "candidates": candidates}, indent=1, sort_keys=True) + "\n").encode()  # fmt: skip
+        raw = (
+            json.dumps(
+                {"generation_id": self.gid, "export_sha256": export_sha, "candidates": candidates},
+                indent=1,
+                sort_keys=True,
+            )
+            + "\n"
+        ).encode()
         target = repo / "llm_candidates" / "dev" / self.gid
         target.mkdir(parents=True)
         (target / "labels.json").write_bytes(raw)
         (target / "labels.sha256").write_text(hashlib.sha256(raw).hexdigest() + "  labels.json\n")
         git(repo, "add", ".")
-        git(repo, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", "x")
+        git(
+            repo,
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@example.invalid",
+            "commit",
+            "-q",
+            "-m",
+            "x",
+        )
         return repo, git(repo, "rev-parse", "HEAD")
 
 
@@ -180,16 +241,27 @@ class TestReadmission(Pilot):
         from experiments.generation.run import GenerationError
 
         with self.assertRaises(GenerationError):
-            readmit(root=self.out, generation_id=self.gid,
-                    inputs={g.scenario_id: g for g in self.inputs}, terraform=None, name="none")  # fmt: skip
+            readmit(
+                root=self.out,
+                generation_id=self.gid,
+                inputs={g.scenario_id: g for g in self.inputs},
+                terraform=None,
+                name="none",
+            )
 
 
 class TestScoring(Pilot):
     def score(self, repo: Path, commit: str, gate: str) -> dict[str, Any]:
         from experiments.scoring.llm_pilot import score
 
-        return score(root=self.out, generations=[self.gid], tp_root=repo, tp_commit=commit,
-                     gate_name=gate, replay_name="replay-1")  # fmt: skip
+        return score(
+            root=self.out,
+            generations=[self.gid],
+            tp_root=repo,
+            tp_commit=commit,
+            gate_name=gate,
+            replay_name="replay-1",
+        )
 
     def test_the_join_and_the_counts(self) -> None:
         self.readmit("gate-s")
@@ -203,8 +275,11 @@ class TestScoring(Pilot):
         self.assertEqual(row["classes"], {"safe": 0, "unsafe": 1, "no label: unlabelable": 1})
         for scope_name, ks in (("all_replayed", (1, 2)), ("validate_valid", (1,))):
             for c in CONDITIONS:
-                expected = {f"{d} {cls}": 0 for d in ("promoted", "rejected")
-                            for cls in ("safe", "unsafe", "no label")}  # fmt: skip
+                expected = {
+                    f"{d} {cls}": 0
+                    for d in ("promoted", "rejected")
+                    for cls in ("safe", "unsafe", "no label")
+                }
                 for k in ks:
                     d = self.decision(k, c)
                     if d is None:
@@ -223,6 +298,7 @@ class TestScoring(Pilot):
         report = self.score(repo, commit, "gate-x")
         self.assertEqual(report["validate_agreement"]["agree"], 2)
         self.assertEqual(report["validate_agreement"]["disagreements"], [])
+
         # a label that says k = 2 validated is a disagreement, listed and not resolved
         def flip(label: dict[str, Any]) -> dict[str, Any]:
             if label["k"] == 2:
@@ -239,8 +315,8 @@ class TestScoring(Pilot):
 
         self.readmit("gate-h")
         for name, edit in (
-            ("content hash", lambda l: dict(l, content_hash="0" * 64)),
-            ("export hash", lambda l: dict(l, export_sha256="0" * 64)),
+            ("content hash", lambda label: dict(label, content_hash="0" * 64)),
+            ("export hash", lambda label: dict(label, export_sha256="0" * 64)),
         ):
             with self.subTest(change=name):
                 repo, commit = self.tp_repo(edit)
@@ -262,3 +338,18 @@ class TestScoring(Pilot):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestScoringDocument(unittest.TestCase):
+    """Section 3.4: "The report is ``docs/P10C_LLM_PILOT_SCORING.md``, generated from records.\" """
+
+    def test_the_document_is_the_rendering_of_its_json(self) -> None:
+        from experiments.report.llm_scoring import render
+        from tests.fixture_catalog import REPO_ROOT
+
+        report = json.loads((REPO_ROOT / "docs" / "P10C_LLM_PILOT_SCORING.json").read_text("utf-8"))
+        doc = (REPO_ROOT / "docs" / "P10C_LLM_PILOT_SCORING.md").read_text("utf-8")
+        self.assertEqual(doc.replace("\r\n", "\n"), render(report))
+        self.assertEqual(len(report["generations"]), 3)
+        for word in ("PROMOTE", "REJECT"):
+            self.assertNotIn(word, doc)  # decisions are counted by class, not echoed

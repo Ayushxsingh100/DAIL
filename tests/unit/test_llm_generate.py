@@ -52,6 +52,7 @@ from tests.llm_builders import (
     reply,
     retry_policy,
 )
+from tests.llm_patch_builders import terraform_passes
 
 F = FailureClass
 REPO = Path(__file__).resolve().parents[2]
@@ -78,6 +79,8 @@ class StubValidator:
     def __init__(self, failure: FailureClass | None) -> None:
         self.failure = failure
         self.calls = 0
+        # C-227: the generator refuses a validator without a terraform validate runner
+        self.terraform_validate = terraform_passes
 
     def check_context(self, _context: object) -> None:
         return None

@@ -92,7 +92,8 @@ class Case(unittest.TestCase):
 
 class TestLifecycleRule(Case):
     def test_the_version_is_2(self) -> None:
-        self.assertEqual(VALIDATOR_VERSION, "dail-patch-validator-2")
+        # version 2 added this rule; version 3 (P10c, C-227) keeps it and adds terraform validate
+        self.assertEqual(VALIDATOR_VERSION, "dail-patch-validator-3")
 
     def test_a_modify_that_drops_the_parents_lifecycle_block_is_refused(self) -> None:
         outcome = self.run_patch(self.parent, SG_APP_CLOSED)

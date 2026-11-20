@@ -3,8 +3,8 @@
 C-227: "The patch validator runs the pinned ``terraform validate`` on the built candidate directory,
 after the build and before normalization. A failure refuses the patch with failure class
 INVALID_OUTPUT ...; the error text is recorded, and no candidate exists. Validator version 3. The
-check runs outside ``core/`` (C-99), through a runner the caller supplies. With no runner, generation
-refuses to start (fail closed)."
+check runs outside ``core/`` (C-99), through a runner the caller supplies. With no runner,
+generation refuses to start (fail closed)."
 Section 3.2: "a candidate with ``"::/0"`` in ``cidr_blocks`` -> refused (fake runner returns the
 Terraform error), no candidate; a valid candidate -> unchanged path; no runner -> generation refuses
 to start; a mutant that skips the check fails a test."
@@ -55,13 +55,14 @@ F = FailureClass
 IPV6_IN_V4 = re.compile(r"cidr_blocks\s*=\s*\[[^\]]*\"::/0\"")
 SG_APP_IPV6 = SG_APP_CLOSED.replace(
     "  ingress     = []\n",
-    "  ingress {\n    from_port   = 443\n    to_port     = 443\n    protocol    = \"tcp\"\n"
-    "    cidr_blocks = [\"::/0\"]\n  }\n",
+    '  ingress {\n    from_port   = 443\n    to_port     = 443\n    protocol    = "tcp"\n'
+    '    cidr_blocks = ["::/0"]\n  }\n',
 )
 
 
 class FakeTerraform:
-    """A ``TerraformCheck``: fails ``"::/0"`` in ``cidr_blocks`` as Terraform does; records each call."""
+    """A ``TerraformCheck``: fails ``"::/0"`` in ``cidr_blocks`` as Terraform does; records each
+    call."""
 
     def __init__(self) -> None:
         self.calls: list[tuple[Path, list[str]]] = []
@@ -127,7 +128,7 @@ class TestValidatorThree(Case):
         outcome = self.run_patch(SG_APP_CLOSED, [SG_APP, SSH_RULE])
         self.assertIsNone(outcome.failure_class, outcome.errors)
         assert outcome.build is not None
-        (called, names), = self.terraform.calls
+        ((called, names),) = self.terraform.calls
         self.assertEqual(called, outcome.build.candidate_dir)  # the built directory itself
         self.assertEqual(names, sorted(p.name for p in outcome.build.candidate_dir.iterdir()))
         self.assertEqual(outcome.terraform, self.terraform(outcome.build.candidate_dir).to_dict())
@@ -165,13 +166,17 @@ class TestValidatorThree(Case):
         parsed = parse_response(repair(SG_APP_CLOSED, [SG_APP, SSH_RULE]))
         assert parsed.response is not None
         with self.assertRaises(RuntimeError):
-            self.validator(broken).validate(parsed.response, request_id=REQUEST_ID, patch_id=PATCH_ID)
+            self.validator(broken).validate(
+                parsed.response, request_id=REQUEST_ID, patch_id=PATCH_ID
+            )
         self.assertEqual(list(self.work.path.iterdir()), [])
 
 
 class TestFailClosed(Case):
     def test_generation_with_a_validator_but_no_runner_refuses_to_start(self) -> None:
-        provider = FakeProvider([ProviderReply(text=repair(SG_APP_CLOSED, [SG_APP]), latency_ms=1.0)])
+        provider = FakeProvider(
+            [ProviderReply(text=repair(SG_APP_CLOSED, [SG_APP]), latency_ms=1.0)]
+        )
         with self.assertRaises(ValueError):
             Generator(
                 provider=provider,
@@ -220,7 +225,9 @@ class TestFailClosed(Case):
         self.assertIs(result.failure_class, F.INVALID_OUTPUT)
         self.assertIsNone(result.build)
         response = result.attempts[0].response.to_dict()
-        self.assertIn('"::/0" is not a valid IPv4 CIDR block', " ".join(response["validation_errors"]))
+        self.assertIn(
+            '"::/0" is not a valid IPv4 CIDR block', " ".join(response["validation_errors"])
+        )
         self.assertEqual(response["validator_version"], "dail-patch-validator-3")
 
 
@@ -233,7 +240,13 @@ class TestRunnerParts(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             src = Path(tmp) / "src"
             src.mkdir()
-            for name in ("main.tf", "x.tf.json", "terraform.tfvars", "notes.md", ".terraform.lock.hcl"):
+            for name in (
+                "main.tf",
+                "x.tf.json",
+                "terraform.tfvars",
+                "notes.md",
+                ".terraform.lock.hcl",
+            ):
                 (src / name).write_text("#\n", encoding="utf-8")
             (src / ".terraform").mkdir()
             dst = Path(tmp) / "dst"
@@ -259,10 +272,15 @@ class TestRunnerParts(unittest.TestCase):
         )
         self.assertEqual(
             validate_errors(out),
-            (False, 'Error: Missing required argument: The argument "to_port" is required. '
-                    "(dail_llm_patch.tf:9)"),
+            (
+                False,
+                'Error: Missing required argument: The argument "to_port" is required. '
+                "(dail_llm_patch.tf:9)",
+            ),
         )
-        self.assertEqual(validate_errors(json.dumps({"valid": True, "diagnostics": []})), (True, ""))
+        self.assertEqual(
+            validate_errors(json.dumps({"valid": True, "diagnostics": []})), (True, "")
+        )
 
     def test_the_cli_configuration_installs_from_the_mirror_only(self) -> None:
         from experiments.terraform_validate import cli_configuration
@@ -304,7 +322,9 @@ class TestRealTerraform(unittest.TestCase):
             bad_dir = Path(tmp) / "bad"
             shutil.copytree(BASELINE, bad_dir)
             main = bad_dir / "main.tf"
-            probe = SG_APP_IPV6.replace('"aws_security_group" "app"', '"aws_security_group" "probe"')
+            probe = SG_APP_IPV6.replace(
+                '"aws_security_group" "app"', '"aws_security_group" "probe"'
+            )
             main.write_text(main.read_text(encoding="utf-8") + "\n" + probe, encoding="utf-8")
             bad = runner(bad_dir)
             self.assertEqual(tree_digest(BASELINE), before)

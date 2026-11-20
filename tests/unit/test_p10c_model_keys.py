@@ -1,17 +1,19 @@
-"""Model keys that gitleaks' generic secret rule does not flag (P10c-1, C-229; P10b verdict limit 5).
+"""Model keys that gitleaks' generic secret rule does not flag (P10c-1, C-229; P10b verdict limit
+5).
 
-P10b verdict limit 5: "``.gitleaksignore`` keeps growing with model-key fingerprints; rename the keys
-instead." P10c-1: "a key format that does not match gitleaks' generic secret pattern (... check it
-against the rule), applied to new records only. Old frozen records keep their keys."
+P10b verdict limit 5: "``.gitleaksignore`` keeps growing with model-key fingerprints; rename the
+keys instead." P10c-1: "a key format that does not match gitleaks' generic secret pattern (... check
+it against the rule), applied to new records only. Old frozen records keep their keys."
 
 The rule is gitleaks 8.24.3's ``generic-api-key`` (the version DAIL's CI runs), read unchanged from
 ``tests/fixtures/gitleaks/generic_api_key_8.24.3.json`` (extracted from the release's
-``config/gitleaks.toml``, whose SHA-256 the fixture keeps). ``flagged`` reproduces how gitleaks applies
-it to one line: the regex; the secret's Shannon entropy must exceed the rule's ``entropy``; then the
-rule's allowlists (a regex on the secret, on the whole match or on the line; stopwords contained in the
-secret) and the global allowlist. Two Go regex forms are translated: ``\\z`` and a ``(?i)`` flag group
-in the middle of a pattern. The reproduction is calibrated against what CI flagged in P10b: the granite
-keys were flagged, the qwen and phi4-mini keys in the same files were not.
+``config/gitleaks.toml``, whose SHA-256 the fixture keeps). ``flagged`` reproduces how gitleaks
+applies it to one line: the regex; the secret's Shannon entropy must exceed the rule's ``entropy``;
+then the rule's allowlists (a regex on the secret, on the whole match or on the line; stopwords
+contained in the secret) and the global allowlist. Two Go regex forms are translated: ``\\z`` and a
+``(?i)`` flag group in the middle of a pattern. The reproduction is calibrated against what CI
+flagged in P10b: the granite keys were flagged, the qwen and phi4-mini keys in the same files were
+not.
 """
 
 from __future__ import annotations
@@ -94,7 +96,8 @@ def flagged(line: str, doc: dict[str, Any] | None = None) -> list[str]:
 
 class TestTheReproductionMatchesCI(unittest.TestCase):
     """What gitleaks 8.24.3 reported on DAIL's PR #33 (docs/P10B_MODEL_PILOT.json and
-    P10B_INTERRUPTIONS.json): the granite keys, and none of the qwen or phi4-mini keys beside them."""
+    P10B_INTERRUPTIONS.json): the granite keys, and none of the qwen or phi4-mini keys beside them.
+    """
 
     def test_the_fixture_is_the_release_rule(self) -> None:
         doc = load_rule()
