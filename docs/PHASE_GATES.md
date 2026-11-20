@@ -683,8 +683,20 @@ P8a, P8b and P10.
 ```text
 P10a: passed with limits (verdict on PR #32). Recorded in P10b (14 Nov 2026); merged as 839c2d3.
 Limits of the verdict (open items):
-1.-7. NOT YET RECORDED: the text of the verdict's limits 1 to 7 was not in the merge commit or on
-   the PR and was not pasted into P10b; they are recorded when the user pastes it.
+1. C-222 is Proposed; the authors must decide it. [Closed by decision 3.]
+2. Under DAIL no LLM candidate was promoted: 0 of 20 valid pilot candidates under B, C and C′. 12 of
+   C's rejections are UNSUPPORTED, mostly `group.mixed` and `group.retained_inline`. Prompt v2 lists
+   the supported resource types but not this rule-form restriction (registry §2.6). Decide at the
+   protocol freeze, on dev only, whether to write a prompt v3. [Prompt v3 written in P10b, C-223.]
+3. The pilot's latency for `phi4-mini` is distorted by one call of 39,393 s (the machine slept). The
+   main run must keep the machine awake and record any interruption.
+4. Process deviations: `test_p10a_generation_metrics` was written after its code; the concurrency
+   fix has no red run. Accepted.
+5. The P8b verdict's limits 4–8 are not yet in PHASE_GATES. [Closed in P10b.]
+6. No truth for the LLM candidates yet; the oracle must label them before any LLM result is
+   reported. [Labels in TerraPreserve TP-L1.]
+7. Model choice and k are for the protocol freeze. [Decided in P10b, C-224.]
+(Limits 1 to 7 recorded word for word in P10c, 20 Nov 2026.)
 ```
 
 The P10a author's input to the review, as written before the verdict:
@@ -737,7 +749,23 @@ Limits: one machine, one run per model, k = 1; the projection assumes test scena
 Carry-forward: C-222 Proposed; P10b freezes models, k, the retry policy and the metrics.
 ```
 
-## P10b — Prompt v3 and the second dev pilot (pending external review)
+## P10b — Prompt v3 and the second dev pilot — passed with limits (verdict on PR #33)
+
+```text
+P10b: passed with limits (verdict on PR #33). Recorded in P10c (20 Nov 2026); merged as 883d496.
+Limits of the verdict (open items):
+1. C-225 and C-226 are Proposed. [Closed by decision 3.]
+2. DAIL promoted no valid LLM patch on dev (0/20, 0/19, 0/33 under B, C and C′). Whether the
+   rejections were right was unknown before oracle labels. [TP-L1: no candidate is safe; 5 unsafe;
+   64 fail `terraform validate`.]
+3. Keep-awake failed: modern standby interrupted Run B. Before the main run, configure the machine
+   so it cannot sleep while plugged in, test it, and keep recording interruptions.
+4. The P10a verdict's limits were not in PHASE_GATES. [Closed by this package.]
+5. `.gitleaksignore` keeps growing with model-key fingerprints; rename the keys instead.
+6. Run B's granite timing includes the interrupted attempts; both projections are given.
+```
+
+The P10b author's input to the review, as written before the verdict:
 
 ```text
 P10b mini-gate: NOT DECIDED. Status written by the P10b author as an input to the external review.
