@@ -23,6 +23,11 @@ each listed. Output rows name the model in a field ``model`` (C-229: a ``model_k
 holding a frozen granite key is flagged by gitleaks' generic rule). The validate cross-check
 compares DAIL's gate with TP-L1's ``terraform validate`` (a candidate whose plan status is
 ``invalid`` under either value set failed it); every disagreement is listed and none is resolved.
+
+``candidate_rows`` (P10d, metrics-final-1) gives the same join one row per attempt: generation,
+model, scenario, k, valid before the gate, validate-valid, the class (``safe``, ``unsafe``,
+``no label``; None without a patch) and each condition's decision (None if not replayed); the
+LLM metrics of ``experiments.metrics.llm_final`` read these rows. ``score``'s output is unchanged.
 """
 
 from __future__ import annotations
@@ -122,6 +127,7 @@ def _generation(
     models: dict[str, dict[str, Any]] = {}
     unsafe_a: list[dict[str, Any]] = []
     agreement: list[dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     for row in manifest["attempts"]:
         m = models.setdefault(
             row["model_key"],
@@ -136,6 +142,17 @@ def _generation(
             },
         )
         m["attempts"] += 1
+        candidate: dict[str, Any] = {
+            "generation_id": gid,
+            "model": row["model_key"],
+            "scenario_id": row["scenario_id"],
+            "k": int(row["k"]),
+            "valid_before_gate": row["status"] == "PATCH",
+            "validate_ok": None,
+            "class": None,
+            "decisions": {c: None for c in CONDITIONS},
+        }
+        rows.append(candidate)
         if row["status"] != "PATCH":
             continue
         m["valid_before_gate"] += 1
@@ -151,6 +168,7 @@ def _generation(
         cls = label_class(label)
         m["classes"][cls] = m["classes"].get(cls, 0) + 1
         short = cls if cls in ("safe", "unsafe") else "no label"
+        candidate["validate_ok"], candidate["class"] = ok, short
         tp_ok = tp_validate_ok(label)
         agreement.append(
             {
@@ -169,6 +187,7 @@ def _generation(
             decision = _read(path)["decision"] if path.exists() else None
             if decision is None:
                 continue
+            candidate["decisions"][c] = decision
             verdict = "promoted" if decision == "PROMOTE" else "rejected"
             m["conditions"]["all_replayed"][c][f"{verdict} {short}"] += 1
             if ok:
@@ -192,7 +211,25 @@ def _generation(
         "export_sha256": _sha(export_raw),
         "labels_count": len(labels),
         "gate_rates": gate["rates"],
+        "rows": rows,
     }
+
+
+def candidate_rows(
+    *,
+    root: Path,
+    generations: Sequence[str],
+    tp_root: Path,
+    tp_commit: str,
+    gate_name: str,
+    replay_name: str,
+) -> list[dict[str, Any]]:
+    """One row per attempt, with the same reads and checks as ``score``."""
+    found: list[dict[str, Any]] = []
+    for gid in generations:
+        tp = read_tp_labels(tp_root, tp_commit, gid)
+        found += _generation(root, gid, tp, gate_name, replay_name)["rows"]
+    return found
 
 
 def score(

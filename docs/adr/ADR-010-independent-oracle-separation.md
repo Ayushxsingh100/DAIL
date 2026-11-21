@@ -25,3 +25,18 @@ Doc 02 §24 defines the oracle boundary. The oracle must never feed the Promotio
 
 - Doc 02 §24 is revised.
 - The separate-author or separate-input-path conditions cannot be met; record the deviation and its effect on the independence claim before any experiment uses oracle labels.
+
+## Deviation (P10d, C-233, 21 Nov 2026)
+
+The separate-author condition was not met. DAIL and TerraPreserve's oracle were both written by
+Claude Code from work-package prompts written by the same assistant, under the authors' direction;
+the oracle was not written by a different human author. Independence rests on:
+
+- separate code in a separate repository;
+- a different input path (Terraform plan JSON, against DAIL's own HCL parser);
+- the enforced import ban (`tests/contract/test_architecture_boundaries.py` here; TerraPreserve's
+  own test there);
+- the two-value-set invariance test.
+
+The effect on the independence claim is stated in the paper. TerraPreserve records the same
+deviation in its next package. N-02 points to C-233.

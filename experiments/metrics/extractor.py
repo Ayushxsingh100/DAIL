@@ -1,5 +1,6 @@
-"""The metric extractor ``extractor-4``, for the metric definitions ``metrics-draft-1`` (P8b work
-package Section 4; Doc 13 §25-§35, Appendix B; C-212 to C-214).
+"""The metric extractor ``extractor-5``, for the metric definitions ``metrics-final-1`` (P10d work
+package Step 2: P8b's ``metrics-draft-1`` (P8b work package Section 4; Doc 13 §25-§35, Appendix B;
+C-212 to C-214) unchanged, plus the definitions of ``experiments.metrics.final``; C-231 to C-240).
 
 Versions (P10a Section 3.1): ``METRICS_VERSION`` names the metric definitions (C-212) and
 ``EXTRACTOR_VERSION`` names this code; every metric record and report carries both. The code of
@@ -9,7 +10,11 @@ first extractor was version ``metrics-draft-1`` (one value for both, P8b); ``ext
 same code with the two versions apart and the generation metrics of
 ``experiments.metrics.generation``; ``extractor-3`` (P10b) adds the pilot metrics
 ``rejection_reasons``, ``distinct_patches`` and ``experiment_projection`` there; ``extractor-4``
-(P10c) adds ``experiments.scoring.llm_pilot``.
+(P10c) adds ``experiments.scoring.llm_pilot``; ``extractor-5`` (P10d) is ``metrics-final-1``:
+``experiments.metrics.final`` (scenario-level MR, H4, W per scenario, κ, macro impact, truth
+recall), the LLM metrics of ``experiments.metrics.llm_final``, identity-truth-2 (C-234) and, over
+the true pairs, identity and transition error rates with UNCERTAIN excluded and the
+evidence-transfer error rate (transfers / true replacements; C-240 (1), (2)).
 
 Input: the transitions of the stored trial records (``experiments.metrics.model``), the scenarios'
 truth from ``experiments.scoring``, DAIL's S0 results under B, and the identity truth table. Output:
@@ -56,13 +61,14 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Final
 
+from experiments.metrics import final
 from experiments.metrics.model import Transition, invariant_of
-from experiments.scoring.identity import IdentityTable, judge, true_pairs
+from experiments.scoring.identity import IdentityTable, judge, judge_transition, true_pairs
 from experiments.scoring.labels import ScenarioLabels
 from experiments.scoring.truth import TransitionTruth, transition_truth
 
-METRICS_VERSION: Final = "metrics-draft-1"  # the metric definitions (C-212)
-EXTRACTOR_VERSION: Final = "extractor-4"  # this code (P10a 3.1; 3: P10b; 4: P10c scoring)
+METRICS_VERSION: Final = "metrics-final-1"  # the metric definitions (P10d; draft-1: C-212)
+EXTRACTOR_VERSION: Final = "extractor-5"  # this code (P10a 3.1; 3: P10b; 4: P10c; 5: P10d)
 NAMESPACE: Final = uuid.uuid5(uuid.NAMESPACE_URL, "dail/experiments/metrics")
 Z95: Final = 1.959963984540054
 ORDER: Final = ("A", "B", "C", "C_PRIME")
@@ -409,10 +415,22 @@ def extract(
             unit="saving",
         )
     _agreement(x, scored_items.get("B", []), baselines, scored)
+    if "B" in scored_items:
+        x.lists["kappa"] = final.kappa_rows(x.confusion)
+        for row in x.lists["kappa"]:
+            stratum = f"invariant={row['invariant_id']}"
+            out.add("kappa", "B", scope="all", stratum=stratum, numerator=None,
+                    denominator=row["n"], value=row["kappa"], unit="kappa")  # fmt: skip
     for c in ("C", "C_PRIME"):
         if c in scored_items:
             _impact(out, x, c, scored_items[c])
+            final.impact_macro(out, c, scored_items[c])
+            final.truth_recall(out, x, c, scored_items[c])
             _identity(out, x, c, scored_items[c], identity)
+    x.lists["scenario_outcomes"] = final.scenario_outcomes(
+        by_condition, scored, _work, work_w, ORDER
+    )
+    final.scenario_records(out, x.lists["scenario_outcomes"], ORDER)
     _work_difference_f5(x, scored_items, identity)
     x.lists["unsafe_promotions_c"] = [
         {
@@ -533,6 +551,8 @@ def _identity(
     out: _Out, x: Extraction, condition: str, items: Sequence[_Scored], table: IdentityTable
 ) -> None:
     pairs = wrong = uncertain = transfer = excluded = 0
+    # metrics-final-1 (C-240 (1), (2)): by stratum (all and family), UNCERTAIN excluded
+    final_counts: dict[str, Counter[str]] = defaultdict(Counter)
     errors = x.lists.setdefault("identity_errors", [])
     excluded_list = x.lists.setdefault("identity_excluded", [])
     for s in items:
@@ -546,6 +566,14 @@ def _identity(
         for pair in found:
             verdict = judge(pair, s.t.identity_pairs)
             pairs += 1
+            for stratum in ("all", f"family={s.scenario.family}"):
+                c = final_counts[stratum]
+                c["pairs"] += 1
+                c["uncertain"] += verdict == "uncertain"
+                c["wrong"] += verdict == "wrong"
+                c["transition_wrong"] += judge_transition(pair, s.t.identity_pairs) == "wrong"
+                c["replacements"] += pair.effect == "REPLACE"
+                c["transfer"] += verdict == "wrong" and pair.effect == "REPLACE" and carried
             if verdict == "uncertain":
                 uncertain += 1
             if verdict == "wrong":
@@ -573,6 +601,17 @@ def _identity(
     out.amount(
         "evidence_transfer_errors", condition, transfer, scope="all", stratum="all", unit="count"
     )
+    final_counts.setdefault("all", Counter())
+    for stratum, c in sorted(final_counts.items()):
+        certain = c["pairs"] - c["uncertain"]
+        where = {"scope": "all", "stratum": stratum}
+        out.ratio("identity_error_rate_certain", condition, c["wrong"], certain, **where)
+        out.ratio("transition_error_rate_certain", condition, c["transition_wrong"], certain,
+                  **where)  # fmt: skip
+        out.ratio("identity_uncertain_share_final", condition, c["uncertain"], c["pairs"],
+                  **where)  # fmt: skip
+        out.ratio("evidence_transfer_error_rate", condition, c["transfer"], c["replacements"],
+                  **where)  # fmt: skip
     out.amount(
         "identity_excluded_pairs", condition, excluded, scope="all", stratum="all", unit="count"
     )

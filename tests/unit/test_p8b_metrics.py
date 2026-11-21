@@ -14,7 +14,9 @@ import unittest
 from typing import Any
 
 from experiments.metrics.extractor import EXTRACTOR_VERSION, extract, find, wilson
-from experiments.scoring.identity import load_identity_table
+
+# the hand values below were computed under identity-truth-1, which P10d keeps (C-234)
+from experiments.scoring.identity import TABLE_PATH_1, load_identity_table
 from experiments.scoring.truth import transition_truth
 from tests.metrics_builders import F, S, baselines, scenarios, transitions
 
@@ -25,7 +27,7 @@ def run() -> Any:
         transitions=transitions(),
         scored=scenarios(),
         baselines=baselines(),
-        identity=load_identity_table(),
+        identity=load_identity_table(TABLE_PATH_1),
     )
 
 
@@ -236,11 +238,11 @@ class TestRecords(Case):
                 "extractor_version",
             ):
                 self.assertIn(key, record)
-            # P10a Section 3.1: the definitions stay metrics-draft-1; the extractor has its own
-            # version (it was the same value in P8b)
-            self.assertEqual(record["metrics_version"], "metrics-draft-1")
+            # P10a Section 3.1: the extractor has its own version (it was the same value in P8b);
+            # P10d: the definitions are metrics-final-1 (P8b's records unchanged inside it)
+            self.assertEqual(record["metrics_version"], "metrics-final-1")
             self.assertEqual(record["extractor_version"], EXTRACTOR_VERSION)
-        self.assertEqual(EXTRACTOR_VERSION, "extractor-4")
+        self.assertEqual(EXTRACTOR_VERSION, "extractor-5")
 
     def test_the_extractor_is_deterministic(self) -> None:
         from experiments.metrics.extractor import dumps_metrics
@@ -288,7 +290,7 @@ class TestEdgeRules(unittest.TestCase):
             transitions=kept,
             scored=scenarios(),
             baselines=baselines(),
-            identity=load_identity_table(),
+            identity=load_identity_table(TABLE_PATH_1),
         )
         record = find(x, "work_saving_c_vs_b", "C", scope="common_prefix_B_C")
         self.assertEqual((record["numerator"], record["denominator"]), (14, 16))
@@ -312,7 +314,7 @@ class TestEdgeRules(unittest.TestCase):
             transitions=[odd],
             scored=scenarios(),
             baselines={},
-            identity=load_identity_table(),
+            identity=load_identity_table(TABLE_PATH_1),
         )
         record = find(x, "unknown_rate", "C")
         self.assertEqual((record["numerator"], record["denominator"]), (0, 3))

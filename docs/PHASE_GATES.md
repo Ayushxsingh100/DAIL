@@ -805,10 +805,34 @@ Carry-forward: C-225, C-226 Proposed; the authors decide the prompt question bef
   freeze.
 ```
 
-## P10c — The `terraform validate` gate, and scoring the dev LLM pilots (pending external review)
+## P10c — The `terraform validate` gate, and scoring the dev LLM pilots — passed with limits (verdict on PR #34)
 
 ```text
-P10c mini-gate: NOT DECIDED. Status written by the P10c author as an input to the external review.
+P10c: passed with limits (verdict on PR #34). Recorded in P10d-2 (21 Nov 2026, C-244); merged as
+  765a3a1.
+Limits of the verdict (open items):
+1. The labels come from an unmerged TerraPreserve PR (C-230, `b9d4cce`). Merge TerraPreserve PR
+   #13 first; its head is `b9d4cce`, so the labels are unchanged, but the record must point to a
+   merged commit; the next package updates C-230 to the merge commit. [Closed in P10d: C-230
+   points to `4b2d84a`.]
+2. C-229 (model keys) and C-230 are Proposed; the authors must decide them. [Closed in P10d.]
+3. Replay of frozen candidates rebuilds without the validate runner (by design, for frozen
+   records). In the main run, an LLM candidate's decisions may enter scoring only if its gate
+   record says it passed; a candidate that failed the gate is reported as an invalid patch, never
+   as a DAIL decision. The P10e package must enforce this, with a test.
+4. `.gitleaksignore` again (4 history fingerprints). The new `model-` key format should end this;
+   check that new records need no new fingerprint. [P10d: 0 lines flagged in 36 new or changed
+   files.]
+5. The suite's 35,651 s wall time on the author's machine suggests sleep during the run. The
+   machine-awake setup is still to be done before the main run (P10b limit 3).
+6. What the dev pilots show (descriptive, C-228): only 8 of 180 generation attempts gave valid
+   Terraform (3 of 36 in P10a, 1 of 36 in Run A, 4 of 108 in Run B); no candidate is safe; DAIL
+   was right to reject the 5 unsafe ones, and so was A; A promoted 2 validate-valid candidates
+   that have no oracle label. This is the expected outcome for small CPU models, and the paper
+   reports it as such.
+(Limits 1 to 6 recorded word for word in P10d-2, 21 Nov 2026.)
+
+Status written by the P10c author as an input to the external review (kept as written):
 Base: 883d496 (the PR #33 merge). Decisions: C-227 (C-99 completed for LLM candidates) and C-228
   (the LLM track is descriptive), Decided (authors, 20 Nov 2026); C-222, C-225, C-226 Decided;
   C-229 (model keys) and C-230 (readings) Proposed.
@@ -838,6 +862,47 @@ Limits: TP-L1 is not merged; the labels are those of its PR head (C-230). The re
   the patch validator to rebuild, so a rebuild difference would show as a tree-hash mismatch (none
   occurred).
 Carry-forward: C-229, C-230 Proposed.
+```
+
+## P10d — Final metrics, the statistics code and the frozen protocol v1 (pending external review)
+
+```text
+P10d mini-gate: NOT DECIDED. Status written by the P10d author as an input to the external review.
+Base: 765a3a1 (the PR #34 merge). P10c: passed with limits (verdict on PR #34), recorded in
+  P10d-2 (C-244).
+Decisions: C-231 (H2 non-inferiority exploratory), C-232 (missed regressions at scenario level),
+  C-233 (the ADR-010 author deviation; N-02 amended, ADR-010 note), C-234 (the count row,
+  identity-truth-2) Decided (authors, 21 Nov 2026); C-229, C-230 Decided (C-230 at TerraPreserve
+  4b2d84a, content equal to b9d4cce); C-238 (the test cluster sizes are not public: public bounds
+  now, the rule applied to the actual sizes at unblinding) and C-239 (unsafe scenarios without a
+  regression-inducing step are not in MR, counted apart) Decided (user, 21 Nov 2026); C-235 to
+  C-237 (P10d-1 to P10d-3), C-240 and C-241 (readings) Proposed.
+What exists: metrics-final-1, extractor-5 (experiments/metrics/final.py, llm_final.py; P8b's
+  records unchanged); identity-truth-2 (identity-truth-1 kept); experiments/stats (procedures,
+  seeded simulations, analysis, dev dry run, rendering); experiments/report/protocol.py;
+  docs/P10D_DEV_DRY_RUN.{json,md}; docs/PROTOCOL_v1.{json,md}. experiments.stats is in the
+  blinding contract. Test references: Newcombe's method 10 against the Armitage and Berry example
+  as worked by StatsDirect (0.056156 to 0.329207), exact McNemar against the same page (0.0129,
+  0.0065), the paper's best case (0.053), Wilson, sign test, Holm, DEFF and ICC by hand. Mutation
+  checks: 14 of 14 metric and 14 of 14 statistics mutants caught (2 of each only after tests were
+  added for the cases the hand examples lacked).
+Dev dry run (21 Nov 2026, DEV DRY RUN, NOT RESULTS; p8b-dev-run-3 and the P10c LLM inputs):
+  every dev ICC of the paired MR outcome is undefined (B and C miss nothing), so ρ = 0.30 goes
+  into DEFF (C-241 (5)). Coverage (4000 replications per cell, seed 20261121): minimum 0.9187
+  (target-bearing) and 0.9233 (change-request), both on the even test bound and already below
+  0.93 at ρ = 0: descriptive; the pooled non-inferiority limit 0.9303: inferential, on the
+  threshold. Power: H1 at effect 0.10 is about 0 in both strata (power 0.80 needs an effect of
+  0.6 / 0.3 to 0.4 with the even bound); H2's workload test 1.000.
+Limits: the test cluster sizes are public bounds (C-238); Newcombe's own Table II was not checked
+  (the PDF had no text layer; the external review checked method 10 independently and says Table
+  II need not be checked); the dry run is dev data under a protocol not yet frozen.
+P10d-2 fix round (21 Nov 2026, external review of 4cf560c): C-242 (power is reported, never used
+  to demote a result) and C-243 (the pooled H1 strata tests and the H2 workload test are
+  inferential whatever the number of clusters; the smallest attainable two-sided p per H1
+  stratum is reported) Decided (authors); PROTOCOL_v1 §5 and §10 regenerated; the dev dry run
+  rerun as analysis-2.
+Carry-forward: C-235 to C-237, C-240, C-241 Proposed; the protocol-v1 tag (the user, after the
+  verdict and the advisor's sign-off); P10c limit 3 for P10e.
 ```
 
 ## Temporary exceptions

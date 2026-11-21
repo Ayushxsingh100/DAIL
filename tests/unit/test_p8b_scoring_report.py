@@ -28,7 +28,7 @@ from experiments.metrics.model import transitions_from_result
 from experiments.report.build import REPORT_KEYS, build_report
 from experiments.report.render import render_markdown
 from experiments.runner import Layout, plan, read_result, run_experiment
-from experiments.scoring.identity import load_identity_table, true_pairs
+from experiments.scoring.identity import TABLE_PATH_1, load_identity_table, true_pairs
 from experiments.scoring.labels import load_labels
 from tests.experiment_builders import F2, F8, TempDirs, mini_root
 from tests.fixture_catalog import REPO_ROOT
@@ -94,7 +94,9 @@ class TestLabels(unittest.TestCase):
 
 class TestIdentityTable(unittest.TestCase):
     def setUp(self) -> None:
-        self.table = load_identity_table()
+        # identity-truth-1, kept unchanged by P10d (C-234); identity-truth-2 is tested in
+        # tests.unit.test_p10d_metrics_final
+        self.table = load_identity_table(TABLE_PATH_1)
 
     def test_every_row_quotes_the_catalogue(self) -> None:
         self.assertTrue(self.table.rows)
