@@ -1,6 +1,6 @@
 {
  "pins": {
-  "analysis_version": "analysis-1",
+  "analysis_version": "analysis-2",
   "aws_provider": "registry.terraform.io/hashicorp/aws 6.53.0",
   "dail_commit": "the commit tagged protocol-v1 (the commit that holds this file)",
   "extractor_code_sha256": "ef4680c4fe125e20cbaac246192d8efac431ef3d9392102c7b3e38b4c045fb5d",
@@ -48,7 +48,7 @@
   "prompt_version": "dail-repair-prompt-3",
   "registry": "registry-v1.1 (stored invariant_registry_version 2)",
   "sampling": "k = 3; temperature 0.7, top_p 0.95, seed rule seed + k - 1 (C-225, C-222)",
-  "stats_code_sha256": "bd46c63d1bb63e4214984dd0fee250fe06d9ab8bc0c20350fe851ba88b0c34f3",
+  "stats_code_sha256": "ecf1cea18fd572fc56af1f93934025668335b3b90fcf40c7f51ee4d56e00ab18",
   "terraform": "1.15.8",
   "terrapreserve_manifest_sha256": "665b326a024d295f727cd5648ffc7e0d375b9300584871f238c6bfa48edd2e2d",
   "terrapreserve_tag": "terrapreserve-v1.0",

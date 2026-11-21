@@ -41,6 +41,7 @@ from experiments.stats.procedures import (
     holm,
     icc_anova,
     mcnemar_exact,
+    min_p_two_sided,
     newcombe10,
     one_sided_upper_95,
     sign_test,
@@ -79,6 +80,31 @@ class TestSignTest(unittest.TestCase):
         self.assertAlmostEqual(mcnemar_exact(12, 2), 0.0129, places=4)
         self.assertAlmostEqual(mcnemar_exact(12, 2, alternative="greater"), 0.0065, places=4)
         self.assertAlmostEqual(mcnemar_exact(12, 2), sign_test(12, 2, alternative="two-sided"))
+
+
+class TestMinimumAttainableP(unittest.TestCase):
+    """P10d-2 decision 2 (C-243): k discordant clusters give a smallest two-sided p of 2 · 0.5^k
+    (every discordant cluster on one side), capped at 1; with none the test gives 1."""
+
+    def test_hand_example(self) -> None:
+        self.assertEqual(min_p_two_sided(0), 1.0)
+        self.assertEqual(min_p_two_sided(1), 1.0)  # 2 · 1/2 = 1
+        self.assertAlmostEqual(min_p_two_sided(2), 0.5)
+        self.assertAlmostEqual(min_p_two_sided(5), 2 / 32)
+        self.assertAlmostEqual(min_p_two_sided(6), 2 / 64)
+        self.assertAlmostEqual(min_p_two_sided(24), 2 / 2**24)
+
+    def test_it_is_the_sign_test_with_every_discordant_cluster_on_one_side(self) -> None:
+        for k in range(1, 30):
+            with self.subTest(k=k):
+                self.assertAlmostEqual(min_p_two_sided(k), sign_test(k, 0, alternative="two-sided"))
+                self.assertLessEqual(
+                    min_p_two_sided(k), sign_test(k - 1, 1, alternative="two-sided")
+                )
+
+    def test_a_negative_count_is_refused(self) -> None:
+        with self.assertRaises(ValueError):
+            min_p_two_sided(-1)
 
 
 class TestHolm(unittest.TestCase):

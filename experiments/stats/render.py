@@ -120,15 +120,16 @@ def render(report: Mapping[str, Any]) -> str:
         f"## 4. H1: A vs C ({m})",
         "",
         "| stratum | MR scenarios | clusters (by tier) | descriptive tiers | n+ / n− / n0 | p "
-        "(two-sided) | Holm | MR_A − MR_C [95% CI, DEFF] |",
-        "|---|---|---|---|---|---|---|---|",
+        "(two-sided) | smallest attainable p | Holm | MR_A − MR_C [95% CI, DEFF] |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
     for stratum, s in h1["strata"].items():
         iv = s["interval95"]
         out.append(
             f"| {stratum} | {s['scenarios']} | {s['clusters']} {s['clusters_by_tier']} | "
             f"{', '.join(s['descriptive_tiers']) or 'none'} | {s['n_plus']} / {s['n_minus']} / "
-            f"{s['n_zero']} | {_f(s['p_two_sided'])} | {_f(h1['holm_adjusted'][stratum])} | "
+            f"{s['n_zero']} | {_f(s['p_two_sided'])} | {_f(s['min_attainable_p_two_sided'])} "
+            f"({s['discordant_clusters']} discordant) | {_f(h1['holm_adjusted'][stratum])} | "
             f"{_f(s['difference'])} [{_f(iv[0])}, {_f(iv[1])}], DEFF {_f(s['deff'], 3)} |"
         )
     out += ["", f"## 5. H2: B vs C ({m})", "", "| workload | value |", "|---|---|"]

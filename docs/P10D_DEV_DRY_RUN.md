@@ -1,6 +1,6 @@
 # P10d dev dry run (DEV DRY RUN, NOT RESULTS)
 
-> **DEV DRY RUN, NOT RESULTS.** The whole analysis of the frozen protocol, run on dev data (reference track: experiment `c4c20b99-0324-58e0-937e-dba26ad5cf0b`, `p8b-dev-run-3`; LLM track: the P10c scoring inputs) as if it were the test split, to check the code and the protocol before the freeze. Nothing here is a finding, and no hypothesis is tested on dev (C-214). Versions: `metrics-final-1`, `extractor-5`, `analysis-1`; seed 20261121, 4000 coverage and 2000 power replications per cell. Generated from `P10D_DEV_DRY_RUN.json` by `experiments.stats.render`.
+> **DEV DRY RUN, NOT RESULTS.** The whole analysis of the frozen protocol, run on dev data (reference track: experiment `c4c20b99-0324-58e0-937e-dba26ad5cf0b`, `p8b-dev-run-3`; LLM track: the P10c scoring inputs) as if it were the test split, to check the code and the protocol before the freeze. Nothing here is a finding, and no hypothesis is tested on dev (C-214). Versions: `metrics-final-1`, `extractor-5`, `analysis-2`; seed 20261121, 4000 coverage and 2000 power replications per cell. Generated from `P10D_DEV_DRY_RUN.json` by `experiments.stats.render`.
 
 ## 1. ρ, the ICC of the paired MR outcome (P10d-2) — DEV DRY RUN, NOT RESULTS
 
@@ -64,10 +64,10 @@ C's dev MR per stratum, used as MR_C: {'repair': 0.0, 'change_request': 0.0}.
 
 ## 4. H1: A vs C (DEV DRY RUN, NOT RESULTS)
 
-| stratum | MR scenarios | clusters (by tier) | descriptive tiers | n+ / n− / n0 | p (two-sided) | Holm | MR_A − MR_C [95% CI, DEFF] |
-|---|---|---|---|---|---|---|---|
-| repair | 28 | 24 {'controlled': 10, 'real_world': 14} | none | 24 / 0 / 0 | 0.0000 | 0.0000 | 1.0000 [0.8167, 1.0000], DEFF 1.086 |
-| change_request | 70 | 55 {'controlled': 21, 'real_world': 34} | none | 55 / 0 / 0 | 0.0000 | 0.0000 | 1.0000 [0.9163, 1.0000], DEFF 1.146 |
+| stratum | MR scenarios | clusters (by tier) | descriptive tiers | n+ / n− / n0 | p (two-sided) | smallest attainable p | Holm | MR_A − MR_C [95% CI, DEFF] |
+|---|---|---|---|---|---|---|---|---|
+| repair | 28 | 24 {'controlled': 10, 'real_world': 14} | none | 24 / 0 / 0 | 0.0000 | 0.0000 (24 discordant) | 0.0000 | 1.0000 [0.8167, 1.0000], DEFF 1.086 |
+| change_request | 70 | 55 {'controlled': 21, 'real_world': 34} | none | 55 / 0 / 0 | 0.0000 | 0.0000 (55 discordant) | 0.0000 | 1.0000 [0.9163, 1.0000], DEFF 1.146 |
 
 ## 5. H2: B vs C (DEV DRY RUN, NOT RESULTS)
 

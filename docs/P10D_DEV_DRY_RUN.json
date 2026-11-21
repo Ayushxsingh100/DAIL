@@ -1,5 +1,5 @@
 {
- "analysis_version": "analysis-1",
+ "analysis_version": "analysis-2",
  "coverage": {
   "configs": {
    "all/dev": [
@@ -11931,10 +11931,12 @@
     "deff": 1.1457142857142857,
     "descriptive_tiers": [],
     "difference": 1.0,
+    "discordant_clusters": 55,
     "interval95": [
      0.9163419986558513,
      1.0
     ],
+    "min_attainable_p_two_sided": 5.551115123125783e-17,
     "mr_a": 1.0,
     "mr_c": 0.0,
     "n_minus": 0,
@@ -11958,10 +11960,12 @@
     "deff": 1.0857142857142856,
     "descriptive_tiers": [],
     "difference": 1.0,
+    "discordant_clusters": 24,
     "interval95": [
      0.8166563552252651,
      1.0
     ],
+    "min_attainable_p_two_sided": 1.1920928955078125e-07,
     "mr_a": 1.0,
     "mr_c": 0.0,
     "n_minus": 0,

@@ -91,7 +91,12 @@ condition, any-unsafe-promoted@k.
 - **Population:** the test split, 96 scenarios (48 unsafe). MR strata: 12 target-bearing (F4, F8)
   and 30 change-request (F1, F3, F5, F6, F7) unsafe scenarios with a regression-inducing step
   (C-239); the 6 unsafe F2 scenarios are counted apart. Clusters are templates (controlled) or
-  lineages (real-world); a tier with fewer than 10 clusters is descriptive (C-241 (6)).
+  lineages (real-world).
+- **Clusters (C-243):** The H1 strata tests and the H2 workload test pool the clusters of both
+  tiers and are inferential whatever the number of clusters. For each stratum, the smallest
+  two-sided p-value the exact sign test can reach with its number of discordant clusters is
+  reported beside the result. Results reported per tier with fewer than 10 clusters are
+  descriptive.
 - **H1** (A vs C), per stratum: the exact cluster sign test, two-sided, on the cluster MR
   differences, each cluster weighted equally (exact McNemar for single-scenario clusters);
   α = 0.05, Holm across the two strata. Also the scenario-weighted MR difference with Newcombe's
@@ -117,9 +122,10 @@ condition, any-unsafe-promoted@k.
   as descriptive only and no inferential claim is drawn from them. Before the freeze the test sizes
   are public bounds (C-238); at unblinding the frozen code computes the actual sizes and applies
   the rule before any outcome is read.
-- **Power:** the H1 and H2 power simulations on dev data are reported (power 0.80, clustering, H1
-  effect 0.10, Holm); the protocol is frozen whatever they show, and an underpowered result is
-  called exploratory.
+- **Power (C-242):** the H1 and H2 power simulations on dev data are reported (power 0.80,
+  clustering, H1 effect 0.10, Holm) as a description of the design. They do not change any test's
+  status. A significant confirmatory result is reported as significant. A non-significant one is
+  reported as inconclusive, never as evidence of no difference.
 - **κ and adjudication (C-237):** κ is computed by the extractor before any adjudication;
   Krishika adjudicates the disagreements blind to condition, on the test split after the run.
 
@@ -158,7 +164,7 @@ At unblinding the rule is applied again on the actual test sizes (section 9).
 
 | pin | value |
 |---|---|
-| analysis_version | `analysis-1` |
+| analysis_version | `analysis-2` |
 | aws_provider | `registry.terraform.io/hashicorp/aws 6.53.0` |
 | dail_commit | `the commit tagged protocol-v1 (the commit that holds this file)` |
 | extractor_code_sha256 | `ef4680c4fe125e20cbaac246192d8efac431ef3d9392102c7b3e38b4c045fb5d` |
@@ -171,7 +177,7 @@ At unblinding the rule is applied again on the actual test sizes (section 9).
 | prompt_version | `dail-repair-prompt-3` |
 | registry | `registry-v1.1 (stored invariant_registry_version 2)` |
 | sampling | `k = 3; temperature 0.7, top_p 0.95, seed rule seed + k - 1 (C-225, C-222)` |
-| stats_code_sha256 | `bd46c63d1bb63e4214984dd0fee250fe06d9ab8bc0c20350fe851ba88b0c34f3` |
+| stats_code_sha256 | `ecf1cea18fd572fc56af1f93934025668335b3b90fcf40c7f51ee4d56e00ab18` |
 | terraform | `1.15.8` |
 | terrapreserve_manifest_sha256 | `665b326a024d295f727cd5648ffc7e0d375b9300584871f238c6bfa48edd2e2d` |
 | terrapreserve_tag | `terrapreserve-v1.0` |
@@ -215,3 +221,4 @@ At unblinding the rule is applied again on the actual test sizes (section 9).
 15. **C-200.** In the reference track a trajectory stops at the first decision other than PROMOTE (the paper's "a patch that no longer applies ends the trajectory" is for the LLM track).
 16. **C-240 (1).** Identity and transition errors, which the paper names but does not define, are defined as in section 4.
 17. **C-213, C-234.** Identity truth comes from a hand-written table of the operator catalogue (`identity-truth-2`); 4 operators stay excluded and their pairs are counted.
+18. **C-231, C-242.** Power: the paper's 'underpowered results are exploratory' is applied only to H2 non-inferiority (C-231, decision 1).

@@ -9,7 +9,8 @@ scenarios with a regression-inducing step, three clusters:
   W (C / B): s1 3 / 5, s2 4 / 4, s3 6 / 5, s4 2 / 4; s5 (lin-3, safe, change_request) 1 / 1.
 
 H1 (A vs C), repair: cluster MR differences tpl-1 1 - 1/2 = 1/2, lin-1 1 - 0 = 1, lin-2 0: n+ 2,
-n- 0, n0 1; two-sided p = 2 · (1/2)² = 0.5. change_request: no MR scenario, p = 1. Holm: 0.5 x 2
+n- 0, n0 1; two-sided p = 2 · (1/2)² = 0.5; 2 discordant clusters, so the smallest attainable
+two-sided p is 2 · 0.5² = 0.5 (C-243). change_request: no MR scenario, p = 1. Holm: 0.5 x 2
 = 1.0, then 1.0. Paired cells (A, C): both missed s2 = 1, A only s1, s3 = 2, C only 0, neither s4
 = 1; MR_A - MR_C = 3/4 - 1/4 = 1/2. Tiers: 1 controlled and 2 real-world clusters, both under 10:
 descriptive.
@@ -86,6 +87,14 @@ class TestH1(unittest.TestCase):
         cr = self.result["strata"]["change_request"]
         self.assertEqual((cr["n_plus"], cr["n_minus"], cr["n_zero"]), (0, 0, 0))
         self.assertEqual(cr["p_two_sided"], 1.0)
+
+    def test_the_smallest_attainable_p_per_stratum(self) -> None:
+        repair = self.result["strata"]["repair"]
+        self.assertEqual(repair["discordant_clusters"], 2)
+        self.assertAlmostEqual(repair["min_attainable_p_two_sided"], 0.5)
+        cr = self.result["strata"]["change_request"]
+        self.assertEqual(cr["discordant_clusters"], 0)
+        self.assertEqual(cr["min_attainable_p_two_sided"], 1.0)
 
     def test_holm_across_the_two_strata(self) -> None:
         self.assertEqual(self.result["holm_adjusted"], {"repair": 1.0, "change_request": 1.0})

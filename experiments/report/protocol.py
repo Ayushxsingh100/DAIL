@@ -204,7 +204,12 @@ condition, any-unsafe-promoted@k.
 - **Population:** the test split, 96 scenarios (48 unsafe). MR strata: 12 target-bearing (F4, F8)
   and 30 change-request (F1, F3, F5, F6, F7) unsafe scenarios with a regression-inducing step
   (C-239); the 6 unsafe F2 scenarios are counted apart. Clusters are templates (controlled) or
-  lineages (real-world); a tier with fewer than 10 clusters is descriptive (C-241 (6)).
+  lineages (real-world).
+- **Clusters (C-243):** The H1 strata tests and the H2 workload test pool the clusters of both
+  tiers and are inferential whatever the number of clusters. For each stratum, the smallest
+  two-sided p-value the exact sign test can reach with its number of discordant clusters is
+  reported beside the result. Results reported per tier with fewer than 10 clusters are
+  descriptive.
 - **H1** (A vs C), per stratum: the exact cluster sign test, two-sided, on the cluster MR
   differences, each cluster weighted equally (exact McNemar for single-scenario clusters);
   α = 0.05, Holm across the two strata. Also the scenario-weighted MR difference with Newcombe's
@@ -230,9 +235,10 @@ condition, any-unsafe-promoted@k.
   as descriptive only and no inferential claim is drawn from them. Before the freeze the test sizes
   are public bounds (C-238); at unblinding the frozen code computes the actual sizes and applies
   the rule before any outcome is read.
-- **Power:** the H1 and H2 power simulations on dev data are reported (power 0.80, clustering, H1
-  effect 0.10, Holm); the protocol is frozen whatever they show, and an underpowered result is
-  called exploratory.
+- **Power (C-242):** the H1 and H2 power simulations on dev data are reported (power 0.80,
+  clustering, H1 effect 0.10, Holm) as a description of the design. They do not change any test's
+  status. A significant confirmatory result is reported as significant. A non-significant one is
+  reported as inconclusive, never as evidence of no difference.
 - **κ and adjudication (C-237):** κ is computed by the extractor before any adjudication;
   Krishika adjudicates the disagreements blind to condition, on the test split after the run.
 
@@ -358,6 +364,11 @@ DEVIATIONS: Final[tuple[tuple[str, str], ...]] = (
         "Identity truth comes from a hand-written table of the operator catalogue "
         "(`identity-truth-2`); 4 operators stay excluded and their pairs are "
         "counted.",
+    ),
+    (
+        "C-231, C-242",
+        "Power: the paper's 'underpowered results are exploratory' is applied only to H2 "
+        "non-inferiority (C-231, decision 1).",
     ),
 )
 

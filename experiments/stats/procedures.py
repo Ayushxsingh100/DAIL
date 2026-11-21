@@ -61,6 +61,14 @@ def sign_test(n_plus: int, n_minus: int, *, alternative: str) -> float:
     raise ValueError(f"alternative {alternative!r}")
 
 
+def min_p_two_sided(discordant: int) -> float:
+    """The smallest two-sided p-value the exact sign test can reach with ``discordant`` non-zero
+    clusters (all on one side): 2 · 0.5^k, capped at 1 (C-243)."""
+    if discordant < 0:
+        raise ValueError(f"discordant {discordant}")
+    return min(1.0, 2 / (1 << discordant))
+
+
 def mcnemar_exact(b: int, c: int, *, alternative: str = "two-sided") -> float:
     return sign_test(b, c, alternative=alternative)
 

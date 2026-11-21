@@ -34,7 +34,7 @@ from experiments.stats import analysis
 from experiments.stats.simulate import Pi, coverage_table, h1_power, h2_power
 
 MARKER: Final = "DEV DRY RUN, NOT RESULTS"
-ANALYSIS_VERSION: Final = "analysis-1"
+ANALYSIS_VERSION: Final = "analysis-2"
 RHOS: Final = (0.0, 0.05, 0.10, 0.20, 0.30)
 THRESHOLD: Final = 0.93
 SEED: Final = 20261121

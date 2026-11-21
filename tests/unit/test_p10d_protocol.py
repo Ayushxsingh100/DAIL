@@ -68,6 +68,44 @@ class TestProtocolDocument(unittest.TestCase):
         self.assertIn("18 target-bearing and 30 change-request", deviations)
         self.assertIn("33 hand-written templates", deviations)
 
+    def _flat(self) -> str:
+        return " ".join(self.text.split())
+
+    def test_power_never_demotes_a_result(self) -> None:
+        # P10d-2 decision 1 (C-242), the external review of 4cf560c
+        self.assertNotIn("underpowered result is called exploratory", self._flat())
+        plan = self._flat().split("## 5. The statistical plan", 1)[1].split("## 6.", 1)[0]
+        self.assertNotIn("underpowered", plan)
+        self.assertIn(
+            "the H1 and H2 power simulations on dev data are reported (power 0.80, clustering, "
+            "H1 effect 0.10, Holm) as a description of the design. They do not change any test's "
+            "status. A significant confirmatory result is reported as significant. A "
+            "non-significant one is reported as inconclusive, never as evidence of no "
+            "difference.",
+            plan,
+        )
+
+    def test_the_pooled_tests_are_inferential_whatever_the_clusters(self) -> None:
+        # P10d-2 decision 2 (C-243)
+        plan = self._flat().split("## 5. The statistical plan", 1)[1].split("## 6.", 1)[0]
+        self.assertIn(
+            "The H1 strata tests and the H2 workload test pool the clusters of both tiers and "
+            "are inferential whatever the number of clusters. For each stratum, the smallest "
+            "two-sided p-value the exact sign test can reach with its number of discordant "
+            "clusters is reported beside the result. Results reported per tier with fewer than "
+            "10 clusters are descriptive.",
+            plan,
+        )
+        self.assertNotIn("a tier with fewer than 10 clusters is descriptive", plan)
+
+    def test_the_power_deviation_is_listed(self) -> None:
+        deviations = self._flat().split("## 10. Deviations from the paper", 1)[1]
+        self.assertIn(
+            "the paper's 'underpowered results are exploratory' is applied only to H2 "
+            "non-inferiority (C-231, decision 1)",
+            deviations,
+        )
+
     def test_the_pins_name_every_version(self) -> None:
         p = self.protocol["pins"]
         assert isinstance(p, dict)

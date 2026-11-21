@@ -2,13 +2,16 @@
 from the paper's §IV-H; C-231, C-232, C-235 to C-241).
 
 Rows are ``lists["scenario_outcomes"]`` of ``metrics-final-1``. A cluster is (tier, cluster id):
-the template for the controlled tier, the lineage for the real-world tier. A tier with fewer than
-10 clusters is descriptive. MR scenarios are the rows whose ``mr`` is ``caught`` or ``missed``
+the template for the controlled tier, the lineage for the real-world tier. The H1 strata tests and
+the H2 workload test pool the clusters of both tiers and are inferential whatever the number of
+clusters; results reported per tier with fewer than 10 clusters are descriptive (C-243). MR
+scenarios are the rows whose ``mr`` is ``caught`` or ``missed``
 (C-232, C-239).
 
 * **H1** (A vs C), per stratum (``repair``: target-bearing; ``change_request``): the exact cluster
   sign test (two-sided) on the cluster MR differences MR_A - MR_C (each cluster weighted equally;
-  for single-scenario clusters it is exact McNemar), Holm across the two strata at alpha = 0.05;
+  for single-scenario clusters it is exact McNemar), with the smallest two-sided p it can reach
+  with the stratum's discordant clusters (C-243), Holm across the two strata at alpha = 0.05;
   and the scenario-weighted MR_A - MR_C with Newcombe's method-10 95% interval, each cell divided
   by DEFF for the stratum's MR cluster sizes and ρ.
 * **H2 workload** (confirmatory): per cluster the mean per-scenario W_C - W_B over every scenario
@@ -35,6 +38,7 @@ from experiments.stats.procedures import (
     deff,
     holm,
     icc_anova,
+    min_p_two_sided,
     newcombe10,
     one_sided_upper_95,
     sign_test,
@@ -114,6 +118,8 @@ def h1(rows: Sequence[Row], *, rho: float, alpha: float = 0.05) -> dict[str, Any
             "n_minus": minus,
             "n_zero": len(diffs) - plus - minus,
             "p_two_sided": sign_test(plus, minus, alternative="two-sided"),
+            "discordant_clusters": plus + minus,
+            "min_attainable_p_two_sided": min_p_two_sided(plus + minus),
             "cells": cells,
             "mr_a": None if n == 0 else (cells["both"] + cells["first_only"]) / n,
             "mr_c": None if n == 0 else (cells["both"] + cells["second_only"]) / n,
