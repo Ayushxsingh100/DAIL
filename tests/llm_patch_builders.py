@@ -21,7 +21,7 @@ from core.domain.state import TrustedState
 from core.terraform_model.normalization import normalize_directory
 from llm.adapter.context import SUPPORTED_TYPES
 from llm.schemas.repair_response import RESPONSE_SCHEMA_VERSION
-from llm.validation.patch import PatchValidator
+from llm.validation.patch import PatchValidator, TerraformCheck
 from tests.fixture_catalog import REPO_ROOT
 from tests.identity_builders import NOW
 from tests.impact_builders import registry
@@ -117,6 +117,12 @@ class WorkRoot:
 
     def close(self) -> None:
         self._tmp.cleanup()
+
+
+def terraform_passes(candidate_dir: Path) -> TerraformCheck:
+    """A stand-in for the C-227 runner in tests that are not about it: every build validates."""
+    del candidate_dir
+    return TerraformCheck(ok=True, error="", versions={"terraform": "test stand-in"})
 
 
 def validator(work: Path, change_scope: AllowedChangeScope | None = None) -> PatchValidator:

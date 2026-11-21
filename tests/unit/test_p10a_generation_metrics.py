@@ -123,7 +123,7 @@ class TestModelMetrics(unittest.TestCase):
 
     def test_versions(self) -> None:
         self.assertEqual(self.m["metrics_version"], "metrics-draft-1")
-        self.assertEqual(self.m["extractor_version"], "extractor-3")
+        self.assertEqual(self.m["extractor_version"], "extractor-4")
 
 
 class TestPilotDocument(unittest.TestCase):

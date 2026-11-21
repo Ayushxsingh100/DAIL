@@ -80,6 +80,12 @@ class Generator:
             raise ValueError("generation_enabled must be the boolean llm.generation_enabled")
         if (logger is None) != (ctx is None):
             raise ValueError("a logger needs a correlation context and the other way round")
+        if validator is not None and validator.terraform_validate is None:
+            # C-227: no candidate is built without the pinned terraform validate (fail closed)
+            raise ValueError(
+                "the patch validator has no terraform validate runner: generation refuses to "
+                "start (C-99, C-227)"
+            )
         self.provider = provider
         self.config = config
         self.retry_policy = retry_policy

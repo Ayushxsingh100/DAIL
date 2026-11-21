@@ -46,6 +46,7 @@ from tests.llm_patch_builders import (
     WorkRoot,
     repair,
     scope,
+    terraform_passes,
     tree_digest,
 )
 from tests.promotion_orchestrator_builders import (
@@ -104,6 +105,7 @@ class Pipeline(OrchestratorCase):
             work_root=self.work.path,
             variables=None,
             now=NOW,
+            terraform_validate=terraform_passes,  # C-227: generation needs a runner
         )
         settings: dict[str, Any] = {
             "provider": FakeProvider([ok(r) for r in replies]),

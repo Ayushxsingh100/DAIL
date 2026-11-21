@@ -5,6 +5,7 @@
     python -m experiments.generation replay --name NAME [--version V] --replay-name R
             [--conditions A,B,C,C_PRIME]
     python -m experiments.generation export --name NAME [--version V]
+    python -m experiments.generation readmit --name NAME [--version V] --gate-name G
 
 ``TERRAPRESERVE_ROOT`` and ``DAIL_EXPERIMENT_ROOT`` as for ``python -m experiments`` (C-204): the
 checkout at ``terrapreserve-v1.0``, the dev split only (the loader refuses the test split), the
@@ -36,6 +37,7 @@ from experiments.generation.run import (
 from experiments.generation.task import REPAIR, GenerationInput, generation_input
 from experiments.loader import ScenarioInput, load
 from experiments.runner import experiment_config
+from experiments.terraform_validate import RunnerError, TerraformValidateRunner
 from llm.adapter.ollama import OllamaProvider
 
 REPAIR_FAMILIES = ("F2", "F4", "F8")
@@ -64,6 +66,24 @@ def choose(
     return chosen
 
 
+def terraform_runner(output: Any) -> TerraformValidateRunner:
+    """The C-227 gate: Terraform on PATH and the provider mirror named by DAIL_TERRAFORM_MIRROR."""
+    import os
+    import shutil
+    from pathlib import Path
+
+    terraform = shutil.which("terraform")
+    mirror = os.environ.get("DAIL_TERRAFORM_MIRROR")
+    if terraform is None or not mirror:
+        raise CommandError("terraform on PATH and DAIL_TERRAFORM_MIRROR are needed (C-227)")
+    try:
+        return TerraformValidateRunner(
+            terraform=terraform, mirror=Path(mirror), work_root=Path(output) / "terraform-validate"
+        )
+    except RunnerError as error:
+        raise CommandError(str(error)) from error
+
+
 def _spec(args: argparse.Namespace) -> GenerationSpec:
     return GenerationSpec(name=args.name, version=args.version)
 
@@ -88,6 +108,7 @@ def cmd_generate(args: argparse.Namespace) -> int:
         installed = provider.model_facts(pin.tag)
         models.append((pin, provider, installed))
     environment = {**environment, "ollama_version": models[0][1].server_version()}
+    terraform = terraform_runner(output)
     switch = generation_config().get("llm.generation_enabled")
     summary = generate_candidates(
         spec=_spec(args),
@@ -97,6 +118,7 @@ def cmd_generate(args: argparse.Namespace) -> int:
         root=output,
         generation_enabled=switch is True,
         environment=environment,
+        terraform=terraform,
     )
     counts: dict[str, dict[str, int]] = {}
     for row in summary.attempts:
@@ -155,10 +177,30 @@ def cmd_export(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_readmit(args: argparse.Namespace) -> int:
+    """C-227 on frozen candidates (P10c Section 3.3): the gate's result beside the frozen record."""
+    from experiments.generation.readmit import readmit
+
+    terrapreserve, output = _roots()
+    loaded = load(terrapreserve)
+    inputs = {
+        s.scenario_id: generation_input(s) for s in loaded.scenarios if s.target_kind == REPAIR
+    }
+    summary = readmit(
+        root=output,
+        generation_id=_spec(args).generation_id,
+        inputs=inputs,
+        terraform=terraform_runner(output),
+        name=args.gate_name,
+    )
+    print(json.dumps({"validate_gate": str(summary.path), "rates": summary.rates}, indent=1))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m experiments.generation")
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("generate", "replay", "export"):
+    for name in ("generate", "replay", "export", "readmit"):
         command = sub.add_parser(name)
         command.add_argument("--name", required=True)
         command.add_argument("--version", default="1")
@@ -168,11 +210,18 @@ def main(argv: list[str] | None = None) -> int:
             command.add_argument("--only")
             command.add_argument("--per-family", type=int)
             command.add_argument("--families", default=",".join(REPAIR_FAMILIES))
+        if name == "readmit":
+            command.add_argument("--gate-name", required=True)
         if name == "replay":
             command.add_argument("--replay-name", required=True)
             command.add_argument("--conditions", default="A,B,C,C_PRIME")
     args = parser.parse_args(argv)
-    handler: Any = {"generate": cmd_generate, "replay": cmd_replay, "export": cmd_export}
+    handler: Any = {
+        "generate": cmd_generate,
+        "replay": cmd_replay,
+        "export": cmd_export,
+        "readmit": cmd_readmit,
+    }
     try:
         return int(handler[args.command](args))
     except CommandError as error:

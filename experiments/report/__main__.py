@@ -31,6 +31,7 @@ from experiments.definition import experiment_id_for, name_id
 from experiments.metrics.extractor import EXTRACTOR_VERSION, dumps_metrics, extract
 from experiments.metrics.model import Transition, transitions_from_result, trial_outcome
 from experiments.report.build import build_report
+from experiments.report.llm_scoring import render as render_llm_scoring
 from experiments.report.pilot import build_pilot, collect_pilot, render_pilot
 from experiments.report.pilot_b import build_p10b, render_p10b
 from experiments.report.render import render_markdown
@@ -246,10 +247,32 @@ def cmd_pilot_b(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_llm_scoring(args: argparse.Namespace) -> int:
+    """P10c: the dev LLM pilots scored against TP-L1 (``docs/P10C_LLM_PILOT_SCORING``)."""
+    from experiments.scoring.llm_pilot import score
+
+    root = _env("DAIL_EXPERIMENT_ROOT")
+    generations = [name_id("generation", n, "1") for n in args.generations.split(",")]
+    report = score(root=root, generations=generations, tp_root=Path(args.tp_root),
+                   tp_commit=args.tp_commit, gate_name=args.gate_name,
+                   replay_name=args.replay_name)  # fmt: skip
+    out = root / "candidates" / "p10c_scoring" / args.gate_name
+    try:
+        write_or_same(out / "scoring.json", report)
+    except ArtifactError as changed:
+        raise SystemExit(str(changed)) from None
+    if args.doc:
+        Path(f"{args.doc}.json").write_bytes(dumps(report))
+        Path(f"{args.doc}.md").write_text(render_llm_scoring(report), encoding="utf-8",
+                                          newline="\n")  # fmt: skip
+    print(json.dumps({"scoring": str(out)}))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m experiments.report")
     commands = parser.add_subparsers(dest="command", required=True)
-    for name in ("extract", "select", "compare", "pilot", "pilot-b"):
+    for name in ("extract", "select", "compare", "pilot", "pilot-b", "llm-scoring"):
         command = commands.add_parser(name)
         command.add_argument("--name", required=True)
         command.add_argument("--version", default="1")
@@ -259,6 +282,11 @@ def main(argv: list[str] | None = None) -> int:
             command.add_argument("--preface", default="", help="a text file shown at the top")
         if name == "compare":
             command.add_argument("--other", required=True)
+        if name == "llm-scoring":
+            for flag in ("--generations", "--tp-root", "--tp-commit", "--gate-name"):
+                command.add_argument(flag, required=True)
+            command.add_argument("--replay-name", default="replay-1")
+            command.add_argument("--doc", default="")
         if name == "pilot-b":
             for flag in ("--run-a", "--run-b", "--p10a", "--interruptions"):
                 command.add_argument(flag, required=True)
@@ -275,6 +303,7 @@ def main(argv: list[str] | None = None) -> int:
         "compare": cmd_compare,
         "pilot": cmd_pilot,
         "pilot-b": cmd_pilot_b,
+        "llm-scoring": cmd_llm_scoring,
     }[args.command]
     return handler(args)
 

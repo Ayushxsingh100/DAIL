@@ -1,0 +1,902 @@
+{
+ "a_unsafe_promotions": [],
+ "gate_name": "gate-1",
+ "generations": [
+  {
+   "export_sha256": "335409e836a6bd28d68cb684e25bbd438ce8294d2bf26ca12b116f1d915e1a6f",
+   "gate_rates": {
+    "granite3_3-8b": {
+     "after": {
+      "denominator": 12,
+      "numerator": 2,
+      "value": 0.16666666666666666
+     },
+     "attempts": 12,
+     "before": {
+      "denominator": 12,
+      "numerator": 3,
+      "value": 0.25
+     }
+    },
+    "phi4-mini-3_8b": {
+     "after": {
+      "denominator": 12,
+      "numerator": 1,
+      "value": 0.08333333333333333
+     },
+     "attempts": 12,
+     "before": {
+      "denominator": 12,
+      "numerator": 10,
+      "value": 0.8333333333333334
+     }
+    },
+    "qwen2_5-coder-7b": {
+     "after": {
+      "denominator": 12,
+      "numerator": 0,
+      "value": 0.0
+     },
+     "attempts": 12,
+     "before": {
+      "denominator": 12,
+      "numerator": 7,
+      "value": 0.5833333333333334
+     }
+    }
+   },
+   "generation_id": "d4507101-113d-5753-806d-593ee99b3255",
+   "label_count": 20,
+   "name": "p10a-dev-pilot",
+   "prompt_version": "dail-repair-prompt-2",
+   "tp_l1_oracle_version": "oracle-1.0"
+  },
+  {
+   "export_sha256": "1cc74af29266274bfa1c0d2ebf50b973b76cd33a0cbcba70979d31583c3a570e",
+   "gate_rates": {
+    "granite3_3-8b": {
+     "after": {
+      "denominator": 12,
+      "numerator": 1,
+      "value": 0.08333333333333333
+     },
+     "attempts": 12,
+     "before": {
+      "denominator": 12,
+      "numerator": 7,
+      "value": 0.5833333333333334
+     }
+    },
+    "phi4-mini-3_8b": {
+     "after": {
+      "denominator": 12,
+      "numerator": 0,
+      "value": 0.0
+     },
+     "attempts": 12,
+     "before": {
+      "denominator": 12,
+      "numerator": 7,
+      "value": 0.5833333333333334
+     }
+    },
+    "qwen2_5-coder-7b": {
+     "after": {
+      "denominator": 12,
+      "numerator": 0,
+      "value": 0.0
+     },
+     "attempts": 12,
+     "before": {
+      "denominator": 12,
+      "numerator": 5,
+      "value": 0.4166666666666667
+     }
+    }
+   },
+   "generation_id": "7fe30836-fbe0-5850-96ee-31dd9bbbddf1",
+   "label_count": 19,
+   "name": "p10b-run-a",
+   "prompt_version": "dail-repair-prompt-3",
+   "tp_l1_oracle_version": "oracle-1.0"
+  },
+  {
+   "export_sha256": "34ff1fa83889bb7b77de0199d4e9f81dff3a2ed1a721c5c3123a2f15d3f0ecfc",
+   "gate_rates": {
+    "granite3_3-8b-k3": {
+     "after": {
+      "denominator": 36,
+      "numerator": 2,
+      "value": 0.05555555555555555
+     },
+     "attempts": 36,
+     "before": {
+      "denominator": 36,
+      "numerator": 8,
+      "value": 0.2222222222222222
+     }
+    },
+    "phi4-mini-3_8b-k3": {
+     "after": {
+      "denominator": 36,
+      "numerator": 0,
+      "value": 0.0
+     },
+     "attempts": 36,
+     "before": {
+      "denominator": 36,
+      "numerator": 17,
+      "value": 0.4722222222222222
+     }
+    },
+    "qwen2_5-coder-7b-k3": {
+     "after": {
+      "denominator": 36,
+      "numerator": 2,
+      "value": 0.05555555555555555
+     },
+     "attempts": 36,
+     "before": {
+      "denominator": 36,
+      "numerator": 8,
+      "value": 0.2222222222222222
+     }
+    }
+   },
+   "generation_id": "77da54da-66b9-5221-8a6a-718275a5e22b",
+   "label_count": 33,
+   "name": "p10b-run-b",
+   "prompt_version": "dail-repair-prompt-3",
+   "tp_l1_oracle_version": "oracle-1.0"
+  }
+ ],
+ "models": [
+  {
+   "attempts": 12,
+   "classes": {
+    "no label: unlabelable": 7,
+    "safe": 0,
+    "unsafe": 0
+   },
+   "conditions": {
+    "all_replayed": {
+     "A": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 7,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "B": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 7,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "C": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 7,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "C_PRIME": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 7,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     }
+    },
+    "validate_valid": {
+     "A": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 0,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "B": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 0,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "C": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 0,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "C_PRIME": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 0,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     }
+    }
+   },
+   "generation_id": "d4507101-113d-5753-806d-593ee99b3255",
+   "model": "qwen2_5-coder-7b",
+   "valid_before_gate": 7,
+   "validate_valid": 0
+  },
+  {
+   "attempts": 12,
+   "classes": {
+    "no label: unlabelable": 3,
+    "safe": 0,
+    "unsafe": 0
+   },
+   "conditions": {
+    "all_replayed": {
+     "A": {
+      "promoted no label": 2,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 1,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "B": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 3,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "C": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 3,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "C_PRIME": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 3,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     }
+    },
+    "validate_valid": {
+     "A": {
+      "promoted no label": 2,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 0,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "B": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 2,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "C": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 2,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "C_PRIME": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 2,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     }
+    }
+   },
+   "generation_id": "d4507101-113d-5753-806d-593ee99b3255",
+   "model": "granite3_3-8b",
+   "valid_before_gate": 3,
+   "validate_valid": 2
+  },
+  {
+   "attempts": 12,
+   "classes": {
+    "no label: unlabelable": 9,
+    "safe": 0,
+    "unsafe": 1
+   },
+   "conditions": {
+    "all_replayed": {
+     "A": {
+      "promoted no label": 4,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 5,
+      "rejected safe": 0,
+      "rejected unsafe": 1
+     },
+     "B": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 9,
+      "rejected safe": 0,
+      "rejected unsafe": 1
+     },
+     "C": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 9,
+      "rejected safe": 0,
+      "rejected unsafe": 1
+     },
+     "C_PRIME": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 9,
+      "rejected safe": 0,
+      "rejected unsafe": 1
+     }
+    },
+    "validate_valid": {
+     "A": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 0,
+      "rejected safe": 0,
+      "rejected unsafe": 1
+     },
+     "B": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 0,
+      "rejected safe": 0,
+      "rejected unsafe": 1
+     },
+     "C": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 0,
+      "rejected safe": 0,
+      "rejected unsafe": 1
+     },
+     "C_PRIME": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 0,
+      "rejected safe": 0,
+      "rejected unsafe": 1
+     }
+    }
+   },
+   "generation_id": "d4507101-113d-5753-806d-593ee99b3255",
+   "model": "phi4-mini-3_8b",
+   "valid_before_gate": 10,
+   "validate_valid": 1
+  },
+  {
+   "attempts": 12,
+   "classes": {
+    "no label: unlabelable": 5,
+    "safe": 0,
+    "unsafe": 0
+   },
+   "conditions": {
+    "all_replayed": {
+     "A": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 5,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "B": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 5,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "C": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 5,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "C_PRIME": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 5,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     }
+    },
+    "validate_valid": {
+     "A": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 0,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "B": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 0,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "C": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 0,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "C_PRIME": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 0,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     }
+    }
+   },
+   "generation_id": "7fe30836-fbe0-5850-96ee-31dd9bbbddf1",
+   "model": "qwen2_5-coder-7b",
+   "valid_before_gate": 5,
+   "validate_valid": 0
+  },
+  {
+   "attempts": 12,
+   "classes": {
+    "no label: unlabelable": 7,
+    "safe": 0,
+    "unsafe": 0
+   },
+   "conditions": {
+    "all_replayed": {
+     "A": {
+      "promoted no label": 1,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 6,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "B": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 7,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "C": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 7,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "C_PRIME": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 7,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     }
+    },
+    "validate_valid": {
+     "A": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 1,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "B": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 1,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "C": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 1,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "C_PRIME": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 1,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     }
+    }
+   },
+   "generation_id": "7fe30836-fbe0-5850-96ee-31dd9bbbddf1",
+   "model": "granite3_3-8b",
+   "valid_before_gate": 7,
+   "validate_valid": 1
+  },
+  {
+   "attempts": 12,
+   "classes": {
+    "no label: unlabelable": 7,
+    "safe": 0,
+    "unsafe": 0
+   },
+   "conditions": {
+    "all_replayed": {
+     "A": {
+      "promoted no label": 4,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 3,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "B": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 7,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "C": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 7,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "C_PRIME": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 7,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     }
+    },
+    "validate_valid": {
+     "A": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 0,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "B": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 0,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "C": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 0,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "C_PRIME": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 0,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     }
+    }
+   },
+   "generation_id": "7fe30836-fbe0-5850-96ee-31dd9bbbddf1",
+   "model": "phi4-mini-3_8b",
+   "valid_before_gate": 7,
+   "validate_valid": 0
+  },
+  {
+   "attempts": 36,
+   "classes": {
+    "no label: unlabelable": 6,
+    "safe": 0,
+    "unsafe": 2
+   },
+   "conditions": {
+    "all_replayed": {
+     "A": {
+      "promoted no label": 2,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 4,
+      "rejected safe": 0,
+      "rejected unsafe": 2
+     },
+     "B": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 6,
+      "rejected safe": 0,
+      "rejected unsafe": 2
+     },
+     "C": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 6,
+      "rejected safe": 0,
+      "rejected unsafe": 2
+     },
+     "C_PRIME": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 6,
+      "rejected safe": 0,
+      "rejected unsafe": 2
+     }
+    },
+    "validate_valid": {
+     "A": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 0,
+      "rejected safe": 0,
+      "rejected unsafe": 2
+     },
+     "B": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 0,
+      "rejected safe": 0,
+      "rejected unsafe": 2
+     },
+     "C": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 0,
+      "rejected safe": 0,
+      "rejected unsafe": 2
+     },
+     "C_PRIME": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 0,
+      "rejected safe": 0,
+      "rejected unsafe": 2
+     }
+    }
+   },
+   "generation_id": "77da54da-66b9-5221-8a6a-718275a5e22b",
+   "model": "qwen2_5-coder-7b-k3",
+   "valid_before_gate": 8,
+   "validate_valid": 2
+  },
+  {
+   "attempts": 36,
+   "classes": {
+    "no label: unlabelable": 6,
+    "safe": 0,
+    "unsafe": 2
+   },
+   "conditions": {
+    "all_replayed": {
+     "A": {
+      "promoted no label": 3,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 3,
+      "rejected safe": 0,
+      "rejected unsafe": 2
+     },
+     "B": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 6,
+      "rejected safe": 0,
+      "rejected unsafe": 2
+     },
+     "C": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 6,
+      "rejected safe": 0,
+      "rejected unsafe": 2
+     },
+     "C_PRIME": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 6,
+      "rejected safe": 0,
+      "rejected unsafe": 2
+     }
+    },
+    "validate_valid": {
+     "A": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 0,
+      "rejected safe": 0,
+      "rejected unsafe": 2
+     },
+     "B": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 0,
+      "rejected safe": 0,
+      "rejected unsafe": 2
+     },
+     "C": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 0,
+      "rejected safe": 0,
+      "rejected unsafe": 2
+     },
+     "C_PRIME": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 0,
+      "rejected safe": 0,
+      "rejected unsafe": 2
+     }
+    }
+   },
+   "generation_id": "77da54da-66b9-5221-8a6a-718275a5e22b",
+   "model": "granite3_3-8b-k3",
+   "valid_before_gate": 8,
+   "validate_valid": 2
+  },
+  {
+   "attempts": 36,
+   "classes": {
+    "no label: unlabelable": 17,
+    "safe": 0,
+    "unsafe": 0
+   },
+   "conditions": {
+    "all_replayed": {
+     "A": {
+      "promoted no label": 12,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 5,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "B": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 17,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "C": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 17,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "C_PRIME": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 17,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     }
+    },
+    "validate_valid": {
+     "A": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 0,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "B": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 0,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "C": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 0,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     },
+     "C_PRIME": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 0,
+      "rejected safe": 0,
+      "rejected unsafe": 0
+     }
+    }
+   },
+   "generation_id": "77da54da-66b9-5221-8a6a-718275a5e22b",
+   "model": "phi4-mini-3_8b-k3",
+   "valid_before_gate": 17,
+   "validate_valid": 0
+  }
+ ],
+ "record": "p10c_llm_pilot_scoring",
+ "replay_name": "replay-1",
+ "tp_commit": "b9d4cce919810b87c79ae250b1bc41cfb66e8356",
+ "validate_agreement": {
+  "agree": 72,
+  "compared": 72,
+  "disagreements": [],
+  "not_comparable": []
+ }
+}

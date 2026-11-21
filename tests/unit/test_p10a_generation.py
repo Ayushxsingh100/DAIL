@@ -43,7 +43,14 @@ from llm.adapter.provider import ProviderError, ProviderReply
 from llm.schemas.records import FailureClass
 from tests.experiment_builders import F1, F2, F4, F8, TempDirs, mini_root
 from tests.fixture_catalog import REPO_ROOT
-from tests.llm_patch_builders import DB_RULE, SG_APP, SG_APP_CLOSED, SSH_RULE, repair
+from tests.llm_patch_builders import (
+    DB_RULE,
+    SG_APP,
+    SG_APP_CLOSED,
+    SSH_RULE,
+    repair,
+    terraform_passes,
+)
 
 DIGEST = "b" * 64
 TAG = "fake-coder:1b"
@@ -109,6 +116,7 @@ class Case(unittest.TestCase):
             "root": self.out,
             "generation_enabled": True,
             "environment": {"dail_commit": "test"},
+            "terraform": terraform_passes,  # C-227: generation needs a runner
         }
         settings.update(options)
         return generate_candidates(**settings)
