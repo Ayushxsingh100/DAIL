@@ -50,6 +50,17 @@ NEW_KEYS = (
 )
 
 
+# The flagged values are built at run time, so this file holds no line the rule matches (gitleaks
+# scans the source; CLAUDE.md: fake secrets in tests are built at run time).
+GRANITE = "granite" + "3_3-8b"
+EXAMPLE = "granite" + "-3.3-8b"
+
+
+def record(indent: int, field: str, value: str) -> str:
+    """A JSON record line as DAIL writes it."""
+    return " " * indent + '"' + field + '": "' + value + '",'
+
+
 def _go(pattern: str) -> str:
     pattern = pattern.replace(r"\z", r"\Z")
     i = pattern.find("(?i)")
@@ -110,9 +121,9 @@ class TestTheReproductionMatchesCI(unittest.TestCase):
 
     def test_flagged_and_not_flagged_as_ci_reported(self) -> None:
         for line in (
-            '    "key": "granite3_3-8b",',
-            '     "key": "granite3_3-8b-k3",',
-            '   "model_key": "granite3_3-8b-k3",',
+            record(4, "key", GRANITE),
+            record(5, "key", GRANITE + "-k3"),
+            record(3, "model_key", GRANITE + "-k3"),
         ):
             with self.subTest(line=line.strip()):
                 self.assertTrue(flagged(line))
@@ -127,7 +138,7 @@ class TestTheReproductionMatchesCI(unittest.TestCase):
 
     def test_the_work_packages_example_is_still_flagged(self) -> None:
         # why C-229 does not use it: entropy 3.522 > 3.5 and no stopword
-        self.assertTrue(flagged('"model_key": "granite-3.3-8b",'))
+        self.assertTrue(flagged(record(0, "model_key", EXAMPLE)))
 
 
 class TestNewKeys(unittest.TestCase):
