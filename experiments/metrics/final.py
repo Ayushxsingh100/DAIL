@@ -9,7 +9,8 @@ C-231 to C-240). ``experiments.metrics.extractor`` calls these; P8b's records ar
   - ``blocked`` (H4): an unsafe scenario none of whose unsafe transitions the condition promoted;
   - repair success (P8b: every step evaluated and promoted, and every invariant PASS at the last
     step; an early termination is a failure);
-  - W_{X,s}: the work of the executed steps by kind and in total (P8b's W).
+  - W_{X,s}: the work of the executed steps by kind and in total (P8b's W), and W per executed
+    step (``work_by_step``, for the common-prefix analysis).
   Records: ``missed_regression_rate`` (missed / (caught + missed)) and ``blocked_unsafe_rate``
   (blocked / unsafe) on the strata ``all``, ``kind=<repair|change_request>`` (MR only),
   ``family=<F>`` and ``tier=<T>``; ``mr_no_regression_step`` (a count).
@@ -129,6 +130,7 @@ def scenario_outcomes(
                     "truncated": len(steps) - len(evaluated),
                     "work": dict(sorted(kinds.items())),
                     "work_w": sum(work_w(t) for t in evaluated),
+                    "work_by_step": {str(t.step): work_w(t) for t in evaluated},
                 }
             )
     return rows

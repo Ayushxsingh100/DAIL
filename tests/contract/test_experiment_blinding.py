@@ -44,7 +44,13 @@ FORBIDDEN = frozenset(
 )
 # P8b: the only package that reads label fields.
 SCORING_PACKAGE = EXPERIMENTS / "scoring"
-ANALYSIS_PACKAGES = ("experiments.scoring", "experiments.metrics", "experiments.report")
+# P10d: the statistics package is analysis too
+ANALYSIS_PACKAGES = (
+    "experiments.scoring",
+    "experiments.metrics",
+    "experiments.report",
+    "experiments.stats",
+)
 # P10a: the generation package.
 GENERATION_PACKAGE = EXPERIMENTS / "generation"
 GENERATION_FORBIDDEN = FORBIDDEN | {"description"}
@@ -181,6 +187,7 @@ class TestBlinding(unittest.TestCase):
         self.assertIn(EXPERIMENTS / "loader.py", modules)
         self.assertIn(EXPERIMENTS / "metrics" / "extractor.py", modules)
         self.assertIn(EXPERIMENTS / "report" / "build.py", modules)
+        self.assertIn(EXPERIMENTS / "stats" / "analysis.py", modules)  # P10d
         for path in modules:
             with self.subTest(module=path.relative_to(REPO_ROOT).as_posix()):
                 self.assertEqual(label_reads(path.read_text(encoding="utf-8")), [])

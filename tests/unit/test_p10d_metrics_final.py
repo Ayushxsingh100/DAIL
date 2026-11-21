@@ -261,6 +261,11 @@ class TestWorkPerScenario(Case):
         self.assertEqual((row["evaluated"], row["truncated"]), (2, 0))
         self.assertEqual(self.outcome(self.x, "C", "W")["truncated"], 1)
 
+    def test_work_by_step_for_the_common_prefix(self) -> None:
+        # step keys are strings (the rows are JSON); a TRUNCATED step has no entry
+        self.assertEqual(self.outcome(self.x, "C", "X")["work_by_step"], {"1": 4, "2": 3})
+        self.assertEqual(self.outcome(self.x, "C", "W")["work_by_step"], {"1": 4})
+
     def test_the_rows_carry_the_cluster_and_the_stratum(self) -> None:
         row = self.outcome(self.x, "B", "Z")
         self.assertEqual(
@@ -428,6 +433,18 @@ class TestIdentityRates(Case):
         self.ratio(self.x, "identity_error_rate_certain", "C_PRIME", 2, 3)
         self.ratio(self.x, "transition_error_rate_certain", "C_PRIME", 2, 3)
         self.ratio(self.x, "identity_uncertain_share", "C_PRIME", 1, 4)  # of all pairs
+
+    def test_by_family_for_h3_on_f5(self) -> None:
+        # F5 is Y1 only: C rule correct, db wrong; C' rule wrong, db correct; no UNCERTAIN on F5
+        f5 = {"stratum": "family=F5"}
+        self.ratio(self.x, "identity_error_rate_certain", "C", 1, 2, **f5)
+        self.ratio(self.x, "transition_error_rate_certain", "C", 1, 2, **f5)
+        self.ratio(self.x, "identity_error_rate_certain", "C_PRIME", 1, 2, **f5)
+        self.ratio(self.x, "identity_uncertain_share_final", "C_PRIME", 0, 2, **f5)
+        self.ratio(self.x, "identity_uncertain_share_final", "C_PRIME", 1, 4)
+        self.ratio(self.x, "evidence_transfer_error_rate", "C", 1, 1, **f5)
+        # F1 (Z1, mon) under C': the one UNCERTAIN pair, excluded from the certain rates
+        self.ratio(self.x, "identity_error_rate_certain", "C_PRIME", 0, 0, stratum="family=F1")
 
     def test_evidence_transfer_error_rate(self) -> None:
         # true replacements: db at Y1. C keeps db (MODIFIED) while F is carried forward: 1 of 1

@@ -27,7 +27,7 @@ PINNED: dict[str, str] = {
     "extractor-2": "5b4a598940e59fa3d2b3fe1b48360135d174db65124df7b7830757800e80a25b",
     "extractor-3": "066b40195851bd720a3f8165c5ac33e285dc559e937a368e5ea1c3964102bd78",  # P10b
     "extractor-4": "0b6dcd6ecfafc34ec63c2ee48273a1dacf01ed02109653b0bf9a6debf835e2f1",  # P10c
-    "extractor-5": "fcc92dcc6403deee4b481928f170956173a7ff99bd1f8d1bf8a6d31536e64fed",  # P10d
+    "extractor-5": "ef4680c4fe125e20cbaac246192d8efac431ef3d9392102c7b3e38b4c045fb5d",  # P10d
 }
 EXTRACTOR_PACKAGES = ("experiments/metrics", "experiments/scoring")
 CRLF, LF = b"\r\n", b"\n"

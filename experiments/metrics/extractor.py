@@ -551,7 +551,8 @@ def _identity(
     out: _Out, x: Extraction, condition: str, items: Sequence[_Scored], table: IdentityTable
 ) -> None:
     pairs = wrong = uncertain = transfer = excluded = 0
-    transition_wrong = replacements = 0
+    # metrics-final-1 (C-240 (1), (2)): by stratum (all and family), UNCERTAIN excluded
+    final_counts: dict[str, Counter[str]] = defaultdict(Counter)
     errors = x.lists.setdefault("identity_errors", [])
     excluded_list = x.lists.setdefault("identity_excluded", [])
     for s in items:
@@ -565,8 +566,14 @@ def _identity(
         for pair in found:
             verdict = judge(pair, s.t.identity_pairs)
             pairs += 1
-            replacements += pair.effect == "REPLACE"
-            transition_wrong += judge_transition(pair, s.t.identity_pairs) == "wrong"
+            for stratum in ("all", f"family={s.scenario.family}"):
+                c = final_counts[stratum]
+                c["pairs"] += 1
+                c["uncertain"] += verdict == "uncertain"
+                c["wrong"] += verdict == "wrong"
+                c["transition_wrong"] += judge_transition(pair, s.t.identity_pairs) == "wrong"
+                c["replacements"] += pair.effect == "REPLACE"
+                c["transfer"] += verdict == "wrong" and pair.effect == "REPLACE" and carried
             if verdict == "uncertain":
                 uncertain += 1
             if verdict == "wrong":
@@ -594,12 +601,17 @@ def _identity(
     out.amount(
         "evidence_transfer_errors", condition, transfer, scope="all", stratum="all", unit="count"
     )
-    certain = pairs - uncertain  # metrics-final-1: UNCERTAIN excluded (C-240 (1))
-    out.ratio("identity_error_rate_certain", condition, wrong, certain, scope="all", stratum="all")
-    out.ratio("transition_error_rate_certain", condition, transition_wrong, certain, scope="all",
-              stratum="all")  # fmt: skip
-    out.ratio("evidence_transfer_error_rate", condition, transfer, replacements, scope="all",
-              stratum="all")  # fmt: skip
+    final_counts.setdefault("all", Counter())
+    for stratum, c in sorted(final_counts.items()):
+        certain = c["pairs"] - c["uncertain"]
+        where = {"scope": "all", "stratum": stratum}
+        out.ratio("identity_error_rate_certain", condition, c["wrong"], certain, **where)
+        out.ratio("transition_error_rate_certain", condition, c["transition_wrong"], certain,
+                  **where)  # fmt: skip
+        out.ratio("identity_uncertain_share_final", condition, c["uncertain"], c["pairs"],
+                  **where)  # fmt: skip
+        out.ratio("evidence_transfer_error_rate", condition, c["transfer"], c["replacements"],
+                  **where)  # fmt: skip
     out.amount(
         "identity_excluded_pairs", condition, excluded, scope="all", stratum="all", unit="count"
     )
