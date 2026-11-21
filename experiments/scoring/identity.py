@@ -8,12 +8,22 @@ appearing address of the type; a REPLACE names an address the operator's mutatio
 forcing attribute (both ``before`` and ``after`` set); a CREATE (DELETE) names every appearing
 (vanishing) address of the type that the operator's mutation rows name. A MOVE whose addresses
 cannot be recovered that way, and every address of an excluded operator, is an excluded pair,
-counted.
+counted. A COUNT_MOVE (identity-truth-2, C-234: Terraform's implicit count move, C-76) names
+every address of the type whose mutation rows change the named attribute from absent to set or from
+set to absent; it is a MOVE whose old and new address are that address (``x`` and ``x[0]`` are the
+same address once instance keys are dropped).
 
 ``judge`` compares one true pair with DAIL's identity pairs of the transition (trusted ref,
 candidate ref, change type), on addresses without instance keys: ``correct`` (MOVE: DAIL pairs the
 old with the new address; REPLACE: REPLACED; CREATE: CREATED; DELETE: DELETED), ``uncertain`` (DAIL
-says UNCERTAIN for it), or ``wrong``.
+says UNCERTAIN for it), or ``wrong``: the identity judgement (is DAIL's correspondence right?).
+``judge_transition`` (metrics-final-1, C-240 (1)) judges the change type: ``correct`` when DAIL
+gives the expected transition (MOVE: a pair of the old and the new address, MODIFIED with
+``moved``; REPLACE: REPLACED; CREATE: CREATED; DELETE: DELETED), ``uncertain`` when the identity
+judgement is, ``wrong`` otherwise.
+
+``TABLE_PATH`` is identity-truth-2; ``TABLE_PATH_1`` keeps identity-truth-1 for the records scored
+with it (P8b).
 """
 
 from __future__ import annotations
@@ -27,7 +37,8 @@ from typing import Any
 
 from experiments.scoring.labels import ScenarioLabels
 
-TABLE_PATH = Path(__file__).with_name("identity_truth.json")
+TABLE_PATH = Path(__file__).with_name("identity_truth.json")  # identity-truth-2 (C-234)
+TABLE_PATH_1 = Path(__file__).with_name("identity_truth_1.json")  # identity-truth-1 (P8b)
 
 
 @dataclass(frozen=True)
@@ -106,6 +117,15 @@ def true_pairs(
                             "reason": "the renamed addresses cannot be recovered from the rows",
                         }
                     )
+            elif kind == "COUNT_MOVE":
+                for address in sorted(addresses):
+                    if fits(address) and any(
+                        r.attribute == effect["attribute"]
+                        and (r.before is None) != (r.after is None)
+                        for r in addresses[address]
+                    ):
+                        pairs.append(TruePair(operator, "MOVE", wanted, address, address))
+                        used.add(address)
             elif kind == "REPLACE":
                 for address in sorted(addresses):
                     rows = addresses[address]
@@ -151,6 +171,22 @@ def judge(pair: TruePair, dail: Sequence[tuple[str | None, str | None, str, bool
         if _EXPECTED[pair.effect] in own:
             return "correct"
     return "uncertain" if "UNCERTAIN" in touching else "wrong"
+
+
+def judge_transition(
+    pair: TruePair, dail: Sequence[tuple[str | None, str | None, str, bool]]
+) -> str:
+    """``correct``, ``uncertain`` or ``wrong`` for the change type (see the module docstring)."""
+    identity = judge(pair, dail)
+    if identity == "uncertain":
+        return "uncertain"
+    if pair.effect == "MOVE":
+        ok = any(
+            base(t) == pair.old and base(c) == pair.new and kind == "MODIFIED" and moved
+            for t, c, kind, moved in dail
+        )
+        return "correct" if ok else "wrong"
+    return identity  # REPLACE, CREATE, DELETE: the change type is the correspondence
 
 
 def judge_all(

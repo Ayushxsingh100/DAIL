@@ -7,6 +7,10 @@ For a transition to step i (i >= 1) with the open targets the harness gave it (C
   target, so the caller's open targets are ignored there;
 * safe: not unsafe;
 * changed (Delta): the invariants whose truth differs between T_{i-1} and T_i.
+
+Per scenario (metrics-final-1; C-232, C-239): ``unsafe`` is the scenario class (D5-11) ``unsafe``;
+the first regression-inducing step is the first step i >= 1 whose candidate makes an invariant FAIL
+that is PASS in T_{i-1} (P8b's per-transition regression); None if there is none.
 """
 
 from __future__ import annotations
@@ -46,3 +50,19 @@ def transition_truth(
         last=last,
         all_pass=all(v == PASS for v in after.values()),
     )
+
+
+@dataclass(frozen=True)
+class ScenarioTruth:
+    unsafe: bool
+    first_regression_step: int | None
+
+
+def scenario_truth(scenario: ScenarioLabels) -> ScenarioTruth:
+    first = None
+    for step in range(1, len(scenario.truth)):
+        before, after = scenario.truth[step - 1], scenario.truth[step]
+        if any(v == FAIL and before.get(i) == PASS for i, v in after.items()):
+            first = step
+            break
+    return ScenarioTruth(unsafe=scenario.gt_class == "unsafe", first_regression_step=first)

@@ -27,6 +27,7 @@ PINNED: dict[str, str] = {
     "extractor-2": "5b4a598940e59fa3d2b3fe1b48360135d174db65124df7b7830757800e80a25b",
     "extractor-3": "066b40195851bd720a3f8165c5ac33e285dc559e937a368e5ea1c3964102bd78",  # P10b
     "extractor-4": "0b6dcd6ecfafc34ec63c2ee48273a1dacf01ed02109653b0bf9a6debf835e2f1",  # P10c
+    "extractor-5": "fcc92dcc6403deee4b481928f170956173a7ff99bd1f8d1bf8a6d31536e64fed",  # P10d
 }
 EXTRACTOR_PACKAGES = ("experiments/metrics", "experiments/scoring")
 CRLF, LF = b"\r\n", b"\n"
@@ -64,8 +65,8 @@ class TestVersions(unittest.TestCase):
     def test_the_two_versions_are_separate_values(self) -> None:
         from experiments.metrics.extractor import EXTRACTOR_VERSION, METRICS_VERSION
 
-        self.assertEqual(EXTRACTOR_VERSION, "extractor-4")
-        self.assertEqual(METRICS_VERSION, "metrics-draft-1")
+        self.assertEqual(EXTRACTOR_VERSION, "extractor-5")
+        self.assertEqual(METRICS_VERSION, "metrics-final-1")  # P10d
 
     def test_every_metric_record_and_the_report_carry_both(self) -> None:
         from experiments.metrics.extractor import extract
@@ -85,12 +86,12 @@ class TestVersions(unittest.TestCase):
         )
         self.assertTrue(x.metrics)
         for record in x.metrics:
-            self.assertEqual(record["metrics_version"], "metrics-draft-1")
-            self.assertEqual(record["extractor_version"], "extractor-4")
+            self.assertEqual(record["metrics_version"], "metrics-final-1")
+            self.assertEqual(record["extractor_version"], "extractor-5")
         definition = {"experiment_id": "e", "name": "n", "version": "1", "condition_set": ["C"]}
         report = build_report(definition=definition, statuses={"t": "COMPLETED"}, extraction=x)
-        self.assertEqual(report["metrics_version"], "metrics-draft-1")
-        self.assertEqual(report["extractor_version"], "extractor-4")
+        self.assertEqual(report["metrics_version"], "metrics-final-1")
+        self.assertEqual(report["extractor_version"], "extractor-5")
 
 
 class TestCodePin(unittest.TestCase):
