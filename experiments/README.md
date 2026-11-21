@@ -169,3 +169,22 @@ $DAIL_EXPERIMENT_ROOT/candidates/<generation_id>/
   ```
 - **Model keys** of new records (`model-…`, `…-sample`) are checked against gitleaks 8.24.3's
   generic secret rule (C-229), so new records need no `.gitleaksignore` entry.
+
+## The final metrics, the statistics and the frozen protocol (P10d)
+
+- **`metrics-final-1`** (extractor `extractor-5`): P8b's records unchanged, plus the scenario-level
+  missed regressions (C-232, C-239), H4, W per scenario, Cohen's κ, macro impact, truth recall and
+  the H3 identity and transition rates (`experiments/metrics/final.py`), and the LLM track's
+  descriptive metrics (`experiments/metrics/llm_final.py`). Identity truth is `identity-truth-2`
+  (C-234); `identity-truth-1` is kept.
+- **`experiments/stats/`**: the procedures of the statistical plan (`procedures.py`), the seeded
+  coverage and power simulations (`simulate.py`), the analysis on scenario outcome rows
+  (`analysis.py`) and the dev dry run (`dry_run.py`):
+
+  ```bash
+  python3.12 -m experiments.stats dry-run --name p8b-dev-run-3       --generations p10a-dev-pilot,p10b-run-a,p10b-run-b --tp-commit <TerraPreserve commit>       --gate-name gate-1 --doc docs/P10D_DEV_DRY_RUN
+  python3.12 -m experiments.report protocol --dry-run docs/P10D_DEV_DRY_RUN.json       --out docs/PROTOCOL_v1
+  ```
+
+  Every output of the dry run is marked `DEV DRY RUN, NOT RESULTS`. `docs/PROTOCOL_v1.md` is the
+  frozen protocol; a test fails if the code it pins changes.

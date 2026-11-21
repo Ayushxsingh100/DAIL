@@ -5,6 +5,8 @@
     python -m experiments.report compare --name NAME --other OTHER [--version V]
     python -m experiments.report pilot --name GENERATION [--version V] --replay-name R
                                        --licence-checks FILE.json [--doc docs/P10A_MODEL_PILOT]
+    python -m experiments.report protocol --dry-run docs/P10D_DEV_DRY_RUN.json
+                                          --out docs/PROTOCOL_v1
 
 ``extract`` reads the stored records of the experiment under ``$DAIL_EXPERIMENT_ROOT`` and the dev
 labels under ``$TERRAPRESERVE_ROOT`` (through ``experiments.scoring``), runs the extractor and
@@ -269,9 +271,25 @@ def cmd_llm_scoring(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_protocol(args: argparse.Namespace) -> int:
+    """P10d: ``<out>.json`` (pins from the code, pre-freeze outcomes of the dry run) and
+    ``<out>.md`` (``experiments.report.protocol``)."""
+    from experiments.report.protocol import build_protocol, render_protocol
+
+    protocol = build_protocol(json.loads(Path(args.dry_run).read_text(encoding="utf-8")))
+    Path(f"{args.out}.json").write_bytes(dumps(protocol))
+    rendered = render_protocol(json.loads(dumps(protocol)))
+    Path(f"{args.out}.md").write_text(rendered, encoding="utf-8", newline="\n")
+    print(json.dumps({"protocol": f"{args.out}.md"}))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m experiments.report")
     commands = parser.add_subparsers(dest="command", required=True)
+    protocol = commands.add_parser("protocol")
+    protocol.add_argument("--dry-run", required=True)
+    protocol.add_argument("--out", required=True)
     for name in ("extract", "select", "compare", "pilot", "pilot-b", "llm-scoring"):
         command = commands.add_parser(name)
         command.add_argument("--name", required=True)
@@ -304,6 +322,7 @@ def main(argv: list[str] | None = None) -> int:
         "pilot": cmd_pilot,
         "pilot-b": cmd_pilot_b,
         "llm-scoring": cmd_llm_scoring,
+        "protocol": cmd_protocol,
     }[args.command]
     return handler(args)
 

@@ -840,6 +840,40 @@ Limits: TP-L1 is not merged; the labels are those of its PR head (C-230). The re
 Carry-forward: C-229, C-230 Proposed.
 ```
 
+## P10d — Final metrics, the statistics code and the frozen protocol v1 (pending external review)
+
+```text
+P10d mini-gate: NOT DECIDED. Status written by the P10d author as an input to the external review.
+Base: 765a3a1 (the PR #34 merge). P10c: no verdict pasted yet (its section above stays NOT DECIDED).
+Decisions: C-231 (H2 non-inferiority exploratory), C-232 (missed regressions at scenario level),
+  C-233 (the ADR-010 author deviation; N-02 amended, ADR-010 note), C-234 (the count row,
+  identity-truth-2) Decided (authors, 21 Nov 2026); C-229, C-230 Decided (C-230 at TerraPreserve
+  4b2d84a, content equal to b9d4cce); C-238 (the test cluster sizes are not public: public bounds
+  now, the rule applied to the actual sizes at unblinding) and C-239 (unsafe scenarios without a
+  regression-inducing step are not in MR, counted apart) Decided (user, 21 Nov 2026); C-235 to
+  C-237 (P10d-1 to P10d-3), C-240 and C-241 (readings) Proposed.
+What exists: metrics-final-1, extractor-5 (experiments/metrics/final.py, llm_final.py; P8b's
+  records unchanged); identity-truth-2 (identity-truth-1 kept); experiments/stats (procedures,
+  seeded simulations, analysis, dev dry run, rendering); experiments/report/protocol.py;
+  docs/P10D_DEV_DRY_RUN.{json,md}; docs/PROTOCOL_v1.{json,md}. experiments.stats is in the
+  blinding contract. Test references: Newcombe's method 10 against the Armitage and Berry example
+  as worked by StatsDirect (0.056156 to 0.329207), exact McNemar against the same page (0.0129,
+  0.0065), the paper's best case (0.053), Wilson, sign test, Holm, DEFF and ICC by hand. Mutation
+  checks: 14 of 14 metric and 14 of 14 statistics mutants caught (2 of each only after tests were
+  added for the cases the hand examples lacked).
+Dev dry run (21 Nov 2026, DEV DRY RUN, NOT RESULTS; p8b-dev-run-3 and the P10c LLM inputs):
+  every dev ICC of the paired MR outcome is undefined (B and C miss nothing), so ρ = 0.30 goes
+  into DEFF (C-241 (5)). Coverage (4000 replications per cell, seed 20261121): minimum 0.9187
+  (target-bearing) and 0.9233 (change-request), both on the even test bound and already below
+  0.93 at ρ = 0: descriptive; the pooled non-inferiority limit 0.9303: inferential, on the
+  threshold. Power: H1 at effect 0.10 is about 0 in both strata (power 0.80 needs an effect of
+  0.6 / 0.3 to 0.4 with the even bound); H2's workload test 1.000.
+Limits: the test cluster sizes are public bounds (C-238); Newcombe's own Table II was not checked
+  (the PDF had no text layer); the dry run is dev data under a protocol not yet frozen.
+Carry-forward: C-235 to C-237, C-240, C-241 Proposed; the protocol-v1 tag (the user, after the
+  verdict and the advisor's sign-off).
+```
+
 ## Temporary exceptions
 
 None.

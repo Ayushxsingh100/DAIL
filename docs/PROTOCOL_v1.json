@@ -1,0 +1,135 @@
+{
+ "pins": {
+  "analysis_version": "analysis-1",
+  "aws_provider": "registry.terraform.io/hashicorp/aws 6.53.0",
+  "dail_commit": "the commit tagged protocol-v1 (the commit that holds this file)",
+  "extractor_code_sha256": "ef4680c4fe125e20cbaac246192d8efac431ef3d9392102c7b3e38b4c045fb5d",
+  "extractor_version": "extractor-5",
+  "identity_truth_version": "identity-truth-2",
+  "llm_parser_version": "dail-llm-parser-2",
+  "metrics_version": "metrics-final-1",
+  "models": {
+   "model-granite-3.3-8b-sample": {
+    "digest": "fd429f23b90980ed1bef53b990894e7b0199331f6ae90c5650240a7d5b70f1f7",
+    "max_output_tokens": 2048,
+    "num_ctx": 16384,
+    "quantization": "Q4_K_M",
+    "seed": 20261113,
+    "tag": "granite3.3:8b",
+    "temperature": 0.7,
+    "timeout_seconds": 1800.0,
+    "top_p": 0.95
+   },
+   "model-phi4-mini-3.8b-sample": {
+    "digest": "78fad5d182a7c33065e153a5f8ba210754207ba9d91973f57dffa7f487363753",
+    "max_output_tokens": 2048,
+    "num_ctx": 16384,
+    "quantization": "Q4_K_M",
+    "seed": 20261113,
+    "tag": "phi4-mini:3.8b",
+    "temperature": 0.7,
+    "timeout_seconds": 1800.0,
+    "top_p": 0.95
+   },
+   "model-qwen2.5-coder-7b-sample": {
+    "digest": "dae161e27b0e90dd1856c8bb3209201fd6736d8eb66298e75ed87571486f4364",
+    "max_output_tokens": 2048,
+    "num_ctx": 16384,
+    "quantization": "Q4_K_M",
+    "seed": 20261113,
+    "tag": "qwen2.5-coder:7b",
+    "temperature": 0.7,
+    "timeout_seconds": 1800.0,
+    "top_p": 0.95
+   }
+  },
+  "patch_validator_version": "dail-patch-validator-3",
+  "prompt_template_hash": "80e4dfb3f3055e50fdd7ae610537bfd8e68af9e76c2000f1ecd0f4aa6d140691",
+  "prompt_version": "dail-repair-prompt-3",
+  "registry": "registry-v1.1 (stored invariant_registry_version 2)",
+  "sampling": "k = 3; temperature 0.7, top_p 0.95, seed rule seed + k - 1 (C-225, C-222)",
+  "stats_code_sha256": "bd46c63d1bb63e4214984dd0fee250fe06d9ab8bc0c20350fe851ba88b0c34f3",
+  "terraform": "1.15.8",
+  "terrapreserve_manifest_sha256": "665b326a024d295f727cd5648ffc7e0d375b9300584871f238c6bfa48edd2e2d",
+  "terrapreserve_tag": "terrapreserve-v1.0",
+  "tp_l1_labels_commit": "4b2d84a69a8cadd2f87574b277efe67dac10b654"
+ },
+ "pre_freeze": {
+  "coverage_decision": {
+   "all": {
+    "at": {
+     "config": "all/test-even",
+     "pi": [
+      0.2,
+      0.1,
+      0.0,
+      0.7
+     ],
+     "rho": 0.3,
+     "true_difference": 0.1
+    },
+    "minimum": 0.93025,
+    "outcome": "inferential",
+    "threshold": 0.93
+   },
+   "change_request": {
+    "at": {
+     "config": "change_request/test-even",
+     "pi": [
+      0.2,
+      0.3,
+      0.0,
+      0.5
+     ],
+     "rho": 0.3,
+     "true_difference": 0.3
+    },
+    "minimum": 0.92325,
+    "outcome": "descriptive",
+    "threshold": 0.93
+   },
+   "repair": {
+    "at": {
+     "config": "repair/test-even",
+     "pi": [
+      0.2,
+      0.3,
+      0.0,
+      0.5
+     ],
+     "rho": 0.05,
+     "true_difference": 0.3
+    },
+    "minimum": 0.91875,
+    "outcome": "descriptive",
+    "threshold": 0.93
+   }
+  },
+  "coverage_reps": 4000,
+  "dry_run_experiment_id": "c4c20b99-0324-58e0-937e-dba26ad5cf0b",
+  "icc_dev": {
+   "all": {
+    "A_minus_C": null,
+    "B": null,
+    "C": null,
+    "C_minus_B": null
+   },
+   "change_request": {
+    "A_minus_C": null,
+    "B": null,
+    "C": null,
+    "C_minus_B": null
+   },
+   "repair": {
+    "A_minus_C": null,
+    "B": null,
+    "C": null,
+    "C_minus_B": null
+   }
+  },
+  "rho_analysis": 0.3,
+  "seed": 20261121,
+  "source": "docs/P10D_DEV_DRY_RUN.json (DEV DRY RUN, NOT RESULTS)"
+ },
+ "protocol_version": "protocol-v1"
+}
