@@ -875,7 +875,7 @@ Limits of the verdict (open items):
    though the protocol rests on them; and record the advisor's sign-off as a decision row, dated,
    naming `PROTOCOL_v1.md` and its SHA-256, covering C-231 (non-inferiority exploratory). Both
    can go in a small docs-only PR before the tag, or in the first step of P10e, before anything
-   touches the test split. [Open: P10d-3, with the new protocol SHA-256 `f860c4c6…`.]
+   touches the test split. [Closed in P10d-3, with the authors' sign-off; no advisor available.]
 2. Tag the right commit: the tag goes on the merge commit of this PR (or of the docs PR above),
    whichever holds the final protocol and the decided rows. [Open: after P10d-3.]
 3. H1's target-bearing stratum may not be able to reach significance. It has only 12 MR
@@ -932,10 +932,31 @@ Carry-forward: C-235 to C-237, C-240, C-241 Proposed; the protocol-v1 tag (the u
   verdict and the advisor's sign-off); P10c limit 3 for P10e.
 ```
 
-## P10e-prep — The main run, built before the freeze (pending external review)
+## P10e-prep — The main run, built before the freeze — passed with limits (verdict on PR #36)
 
 ```text
-P10e-prep: NOT DECIDED. Status written by the P10e-prep author as an input to the external review.
+P10e-prep: passed with limits (verdict on PR #36). Recorded in P10d-3 (22 Nov 2026); merged as
+  ac2d36c.
+Limits of the verdict (open items):
+1. Before the `protocol-v1` tag: P10d-3 records the advisor's sign-off of the protocol at SHA-256
+   `f860c4c6…` and the authors' decisions on C-235, C-236, C-237, C-240 and C-241 (P10d limit
+   1); the tag then goes on P10d-3's merge commit (P10d limit 2). [Closed by this package with
+   the authors' sign-off instead of an advisor's (C-256), except the tag.]
+2. The charger dropped for 40 s while plugged in (Kernel-Power 105 at 08:30:31Z, back at
+   08:31:11Z). The battery settings are unchanged (lid closing means sleep, hibernate after 3 h),
+   so a loose charger overnight could stop the run. Before the main run, reseat or replace the
+   charger; for the run only, set the battery (DC) lid action to "do nothing" and the DC
+   hibernate timeout to 0, and restore them afterwards. The monitor records any switch to battery
+   as an interruption (C-253).
+3. The awake check ran with the IDE holding an EXECUTION request (Antigravity IDE). The same will
+   be true in the main run, so the check reflects the run's real conditions; it does not show
+   that the machine stays awake with no request held.
+4. Start the main run from an elevated prompt, so that `powercfg /requests` is recorded (C-254).
+5. Not exercised end to end: the main-run command with Ollama and the real test data. It can run
+   only on the tagged commit. Its first step (the reference track) will show at once whether the
+   path works. Any failure is recorded and reported, never fixed in place: a code change after
+   the tag is a protocol deviation.
+Status before the verdict, as written by the P10e-prep author:
 Base: eaeba05 (the PR #35 merge). The P10d verdict and the P10d-3 freeze record are not yet
   recorded here. The test split was not read: every test of the test-split path uses a fake
   private directory built at test time; $TERRAPRESERVE_PRIVATE was never opened.
