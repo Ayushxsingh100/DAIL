@@ -28,6 +28,13 @@ compares DAIL's gate with TP-L1's ``terraform validate`` (a candidate whose plan
 model, scenario, k, valid before the gate, validate-valid, the class (``safe``, ``unsafe``,
 ``no label``; None without a patch) and each condition's decision (None if not replayed); the
 LLM metrics of ``experiments.metrics.llm_final`` read these rows. ``score``'s output is unchanged.
+
+``main_run_candidate_rows`` (P10e-prep, C-245, C-252) gives the same rows for the main run's test
+generations: TP-L2's ``llm_candidates/test/<generation_id>/labels.json`` from the private
+directory, read only after the test-split guard of ``experiments.split_guard`` passed, checked
+against its ``labels.sha256``. Decisions of a candidate that failed the gate stay in its row; the
+metrics count a candidate's decisions only if its gate record passed (``validate_ok``, P10c verdict
+limit 3, C-248).
 """
 
 from __future__ import annotations
@@ -38,6 +45,13 @@ import subprocess
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Final
+
+from experiments.split_guard import (
+    PRIVATE_MANIFEST_SHA256,
+    GuardRefused,
+    open_test_split,
+    tp_l2_dir,
+)
 
 CONDITIONS: Final = ("A", "B", "C", "C_PRIME")
 CLASSES: Final = ("safe", "unsafe", "no label")
@@ -75,6 +89,25 @@ def read_tp_labels(tp_root: Path, commit: str, generation_id: str) -> dict[str, 
     doc: dict[str, Any] = json.loads(raw)
     if doc.get("generation_id") != generation_id:
         raise ScoringError(f"{base}/labels.json names generation {doc.get('generation_id')}")
+    return doc
+
+
+def read_tp_l2_labels(private_root: Path, generation_id: str) -> dict[str, Any]:
+    """TP-L2's labels of one main-run generation from the private directory (C-252 (3)), checked
+    against labels.sha256. Called only after the test-split guard passed."""
+    base = tp_l2_dir(private_root, generation_id)
+    try:
+        raw = (base / "labels.json").read_bytes()
+        pinned = (base / "labels.sha256").read_text(encoding="utf-8").split()[0]
+    except (OSError, IndexError):
+        raise ScoringError(
+            f"no TP-L2 labels for {generation_id} in the private directory"
+        ) from None
+    if _sha(raw) != pinned:
+        raise ScoringError(f"TP-L2 labels.json of {generation_id}: sha256 is not its labels.sha256")
+    doc: dict[str, Any] = json.loads(raw)
+    if doc.get("generation_id") != generation_id:
+        raise ScoringError(f"TP-L2 labels.json names generation {doc.get('generation_id')}")
     return doc
 
 
@@ -228,6 +261,32 @@ def candidate_rows(
     found: list[dict[str, Any]] = []
     for gid in generations:
         tp = read_tp_labels(tp_root, tp_commit, gid)
+        found += _generation(root, gid, tp, gate_name, replay_name)["rows"]
+    return found
+
+
+def main_run_candidate_rows(
+    *,
+    root: Path,
+    generations: Sequence[str],
+    private_root: Path,
+    gate_name: str,
+    replay_name: str,
+    command: str | None,
+    repo_root: Path | None = None,
+    manifest_sha256: str = PRIVATE_MANIFEST_SHA256,
+) -> list[dict[str, Any]]:
+    """``candidate_rows`` for the main run's test generations (C-245, C-252): TP-L2's labels from
+    the private directory, only through the test-split guard; the same join and checks."""
+    try:
+        access = open_test_split(
+            private_root, command=command, repo_root=repo_root, manifest_sha256=manifest_sha256
+        )
+    except GuardRefused as error:
+        raise ScoringError(str(error)) from None
+    found: list[dict[str, Any]] = []
+    for gid in generations:
+        tp = read_tp_l2_labels(access.private_root, gid)
         found += _generation(root, gid, tp, gate_name, replay_name)["rows"]
     return found
 

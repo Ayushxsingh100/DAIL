@@ -1,6 +1,6 @@
 # P10d dev dry run (DEV DRY RUN, NOT RESULTS)
 
-> **DEV DRY RUN, NOT RESULTS.** The whole analysis of the frozen protocol, run on dev data (reference track: experiment `c4c20b99-0324-58e0-937e-dba26ad5cf0b`, `p8b-dev-run-3`; LLM track: the P10c scoring inputs) as if it were the test split, to check the code and the protocol before the freeze. Nothing here is a finding, and no hypothesis is tested on dev (C-214). Versions: `metrics-final-1`, `extractor-5`, `analysis-2`; seed 20261121, 4000 coverage and 2000 power replications per cell. Generated from `P10D_DEV_DRY_RUN.json` by `experiments.stats.render`.
+> **DEV DRY RUN, NOT RESULTS.** The whole analysis of the frozen protocol, run on dev data (reference track: experiment `c4c20b99-0324-58e0-937e-dba26ad5cf0b`, `p8b-dev-run-3`; LLM track: the P10c scoring inputs) as if it were the test split, to check the code and the protocol before the freeze. Nothing here is a finding, and no hypothesis is tested on dev (C-214). Versions: `metrics-final-1`, `extractor-6`, `analysis-2`; seed 20261121, 4000 coverage and 2000 power replications per cell. Generated from `P10D_DEV_DRY_RUN.json` by `experiments.stats.render`.
 
 ## 1. ρ, the ICC of the paired MR outcome (P10d-2) — DEV DRY RUN, NOT RESULTS
 

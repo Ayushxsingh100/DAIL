@@ -155,10 +155,10 @@ class Case(unittest.TestCase):
 class TestVersions(unittest.TestCase):
     def test_the_definitions_are_metrics_final_1_and_the_extractor_is_5(self) -> None:
         self.assertEqual(METRICS_VERSION, "metrics-final-1")
-        self.assertEqual(EXTRACTOR_VERSION, "extractor-5")
+        self.assertEqual(EXTRACTOR_VERSION, "extractor-6")
         for record in run().metrics:
             self.assertEqual(record["metrics_version"], "metrics-final-1")
-            self.assertEqual(record["extractor_version"], "extractor-5")
+            self.assertEqual(record["extractor_version"], "extractor-6")
 
 
 class TestScenarioTruth(unittest.TestCase):

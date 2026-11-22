@@ -242,7 +242,7 @@ class TestRecords(Case):
             # P10d: the definitions are metrics-final-1 (P8b's records unchanged inside it)
             self.assertEqual(record["metrics_version"], "metrics-final-1")
             self.assertEqual(record["extractor_version"], EXTRACTOR_VERSION)
-        self.assertEqual(EXTRACTOR_VERSION, "extractor-5")
+        self.assertEqual(EXTRACTOR_VERSION, "extractor-6")
 
     def test_the_extractor_is_deterministic(self) -> None:
         from experiments.metrics.extractor import dumps_metrics

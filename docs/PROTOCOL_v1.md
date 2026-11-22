@@ -36,7 +36,7 @@ Comparisons: A–C (H1, H4), B–C (H2), C–C′ on F5 (H3).
   operations (C-220); repair scenarios only (C-219); generated only on the authors' machine with
   the local Ollama server (C-218). No hypothesis rests on it.
 
-## 4. Metrics: `metrics-final-1` (extractor `extractor-5`)
+## 4. Metrics: `metrics-final-1` (extractor `extractor-6`)
 
 Every proportion carries its numerator and denominator and a Wilson 95% interval; a denominator of
 0 gives no value. Truth comes only from TerraPreserve's oracle labels, read only by
@@ -167,8 +167,8 @@ At unblinding the rule is applied again on the actual test sizes (section 9).
 | analysis_version | `analysis-2` |
 | aws_provider | `registry.terraform.io/hashicorp/aws 6.53.0` |
 | dail_commit | `the commit tagged protocol-v1 (the commit that holds this file)` |
-| extractor_code_sha256 | `ef4680c4fe125e20cbaac246192d8efac431ef3d9392102c7b3e38b4c045fb5d` |
-| extractor_version | `extractor-5` |
+| extractor_code_sha256 | `6338cff50da03b8cba438b76f9458e51bf27313fe2964746b1a477f2c74f82ab` |
+| extractor_version | `extractor-6` |
 | identity_truth_version | `identity-truth-2` |
 | llm_parser_version | `dail-llm-parser-2` |
 | metrics_version | `metrics-final-1` |

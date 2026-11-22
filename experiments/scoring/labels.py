@@ -2,7 +2,9 @@
 
 Read for scoring only. The files are the ones ``experiments.loader`` verified for execution: the
 manifest's SHA-256 must be the pin and every scenario.json must have the manifest's SHA-256, or
-``LoaderError`` is raised. The test split is refused.
+``LoaderError`` is raised. The test split is refused by ``load_labels``; ``load_test_labels`` reads
+it only through the guard of ``experiments.split_guard`` (P10e-prep decision 2, C-245), from
+TerraPreserve's private package (``V1_MANIFEST_PRIVATE.json`` and ``<scenario_id>/`` at its root).
 
 Per scenario: ``truth[k]`` is ``labels[k].invariant_truth`` (the oracle's result per invariant at
 step k), ``oracle_affected[k]`` is ``labels[k].oracle_affected``, ``mutations`` are the
@@ -25,6 +27,12 @@ from types import MappingProxyType
 from typing import Any
 
 from experiments.loader import DEV_SPLIT, MANIFEST_SHA256, REFUSED_SPLIT, LoaderError, sha256_hex
+from experiments.split_guard import (
+    PRIVATE_MANIFEST_SHA256,
+    TEST_SPLIT,
+    GuardRefused,
+    open_test_split,
+)
 
 
 @dataclass(frozen=True)
@@ -123,13 +131,24 @@ def load_labels(
     raw = path.read_bytes()
     if sha256_hex(raw) != manifest_sha256:
         raise LoaderError("the manifest sha256 is not the pin")
+    return _read_split(
+        json.loads(raw)[DEV_SPLIT], Path(root) / "scenarios" / DEV_SPLIT, scenario_ids, roles
+    )
+
+
+def _read_split(
+    entries: Iterable[Mapping[str, Any]],
+    home: Path,
+    scenario_ids: Iterable[str] | None,
+    roles: Iterable[str],
+) -> dict[str, ScenarioLabels]:
     wanted = None if scenario_ids is None else set(scenario_ids)
     found: dict[str, ScenarioLabels] = {}
-    for entry in json.loads(raw)[DEV_SPLIT]:
+    for entry in entries:
         sid = entry["scenario_id"]
         if entry["v1_role"] not in set(roles) or (wanted is not None and sid not in wanted):
             continue
-        file = Path(root) / "scenarios" / DEV_SPLIT / sid / "scenario.json"
+        file = home / sid / "scenario.json"
         data = file.read_bytes()
         if sha256_hex(data) != entry["scenario_json_sha256"]:
             raise LoaderError(f"{sid}: scenario.json sha256 is not the manifest's")
@@ -137,3 +156,26 @@ def load_labels(
     if wanted is not None and set(found) != wanted:
         raise LoaderError(f"no labels for {sorted(wanted - set(found))}")
     return dict(sorted(found.items()))
+
+
+def load_test_labels(
+    private_root: Path,
+    scenario_ids: Iterable[str] | None = None,
+    *,
+    command: str | None,
+    repo_root: Path | None = None,
+    manifest_sha256: str = PRIVATE_MANIFEST_SHA256,
+    roles: Iterable[str] = ("target",),
+) -> dict[str, ScenarioLabels]:
+    """The labels of the test scenarios (P10e-prep decision 2, C-245): only through
+    ``split_guard.open_test_split``, from TerraPreserve's private package, with the same checks as
+    ``load_labels``."""
+    try:
+        access = open_test_split(
+            private_root, command=command, repo_root=repo_root, manifest_sha256=manifest_sha256
+        )
+    except GuardRefused as error:
+        raise LoaderError(str(error)) from None
+    return _read_split(
+        json.loads(access.manifest_raw)[TEST_SPLIT], access.private_root, scenario_ids, roles
+    )

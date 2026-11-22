@@ -106,7 +106,7 @@ class TestProjection(unittest.TestCase):
 
 class TestVersion(unittest.TestCase):
     def test_extractor_3(self) -> None:
-        self.assertEqual(EXTRACTOR_VERSION, "extractor-5")
+        self.assertEqual(EXTRACTOR_VERSION, "extractor-6")
 
 
 if __name__ == "__main__":

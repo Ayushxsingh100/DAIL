@@ -864,10 +864,37 @@ Limits: TP-L1 is not merged; the labels are those of its PR head (C-230). The re
 Carry-forward: C-229, C-230 Proposed.
 ```
 
-## P10d — Final metrics, the statistics code and the frozen protocol v1 (pending external review)
+## P10d — Final metrics, the statistics code and the frozen protocol v1 — passed with limits (verdict on PR #35)
 
 ```text
-P10d mini-gate: NOT DECIDED. Status written by the P10d author as an input to the external review.
+P10d: passed with limits (verdict on PR #35). Recorded in P10e-prep-2 (22 Nov 2026, C-255); merged
+  as eaeba05.
+Limits of the verdict (open items):
+1. Must be done before the `protocol-v1` tag: the authors decide C-235, C-236, C-237, C-240 and
+   C-241 (the coverage rule, ρ, κ and the metric and statistics readings), all still Proposed,
+   though the protocol rests on them; and record the advisor's sign-off as a decision row, dated,
+   naming `PROTOCOL_v1.md` and its SHA-256, covering C-231 (non-inferiority exploratory). Both
+   can go in a small docs-only PR before the tag, or in the first step of P10e, before anything
+   touches the test split. [Open: P10d-3, with the new protocol SHA-256 `f860c4c6…`.]
+2. Tag the right commit: the tag goes on the merge commit of this PR (or of the docs PR above),
+   whichever holds the final protocol and the decided rows. [Open: after P10d-3.]
+3. H1's target-bearing stratum may not be able to reach significance. It has only 12 MR
+   scenarios. With Holm across two strata, the smaller p must be ≤ 0.025, and the exact sign test
+   needs at least 7 discordant clusters for that (2 · 0.5^7 ≈ 0.016). With 6 or fewer, the
+   stratum can only be inconclusive, whatever the data. The protocol already reports the
+   attainable minimum p (C-243); the paper must say this plainly.
+4. The pooled coverage of 0.9303 sits right on the 0.93 threshold and depends on the simulation
+   design chosen in C-241 (the Dirichlet-multinomial model, the grid of true values and the test
+   bounds). Only H2 non-inferiority uses the pooled interval, and that is exploratory anyway
+   (C-231), so no confirmatory claim depends on it.
+5. The machine still sleeps: the reported suite wall times were 27,916 s and 35,651 s. Fix the
+   power settings and test them (for example, a two-hour idle run with the event log checked)
+   before the main run. [P10e-prep: AC settings fixed; this round adds the mains-only rule.]
+6. Carried to P10e (P10c limit 3): only candidates whose gate record passed may enter scoring as
+   DAIL decisions, enforced by a test. [Closed in P10e-prep, C-248.]
+7. The paper needs updating: it must be revised for the 18 deviations listed in `PROTOCOL_v1.md`
+   §10 before submission.
+Status before the verdict, as written by the P10d author:
 Base: 765a3a1 (the PR #34 merge). P10c: passed with limits (verdict on PR #34), recorded in
   P10d-2 (C-244).
 Decisions: C-231 (H2 non-inferiority exploratory), C-232 (missed regressions at scenario level),
@@ -903,6 +930,59 @@ P10d-2 fix round (21 Nov 2026, external review of 4cf560c): C-242 (power is repo
   rerun as analysis-2.
 Carry-forward: C-235 to C-237, C-240, C-241 Proposed; the protocol-v1 tag (the user, after the
   verdict and the advisor's sign-off); P10c limit 3 for P10e.
+```
+
+## P10e-prep — The main run, built before the freeze (pending external review)
+
+```text
+P10e-prep: NOT DECIDED. Status written by the P10e-prep author as an input to the external review.
+Base: eaeba05 (the PR #35 merge). The P10d verdict and the P10d-3 freeze record are not yet
+  recorded here. The test split was not read: every test of the test-split path uses a fake
+  private directory built at test time; $TERRAPRESERVE_PRIVATE was never opened.
+Decisions: C-245 (the frozen scoring code cannot read the test split) Decided (user, 22 Nov 2026):
+  the scoring code changes, the protocol gets a new hash; C-246 to C-251 (decisions 2, 3, 4, 5,
+  6, 1) Decided (authors, 22 Nov 2026); C-252 (readings) Decided (authors, 22 Nov 2026), accepted
+  as built after external review, with amendment (10).
+What exists: experiments/split_guard.py (the guard: main-run command, HEAD tagged protocol-v1,
+  clean tree, private manifest SHA-256 14ca1fff…6efe, in that order; nothing read on a refusal);
+  experiments.loader.load_test, experiments.scoring.labels.load_test_labels,
+  experiments.scoring.llm_pilot.main_run_candidate_rows (the dev entry points unchanged, still
+  refusing the test split); experiments/mainrun (lock, order, run, power, unblind, the command
+  python -m experiments.mainrun reference|generate|analyse). Extractor extractor-6
+  (6338cff5…82ab; extractor-5 kept pinned); stats code unchanged (ecf1cea1…ab18). The dev dry run
+  rerun as extractor-6-analysis-2: only the version fields changed.
+Protocol: docs/PROTOCOL_v1.md SHA-256 f860c4c624080730b3164d56ec9adf3a30e1a5426c5a25a3028185563321bcaa
+  (was 6379b894…1283; only the extractor version and pin changed), docs/PROTOCOL_v1.json
+  2c27009c389e9434d2442d1398f81f1e20e0d70ca96f1f1caee3f2c281d2cec4.
+Power (authors' machine, scheme e6f535c0-edc3-4b6d-a83a-f6723c38aea2, 22 Nov 2026): AC standby
+  0x00000000 before and after; AC hibernate 0x0000a8c0 before, 0x00000000 after; AC lid-close
+  0x00000001 (Sleep) before, 0x00000000 (Do nothing) after; DC values unchanged (standby 0,
+  hibernate 0x00002a30, lid 1).
+Idle test (2026-11-21T20:22:44Z to 22:22:53Z UTC, a timestamp a minute): 121 timestamps, longest
+  gap 62.6 s. One Kernel-Power or Power-Troubleshooter event: Kernel-Power 105 (power source
+  change, AcOnline=false) at 20:37:49.714Z; no sleep, hibernate, resume, wake, modern-standby or
+  restart event. Limit: the charger was out from 20:37:49Z to the end, so 1 h 45 min of the test
+  ran on the DC settings (not changed), not the AC settings the preflight checks; accepted as is
+  by the user (22 Nov 2026).
+Not exercised end to end: the main-run command with Ollama and real test data (it runs only on
+  the commit tagged protocol-v1).
+P10e-prep-2 fix round (22 Nov 2026, external review of 77b62ac): C-253 (mains power only: the
+  preflight refuses unless on AC; a Kernel-Power 105 with AcOnline=false is an interruption;
+  C-252 (10) amended), C-254 (powercfg /requests recorded with each preflight and each poll that
+  finds an event, never enforced; it needs an elevated prompt), C-255 (the P10d verdict recorded
+  above) Decided (authors). Only experiments/mainrun, tests and docs changed; the protocol
+  SHA-256 and the pinned code hashes are unchanged, held by tests/unit/test_p10e_mains.py.
+  The preflight on the authors' machine (22 Nov 2026, 08:28:11Z, an elevated prompt): on AC
+  (PowerOnline True), AC standby, hibernate and lid-close 0; powercfg /requests exit 0, one
+  request: EXECUTION by Antigravity IDE.exe (Electron, the editor this session runs in), all
+  other sections None. (An earlier unelevated run at 08:26:36Z stored the refusal on stderr.)
+  The 30-minute check on AC (08:28:38Z to 08:58:38Z, a timestamp a minute): 31 timestamps,
+  longest gap 60.0 s; two events: Kernel-Power 105 AcOnline=false at 08:30:31.566Z and
+  AcOnline=true at 08:31:11.015Z (40 s on battery; the new monitor code counts the first as an
+  interruption, the second not); no sleep, hibernate, resume, wake, modern-standby or restart
+  event. Limit: the charger connection dropped once for 40 s with the charger plugged in.
+Carry-forward: P10d limits 1 and 2 (P10d-3: advisor, sign-off date, with the protocol hash
+  f860c4c6…; the protocol-v1 tag); P10d limits 3, 4 and 7 for the paper.
 ```
 
 ## Temporary exceptions

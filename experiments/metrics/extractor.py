@@ -1,4 +1,4 @@
-"""The metric extractor ``extractor-5``, for the metric definitions ``metrics-final-1`` (P10d work
+"""The metric extractor ``extractor-6``, for the metric definitions ``metrics-final-1`` (P10d work
 package Step 2: P8b's ``metrics-draft-1`` (P8b work package Section 4; Doc 13 §25-§35, Appendix B;
 C-212 to C-214) unchanged, plus the definitions of ``experiments.metrics.final``; C-231 to C-240).
 
@@ -14,7 +14,9 @@ same code with the two versions apart and the generation metrics of
 ``experiments.metrics.final`` (scenario-level MR, H4, W per scenario, κ, macro impact, truth
 recall), the LLM metrics of ``experiments.metrics.llm_final``, identity-truth-2 (C-234) and, over
 the true pairs, identity and transition error rates with UNCERTAIN excluded and the
-evidence-transfer error rate (transfers / true replacements; C-240 (1), (2)).
+evidence-transfer error rate (transfers / true replacements; C-240 (1), (2)); ``extractor-6``
+(P10e-prep) is the same metric code with the guarded test-split entry points of
+``experiments.scoring`` (``load_test_labels``, ``main_run_candidate_rows``; C-245).
 
 Input: the transitions of the stored trial records (``experiments.metrics.model``), the scenarios'
 truth from ``experiments.scoring``, DAIL's S0 results under B, and the identity truth table. Output:
@@ -68,7 +70,7 @@ from experiments.scoring.labels import ScenarioLabels
 from experiments.scoring.truth import TransitionTruth, transition_truth
 
 METRICS_VERSION: Final = "metrics-final-1"  # the metric definitions (P10d; draft-1: C-212)
-EXTRACTOR_VERSION: Final = "extractor-5"  # this code (P10a 3.1; 3: P10b; 4: P10c; 5: P10d)
+EXTRACTOR_VERSION: Final = "extractor-6"  # P10a 3.1; 3 P10b; 4 P10c; 5 P10d; 6 P10e-prep
 NAMESPACE: Final = uuid.uuid5(uuid.NAMESPACE_URL, "dail/experiments/metrics")
 Z95: Final = 1.959963984540054
 ORDER: Final = ("A", "B", "C", "C_PRIME")
