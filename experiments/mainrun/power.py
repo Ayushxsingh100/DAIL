@@ -8,12 +8,23 @@ hidden settings: the lid-close action is hidden on the author's machine, so ``/q
 list it (C-250). A value that is not 0, or one that cannot be read, refuses the start: uncertainty
 fails closed.
 
+**Mains only** (P10e-prep-2 decision 1; C-253): the preflight also refuses unless the machine is on
+AC power at that moment, read from Windows (``Get-CimInstance -Namespace root/wmi -ClassName
+BatteryStatus``, ``PowerOnline`` of every battery); a value that cannot be read refuses the start.
+
+**``powercfg /requests``** (decision 2; C-254) is recorded, never enforced: the preflight stores
+its full output (return code, stdout, stderr; an error if it cannot run) in its record, and the
+monitor stores it again with every poll that finds a new power event. It needs an elevated prompt;
+unelevated, what is stored is Windows' refusal message (C-254).
+
 **Monitor**: every 10 minutes the System log's Kernel-Power and Power-Troubleshooter events since
 the start of the step are read (``wevtutil qe System /f:xml``) and every new one is appended to
 the run's interruption file as a ``power_event`` line, with a ``poll`` line per poll and a
 ``poll_error`` line when the log cannot be read. Every event is kept; sleep, resume, wake, modern
-standby, an unexpected restart and any event this module does not know count as interruptions (a
-power-source change does not). The main-run command reports them; nothing is redone.
+standby, an unexpected restart and any event this module does not know count as interruptions. A
+power-source change (Kernel-Power 105) counts only when it switches to battery (``AcOnline`` is
+``false``) or when ``AcOnline`` cannot be read (C-253; C-252 (10) amended). The main-run command
+reports them; nothing is redone.
 """
 
 from __future__ import annotations
@@ -43,7 +54,7 @@ TROUBLESHOOTER: Final = "Microsoft-Windows-Power-Troubleshooter"
 KINDS: Final = {
     (KERNEL_POWER, 41): ("unexpected restart", True),
     (KERNEL_POWER, 42): ("sleep or hibernate", True),
-    (KERNEL_POWER, 105): ("power source change", False),
+    (KERNEL_POWER, 105): ("power source change", False),  # on AC; see _kind
     (KERNEL_POWER, 107): ("resume", True),
     (KERNEL_POWER, 506): ("modern standby entry", True),
     (KERNEL_POWER, 507): ("modern standby exit", True),
@@ -53,6 +64,12 @@ INTERVAL_SECONDS: Final = 600
 _NS: Final = "{http://schemas.microsoft.com/win/2004/08/events/event}"
 _AC = re.compile(r"Current AC Power Setting Index:\s*0x([0-9a-fA-F]+)")
 _DC = re.compile(r"Current DC Power Setting Index:\s*0x([0-9a-fA-F]+)")
+
+
+_BATTERY_SCRIPT: Final = (
+    "Get-CimInstance -Namespace root/wmi -ClassName BatteryStatus "
+    "| ForEach-Object { $_.PowerOnline }"
+)
 
 
 class PreflightError(Exception):
@@ -95,6 +112,75 @@ def preflight(query: Callable[[str], str] = powercfg_query) -> dict[str, int]:
     return values
 
 
+def battery_query() -> str:
+    """``PowerOnline`` of every battery, one per line (``True`` or ``False``)."""
+    done = subprocess.run(
+        ["powershell", "-NoProfile", "-NonInteractive", "-Command", _BATTERY_SCRIPT],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return done.stdout
+
+
+def ac_online(battery: Callable[[], str] = battery_query) -> bool:
+    """True if every battery reports ``PowerOnline`` True; otherwise PreflightError."""
+    try:
+        text = battery()
+    except (OSError, subprocess.SubprocessError) as error:
+        raise PreflightError(f"the power source cannot be read: {error}") from None
+    values = [line.strip() for line in text.splitlines() if line.strip()]
+    if values and all(v == "False" for v in values):
+        raise PreflightError("the machine is on battery: plug the charger in (C-253)")
+    if not values or any(v != "True" for v in values):
+        raise PreflightError(f"the power source cannot be read from Windows: {text!r}")
+    return True
+
+
+def powercfg_requests() -> dict[str, Any]:
+    """The full ``powercfg /requests`` output; never raises (recorded, not enforced; C-254)."""
+    try:
+        done = subprocess.run(
+            ["powercfg", "/requests"], capture_output=True, text=True, check=False
+        )
+    except OSError as error:
+        return {"command": "powercfg /requests", "error": str(error)}
+    return {
+        "command": "powercfg /requests",
+        "returncode": done.returncode,
+        "output": done.stdout,
+        "stderr": done.stderr,
+    }
+
+
+def _requests_record(requests: Callable[[], dict[str, Any]]) -> dict[str, Any]:
+    try:
+        return requests()
+    except (OSError, subprocess.SubprocessError) as error:
+        return {"command": "powercfg /requests", "error": str(error)}
+
+
+def preflight_record(
+    *,
+    settings: Callable[[], dict[str, int]] = preflight,
+    battery: Callable[[], str] = battery_query,
+    requests: Callable[[], dict[str, Any]] = powercfg_requests,
+) -> dict[str, Any]:
+    """The whole preflight: the AC settings, on mains, and ``/requests`` (recorded only)."""
+    values = settings()
+    try:
+        raw = battery()
+    except (OSError, subprocess.SubprocessError) as error:
+        raise PreflightError(f"the power source cannot be read: {error}") from None
+    online = ac_online(lambda: raw)
+    return {
+        "ac_settings": values,
+        "ac_online": online,
+        "battery_status": raw,
+        "requests": _requests_record(requests),
+    }
+
+
 def events_query(since: str) -> str:
     return (
         f"*[System[(Provider[@Name='{KERNEL_POWER}'] or Provider[@Name='{TROUBLESHOOTER}'])"
@@ -126,8 +212,13 @@ def parse_events(text: str) -> list[dict[str, Any]]:
         name = "" if provider is None else provider.get("Name", "")
         event_id = int(system.findtext(f"{_NS}EventID") or -1)
         created = system.find(f"{_NS}TimeCreated")
-        kind, interruption = KINDS.get((name, event_id), ("other", True))
         data = e.find(f"{_NS}EventData")
+        fields = (
+            {}
+            if data is None
+            else {d.get("Name", ""): d.text or "" for d in data.findall(f"{_NS}Data")}
+        )
+        kind, interruption = _kind(name, event_id, fields)
         found.append(
             {
                 "provider": name,
@@ -136,14 +227,21 @@ def parse_events(text: str) -> list[dict[str, Any]]:
                 "record_id": system.findtext(f"{_NS}EventRecordID") or "",
                 "kind": kind,
                 "interruption": interruption,
-                "data": (
-                    {}
-                    if data is None
-                    else {d.get("Name", ""): d.text or "" for d in data.findall(f"{_NS}Data")}
-                ),
+                "data": fields,
             }
         )
     return sorted(found, key=lambda r: (r["time"], r["record_id"], r["event_id"]))
+
+
+def _kind(provider: str, event_id: int, data: dict[str, str]) -> tuple[str, bool]:
+    if (provider, event_id) == (KERNEL_POWER, 105):
+        ac = data.get("AcOnline", "").strip().lower()
+        if ac == "true":
+            return "power source change", False
+        if ac == "false":
+            return "power source change to battery", True
+        return "power source change, AcOnline unreadable", True
+    return KINDS.get((provider, event_id), ("other", True))
 
 
 def utc_now() -> str:
@@ -162,11 +260,13 @@ class PowerMonitor:
         since: str,
         query: Callable[[str], str] = wevtutil_query,
         now: Callable[[], str] = utc_now,
+        requests: Callable[[], dict[str, Any]] | None = None,
     ) -> None:
         self.path = Path(path)
         self.since = since
         self.query = query
         self.now = now
+        self.requests = requests
         self._seen: dict[tuple[str, int, str, str], bool] = {}
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -190,7 +290,10 @@ class PowerMonitor:
             self._seen[key] = r["interruption"]
             self._append({"record": "power_event", **r})
             new += 1
-        self._append({"record": "poll", "at": at, "since": self.since, "new_events": new})
+        line: dict[str, Any] = {"record": "poll", "at": at, "since": self.since, "new_events": new}
+        if new and self.requests is not None:
+            line["requests"] = _requests_record(self.requests)
+        self._append(line)
 
     def interruptions(self) -> int:
         return sum(self._seen.values())

@@ -10,14 +10,17 @@
 ``generate`` also needs the local Ollama server with the pinned models, Terraform on PATH and
 ``DAIL_TERRAFORM_MIRROR`` (C-227).
 
-1. ``reference``: the power preflight; the test split through the guard; the lock (or, with
-   ``--resume``, the locked experiment); the 96 test targets under A, B, C and C' (P8a's runner:
-   an interrupted trial is re-run as a new attempt, nothing is overwritten); the power monitor
-   writes ``main-run.interruptions.jsonl`` beside the lock.
-2. ``generate``: the preflight; the 36 test repair scenarios, the three ``-sample`` pins, k = 3
-   (C-224, C-225); then the validate gate (``gate-1``), the replay under A, B, C and C'
-   (``replay-1``) and the export for the oracle. Each part whose output exists is skipped (each is
-   written once); an interrupted generation attempt is refused by the generation code, as in P10a.
+1. ``reference``: the test split through the guard; the power preflight (the AC settings, on
+   mains, ``powercfg /requests`` recorded; C-250, C-253, C-254); the lock (or, with ``--resume``,
+   the locked experiment); the preflight record appended to ``main-run.preflight.jsonl`` beside
+   the lock; the 96 test targets under A, B, C and C' (P8a's runner: an interrupted trial is re-run
+   as a new attempt, nothing is overwritten); the power monitor writes
+   ``main-run.interruptions.jsonl`` beside the lock.
+2. ``generate``: the guard, then the preflight as in step 1; the 36 test repair scenarios, the
+   three ``-sample`` pins, k = 3 (C-224, C-225); then the validate gate (``gate-1``), the replay
+   under A, B, C and C' (``replay-1``) and the export for the oracle. Each part whose output
+   exists is skipped (each is written once); an interrupted generation attempt is refused by the
+   generation code, as in P10a.
 3. Stop: TerraPreserve labels the exported candidates (TP-L2) into
    ``$TERRAPRESERVE_PRIVATE/llm_candidates/test/<generation id>/`` (C-252 (3)).
 4. ``analyse``: once; the order of ``experiments.mainrun.unblind``; every result is written once
@@ -42,7 +45,15 @@ from experiments.definition import Condition, ExperimentSpec
 from experiments.loader import LoadedSet, LoaderError, load_test
 from experiments.mainrun.lock import LockError
 from experiments.mainrun.order import OrderError
-from experiments.mainrun.power import PowerMonitor, PreflightError, preflight, utc_now
+from experiments.mainrun.power import (
+    PowerMonitor,
+    PreflightError,
+    battery_query,
+    powercfg_requests,
+    preflight,
+    preflight_record,
+    utc_now,
+)
 from experiments.mainrun.run import (
     EXPERIMENT_NAME,
     EXPERIMENT_VERSION,
@@ -63,6 +74,7 @@ MODEL_KEYS: Final = (
 K: Final = 3
 CONDITIONS: Final = ("A", "B", "C", "C_PRIME")
 INTERRUPTIONS: Final = "main-run.interruptions.jsonl"
+PREFLIGHTS: Final = "main-run.preflight.jsonl"
 PROTOCOL_PATH: Final = "docs/PROTOCOL_v1.md"
 
 
@@ -90,12 +102,21 @@ def _test_split() -> LoadedSet:
     return load_test(_private(), command=MAIN_RUN_COMMAND)
 
 
-def _preflight() -> None:
-    print(json.dumps({"power_preflight_ac": preflight()}))
+def _preflight() -> dict[str, Any]:
+    record = preflight_record(settings=preflight, battery=battery_query, requests=powercfg_requests)
+    record = {"at": utc_now(), **record}
+    print(json.dumps({"power_preflight": {k: record[k] for k in ("ac_settings", "ac_online")}}))
+    return record
+
+
+def _record_preflight(output: Path, step: str, record: dict[str, Any]) -> None:
+    """Appends the step's preflight record (with ``/requests``) to the run (C-254)."""
+    with (output / PREFLIGHTS).open("a", encoding="utf-8", newline="\n") as out:
+        out.write(json.dumps({"step": step, "preflight": record}, sort_keys=True) + "\n")
 
 
 def _monitored(output: Path, work: Any) -> Any:
-    monitor = PowerMonitor(output / INTERRUPTIONS, since=utc_now())
+    monitor = PowerMonitor(output / INTERRUPTIONS, since=utc_now(), requests=powercfg_requests)
     monitor.start()
     try:
         return work()
@@ -108,8 +129,8 @@ def cmd_reference(args: argparse.Namespace) -> int:
     from experiments.runner import plan, run_experiment
 
     terrapreserve, output = _roots()
-    _preflight()
     loaded = _test_split()
+    checked = _preflight()
     environment = _environment(terrapreserve)
     spec = ExperimentSpec(
         name=EXPERIMENT_NAME,
@@ -121,6 +142,7 @@ def cmd_reference(args: argparse.Namespace) -> int:
     )
 
     def step(experiment_id: str) -> None:
+        _record_preflight(output, "reference", checked)
         experiment = plan(
             spec, loaded, environment=environment, created_at=datetime.now(UTC), only=None
         )
@@ -148,14 +170,15 @@ def cmd_generate(args: argparse.Namespace) -> int:
     from llm.adapter.ollama import OllamaProvider
 
     terrapreserve, output = _roots()
-    _preflight()
     loaded = _test_split()
+    checked = _preflight()
     environment = _environment(terrapreserve)
     inputs = [generation_input(s) for s in loaded.scenarios if s.target_kind == REPAIR]
     base = output / "candidates" / GENERATION_ID
 
     def step(experiment_id: str) -> None:
         del experiment_id
+        _record_preflight(output, "generation", checked)
         terraform = terraform_runner(output)
         if not (base / "candidates_manifest.json").exists():
             pins = load_pins()

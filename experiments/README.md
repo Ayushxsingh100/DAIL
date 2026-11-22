@@ -205,5 +205,13 @@ python3.12 -m experiments.mainrun analyse                # once: test sizes and 
 ```
 
 `$DAIL_EXPERIMENT_ROOT` holds `main-run.lock` (one main run; a second start is refused),
-`main-run.steps.jsonl` (every step, in order) and `main-run.interruptions.jsonl` (the power
-monitor's Kernel-Power and Power-Troubleshooter events, polled every 10 minutes).
+`main-run.steps.jsonl` (every step, in order), `main-run.preflight.jsonl` (each step's power
+preflight record, with the full `powercfg /requests` output) and `main-run.interruptions.jsonl`
+(the power monitor's Kernel-Power and Power-Troubleshooter events, polled every 10 minutes, with
+`/requests` stored again on every poll that finds an event).
+
+The main run runs on mains power only (C-253): the preflight refuses unless the AC sleep, hibernate
+and lid-close settings are 0 and the machine is on AC power at that moment; a switch to battery
+during the run (Kernel-Power 105, `AcOnline=false`) is recorded as an interruption. `powercfg
+/requests` is recorded, never enforced (C-254); it needs an elevated prompt, so start the main run
+from one to record more than Windows' refusal message.
