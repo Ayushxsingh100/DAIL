@@ -149,7 +149,7 @@ Comparisons: A–C (H1, H4), B–C (H2), C–C′ on F5 (H3).
   operations (C-220); repair scenarios only (C-219); generated only on the authors' machine with
   the local Ollama server (C-218). No hypothesis rests on it.
 
-## 4. Metrics: `metrics-final-1` (extractor `extractor-5`)
+## 4. Metrics: `metrics-final-1` (extractor `extractor-6`)
 
 Every proportion carries its numerator and denominator and a Wilson 95% interval; a denominator of
 0 gives no value. Truth comes only from TerraPreserve's oracle labels, read only by

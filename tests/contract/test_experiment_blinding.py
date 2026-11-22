@@ -192,6 +192,24 @@ class TestBlinding(unittest.TestCase):
             with self.subTest(module=path.relative_to(REPO_ROOT).as_posix()):
                 self.assertEqual(label_reads(path.read_text(encoding="utf-8")), [])
 
+    def test_the_main_run_rules_import_no_analysis_package(self) -> None:
+        # P10e-prep: the guard, the lock, the ledger, the power checks and the step rules run
+        # before any label is read; the command imports the analysis only inside ``analyse``
+        rules = [EXPERIMENTS / "split_guard.py"] + [
+            EXPERIMENTS / "mainrun" / name
+            for name in ("__init__.py", "lock.py", "order.py", "power.py", "run.py")
+        ]
+        for path in rules:
+            with self.subTest(module=path.relative_to(REPO_ROOT).as_posix()):
+                self.assertEqual(analysis_imports(path.read_text(encoding="utf-8")), [])
+        tree = ast.parse((EXPERIMENTS / "mainrun" / "__main__.py").read_text(encoding="utf-8"))
+        top = ast.Module(
+            body=[n for n in tree.body if isinstance(n, ast.Import | ast.ImportFrom)],
+            type_ignores=[],
+        )
+        self.assertEqual(analysis_imports(ast.unparse(top)), [])
+        self.assertIn(EXPERIMENTS / "mainrun" / "unblind.py", non_scoring_modules())
+
     def test_the_scoring_package_is_the_one_exception(self) -> None:
         # P8b replaces P8a's "no scoring module exists yet": the scoring package exists and reads
         # labels; it is the only part of experiments/ the check (a) skips

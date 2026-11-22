@@ -905,6 +905,43 @@ Carry-forward: C-235 to C-237, C-240, C-241 Proposed; the protocol-v1 tag (the u
   verdict and the advisor's sign-off); P10c limit 3 for P10e.
 ```
 
+## P10e-prep — The main run, built before the freeze (pending external review)
+
+```text
+P10e-prep: NOT DECIDED. Status written by the P10e-prep author as an input to the external review.
+Base: eaeba05 (the PR #35 merge). The P10d verdict and the P10d-3 freeze record are not yet
+  recorded here. The test split was not read: every test of the test-split path uses a fake
+  private directory built at test time; $TERRAPRESERVE_PRIVATE was never opened.
+Decisions: C-245 (the frozen scoring code cannot read the test split) Decided (user, 22 Nov 2026):
+  the scoring code changes, the protocol gets a new hash; C-246 to C-251 (decisions 2, 3, 4, 5,
+  6, 1) Decided (authors, 22 Nov 2026); C-252 (readings) Proposed.
+What exists: experiments/split_guard.py (the guard: main-run command, HEAD tagged protocol-v1,
+  clean tree, private manifest SHA-256 14ca1fff…6efe, in that order; nothing read on a refusal);
+  experiments.loader.load_test, experiments.scoring.labels.load_test_labels,
+  experiments.scoring.llm_pilot.main_run_candidate_rows (the dev entry points unchanged, still
+  refusing the test split); experiments/mainrun (lock, order, run, power, unblind, the command
+  python -m experiments.mainrun reference|generate|analyse). Extractor extractor-6
+  (6338cff5…82ab; extractor-5 kept pinned); stats code unchanged (ecf1cea1…ab18). The dev dry run
+  rerun as extractor-6-analysis-2: only the version fields changed.
+Protocol: docs/PROTOCOL_v1.md SHA-256 f860c4c624080730b3164d56ec9adf3a30e1a5426c5a25a3028185563321bcaa
+  (was 6379b894…1283; only the extractor version and pin changed), docs/PROTOCOL_v1.json
+  2c27009c389e9434d2442d1398f81f1e20e0d70ca96f1f1caee3f2c281d2cec4.
+Power (authors' machine, scheme e6f535c0-edc3-4b6d-a83a-f6723c38aea2, 22 Nov 2026): AC standby
+  0x00000000 before and after; AC hibernate 0x0000a8c0 before, 0x00000000 after; AC lid-close
+  0x00000001 (Sleep) before, 0x00000000 (Do nothing) after; DC values unchanged (standby 0,
+  hibernate 0x00002a30, lid 1).
+Idle test (2026-11-21T20:22:44Z to 22:22:53Z UTC, a timestamp a minute): 121 timestamps, longest
+  gap 62.6 s. One Kernel-Power or Power-Troubleshooter event: Kernel-Power 105 (power source
+  change, AcOnline=false) at 20:37:49.714Z; no sleep, hibernate, resume, wake, modern-standby or
+  restart event. Limit: the charger was out from 20:37:49Z to the end, so 1 h 45 min of the test
+  ran on the DC settings (not changed), not the AC settings the preflight checks; accepted as is
+  by the user (22 Nov 2026).
+Not exercised end to end: the main-run command with Ollama and real test data (it runs only on
+  the commit tagged protocol-v1).
+Carry-forward: the P10d verdict; P10d-3 (advisor, sign-off date, PR #35 verdict text) with the new
+  protocol hash; the protocol-v1 tag; C-252 Proposed.
+```
+
 ## Temporary exceptions
 
 None.

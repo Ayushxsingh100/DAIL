@@ -28,6 +28,7 @@ PINNED: dict[str, str] = {
     "extractor-3": "066b40195851bd720a3f8165c5ac33e285dc559e937a368e5ea1c3964102bd78",  # P10b
     "extractor-4": "0b6dcd6ecfafc34ec63c2ee48273a1dacf01ed02109653b0bf9a6debf835e2f1",  # P10c
     "extractor-5": "ef4680c4fe125e20cbaac246192d8efac431ef3d9392102c7b3e38b4c045fb5d",  # P10d
+    "extractor-6": "6338cff50da03b8cba438b76f9458e51bf27313fe2964746b1a477f2c74f82ab",  # P10e-prep
 }
 EXTRACTOR_PACKAGES = ("experiments/metrics", "experiments/scoring")
 CRLF, LF = b"\r\n", b"\n"
@@ -65,7 +66,7 @@ class TestVersions(unittest.TestCase):
     def test_the_two_versions_are_separate_values(self) -> None:
         from experiments.metrics.extractor import EXTRACTOR_VERSION, METRICS_VERSION
 
-        self.assertEqual(EXTRACTOR_VERSION, "extractor-5")
+        self.assertEqual(EXTRACTOR_VERSION, "extractor-6")
         self.assertEqual(METRICS_VERSION, "metrics-final-1")  # P10d
 
     def test_every_metric_record_and_the_report_carry_both(self) -> None:
@@ -87,11 +88,11 @@ class TestVersions(unittest.TestCase):
         self.assertTrue(x.metrics)
         for record in x.metrics:
             self.assertEqual(record["metrics_version"], "metrics-final-1")
-            self.assertEqual(record["extractor_version"], "extractor-5")
+            self.assertEqual(record["extractor_version"], "extractor-6")
         definition = {"experiment_id": "e", "name": "n", "version": "1", "condition_set": ["C"]}
         report = build_report(definition=definition, statuses={"t": "COMPLETED"}, extraction=x)
         self.assertEqual(report["metrics_version"], "metrics-final-1")
-        self.assertEqual(report["extractor_version"], "extractor-5")
+        self.assertEqual(report["extractor_version"], "extractor-6")
 
 
 class TestCodePin(unittest.TestCase):

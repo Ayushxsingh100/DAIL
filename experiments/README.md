@@ -188,3 +188,22 @@ $DAIL_EXPERIMENT_ROOT/candidates/<generation_id>/
 
   Every output of the dry run is marked `DEV DRY RUN, NOT RESULTS`. `docs/PROTOCOL_v1.md` is the
   frozen protocol; a test fails if the code it pins changes.
+
+## The main run (P10e-prep, built before the freeze)
+
+`python -m experiments.mainrun` is the main-run command (C-246 to C-252). It runs only on the commit
+tagged `protocol-v1`, with a clean tree, and reads the test split only through
+`experiments/split_guard.py` (`$TERRAPRESERVE_PRIVATE/V1_MANIFEST_PRIVATE.json` with its pinned
+SHA-256). The extractor is `extractor-6`: the metric code of `extractor-5` plus the guarded
+test-split entry points of `experiments/scoring` (C-245).
+
+```bash
+python3.12 -m experiments.mainrun reference [--resume]   # power preflight, lock, 96 test targets x A, B, C, C'
+python3.12 -m experiments.mainrun generate [--resume]    # 36 repair scenarios x 3 models x k = 3; gate, replay, export
+# stop: TerraPreserve labels the export (TP-L2) into $TERRAPRESERVE_PRIVATE/llm_candidates/test/<generation id>/
+python3.12 -m experiments.mainrun analyse                # once: test sizes and coverage rule, outcomes, kappa, adjudication, analysis
+```
+
+`$DAIL_EXPERIMENT_ROOT` holds `main-run.lock` (one main run; a second start is refused),
+`main-run.steps.jsonl` (every step, in order) and `main-run.interruptions.jsonl` (the power
+monitor's Kernel-Power and Power-Troubleshooter events, polled every 10 minutes).

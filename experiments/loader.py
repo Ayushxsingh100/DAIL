@@ -8,7 +8,8 @@ TerraPreserve checkout: ``scenarios/V1_MANIFEST.json`` and ``scenarios/dev/<scen
 comes back, so a mismatch stops the run before any trial starts):
 
 1. the split is ``dev``; ``test`` is refused (the test split is touched once, in P10, after the
-   protocol is frozen), and so is anything else;
+   protocol is frozen), and so is anything else; ``load_test`` is the only way to the test split,
+   through the guard of ``experiments.split_guard`` (P10e-prep decision 2);
 2. the SHA-256 of the manifest's bytes is the pin (``MANIFEST_SHA256`` for TerraPreserve v1.0);
 3. for every manifest entry of the split with a wanted ``v1_role`` (``target`` by default): the
    SHA-256 of ``scenario.json`` is the manifest's ``scenario_json_sha256``; the scenario names
@@ -36,6 +37,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Final
+
+from experiments.split_guard import (
+    PRIVATE_MANIFEST_SHA256,
+    TEST_SPLIT,
+    GuardRefused,
+    open_test_split,
+)
 
 MANIFEST_SHA256: Final = "665b326a024d295f727cd5648ffc7e0d375b9300584871f238c6bfa48edd2e2d"
 TERRAPRESERVE_TAG: Final = "terrapreserve-v1.0"
@@ -169,10 +177,11 @@ def _steps(sid: str, base: Path, listed: object, manifest_steps: object) -> tupl
     return tuple(found)
 
 
-def _scenario(root: Path, split: str, entry: object) -> tuple[ScenarioInput, FixtureRecord]:
+def _scenario(home: Path, split: str, entry: object) -> tuple[ScenarioInput, FixtureRecord]:
+    """``home`` holds the split's scenario directories."""
     sid = _take(entry, "scenario_id", str, "manifest entry")
     role = _take(entry, "v1_role", str, sid)
-    base = root / "scenarios" / split / sid
+    base = home / sid
     path = base / "scenario.json"
     if Path(sid).name != sid or not path.is_file():
         raise LoaderError(f"{sid}: scenario.json is missing")
@@ -249,12 +258,32 @@ def load(
         data = json.loads(raw)
     except ValueError as error:
         raise LoaderError(f"the manifest is not JSON: {error}") from None
+    return _loaded(
+        Path(root),
+        Path(root) / "scenarios" / split,
+        split,
+        data,
+        digest,
+        wanted,
+        D6_VALIDATE_EVIDENCE if digest == MANIFEST_SHA256 else NO_VALIDATE_EVIDENCE,
+    )
+
+
+def _loaded(
+    root: Path,
+    home: Path,
+    split: str,
+    data: object,
+    digest: str,
+    wanted: frozenset[str],
+    evidence: str,
+) -> LoadedSet:
     entries = _take(data, split, list, "manifest")
     scenarios, fixtures = [], []
     for entry in entries:
         if _take(entry, "v1_role", str, "manifest entry") not in wanted:
             continue
-        scenario, fixture = _scenario(Path(root), split, entry)
+        scenario, fixture = _scenario(home, split, entry)
         scenarios.append(scenario)
         fixtures.append(fixture)
     ids = [s.scenario_id for s in scenarios]
@@ -262,12 +291,46 @@ def load(
         raise LoaderError("the manifest lists a scenario twice")
     order = sorted(range(len(ids)), key=lambda n: ids[n])
     return LoadedSet(
-        root=Path(root),
+        root=root,
         split=split,
         manifest_sha256=digest,
         scenarios=tuple(scenarios[n] for n in order),
         fixtures=tuple(fixtures[n] for n in order),
-        admission_evidence=(
-            D6_VALIDATE_EVIDENCE if digest == MANIFEST_SHA256 else NO_VALIDATE_EVIDENCE
+        admission_evidence=evidence,
+    )
+
+
+def load_test(
+    private_root: Path,
+    *,
+    command: str | None,
+    repo_root: Path | None = None,
+    manifest_sha256: str = PRIVATE_MANIFEST_SHA256,
+    roles: Iterable[str] = ("target",),
+) -> LoadedSet:
+    """The test split (P10e-prep decision 2): only through ``split_guard.open_test_split``, from
+    TerraPreserve's private package (``V1_MANIFEST_PRIVATE.json`` and ``<scenario_id>/`` at
+    ``private_root``), with the same checks as ``load``. Raises ``LoaderError`` on a refusal."""
+    try:
+        access = open_test_split(
+            private_root, command=command, repo_root=repo_root, manifest_sha256=manifest_sha256
+        )
+    except GuardRefused as error:
+        raise LoaderError(str(error)) from None
+    try:
+        data = json.loads(access.manifest_raw)
+    except ValueError as error:
+        raise LoaderError(f"the private manifest is not JSON: {error}") from None
+    return _loaded(
+        access.private_root,
+        access.private_root,
+        TEST_SPLIT,
+        data,
+        access.manifest_sha256,
+        frozenset(roles),
+        (
+            D6_VALIDATE_EVIDENCE
+            if access.manifest_sha256 == PRIVATE_MANIFEST_SHA256
+            else NO_VALIDATE_EVIDENCE
         ),
     )

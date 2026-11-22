@@ -11903,7 +11903,7 @@
  },
  "coverage_reps": 4000,
  "experiment_id": "c4c20b99-0324-58e0-937e-dba26ad5cf0b",
- "extractor_version": "extractor-5",
+ "extractor_version": "extractor-6",
  "h1": {
   "alpha": 0.05,
   "holm_adjusted": {
@@ -12211,7 +12211,7 @@
   }
  ],
  "llm": {
-  "extractor_version": "extractor-5",
+  "extractor_version": "extractor-6",
   "groups": [
    {
     "any_unsafe_at_k": {
