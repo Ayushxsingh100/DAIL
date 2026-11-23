@@ -1006,6 +1006,48 @@ Carry-forward: P10d limits 1 and 2 (P10d-3: advisor, sign-off date, with the pro
   f860c4c6…; the protocol-v1 tag); P10d limits 3, 4 and 7 for the paper.
 ```
 
+## P10e-run — The main run on the test split
+
+```text
+P10e-run: completed (report of 23 Nov 2026).
+At the tag protocol-v1 (c5f32de), clean tree, no edits. Experiment a502ee87-1ebd-597e-8c6d-7134042f2438;
+  generation 40e2052b-b489-552d-8c27-88785414a4b1. Reference 15:47:35Z to 15:50:11Z and generation
+  15:50:11Z to 02:20:54Z (22-23 Nov 2026), both rc 0, from an elevated prompt; 384 trials COMPLETED,
+  0 FAILED, 0 ABORTED; 108 generation attempts per model; oracle_export.json sha256 7d008d9d…80ff
+  (157 files); candidates_manifest.json sha256 f0fbe374…72cf. Interruptions: none (64 polls, no
+  power event). DC lid-close and hibernate set to 0 for the run and restored (lid 1, hibernate
+  0x2a30). Deviations: C-257.
+```
+
+## TP-L2 — oracle labels for the test LLM candidates (TerraPreserve)
+
+```text
+TP-L2: passed with limits (verdict on TerraPreserve PR #14).
+Limits 1-5: NOT RECORDED. The verdict text was not given to P10f (PR #14 carries no verdict comment
+  and its merge commit dbffceb no verdict); the limits are copied word for word by the next package
+  that receives the verdict file.
+Facts: PR #14 merged as dbffceb (23 Nov 2026, head bb802d9). 25 candidates read, verified and S0-
+  matched; 25 label.json written; labels.json sha256 5e532ec6…3cba, under $TERRAPRESERVE_PRIVATE;
+  oracle-1.0 unchanged; scenarios/ unchanged (798d51fc…).
+```
+
+## P10 exit gate (Doc 15 §17.2) — NOT DECIDED
+
+```text
+Only the item quoted by the P10f work package is listed; the other §17.2 items were not given to
+P10f and are not reconstructed here (CLAUDE.md). The external review decides.
+"Demo is repeatable from clean environment" ... NOT DECIDED. Evidence: docs/QA_REPORT_v1.md (clean-
+  environment demo): a fresh clone at protocol-v1; bootstrap FAILED (the 3 failures of
+  test_every_step_is_refused_off_the_tag_and_writes_nothing, whose premise is a HEAD off the tag);
+  health checks PASS; the canonical end-to-end tests 9 of 9 OK (unsafe REJECTED, safe PROMOTED,
+  chains complete).
+Further evidence for the review: docs/P10_RESULTS.md and docs/P10_RESULTS.json (the single
+  analysis; unsafe promotions under C 0/63 per promotion, stopping rule: none);
+  docs/QA_REPORT_v1.md (decision BLOCK, the authors' decision: 3 failures at the release candidate);
+  C-257 (deviations).
+No item is marked passed here; the external review decides.
+```
+
 ## Temporary exceptions
 
 None.
