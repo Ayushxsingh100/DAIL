@@ -150,3 +150,90 @@ OK
 pass, and the canonical end-to-end tests pass: the unsafe candidate (the repair that breaks the database path) is
 REJECTED and version 0 stays, the safe candidate is PROMOTED into version 1, and the evidence chains are complete.
 The clone was not deleted by this session (a safety check stopped the removal); the user deletes it.
+
+---
+
+# QAReport 2 (rerun after P10g)
+
+Written in P10g (23 Nov 2026), after the test-only fix of the off-tag premise (C-258, defect D-1). QAReport 1 above
+and its BLOCK stay on record unchanged. The analysis was not rerun; the results are P10f's. The external review
+decides any gate; this report does not mark one passed.
+
+## QAReport
+
+| Field | Value |
+|---|---|
+| `run_id` | `p10g-qa-2026-11-23` (suite run in `X:\DAIL-ref` at 119628b, 11:37:45Z to 12:22:31Z on AC power, 23 Nov 2026; logs `p10g-devtest.log`, `p10g-lint.log`, `p10g-pytest.log`, `p10g-pytest2.log`, `p10g-demo.log` in `X:\DAIL-mainrun-logs`). Main-run experiment `a502ee87-1ebd-597e-8c6d-7134042f2438` (not rerun). |
+| `release_candidate` | `feature/p10g-qa` at `119628b5bf82f8745af31ece97d0ff143f1ab89a` (`protocol-v1-3-g119628b`). Code-identical to `protocol-v1` (`c5f32de`): `git diff protocol-v1 HEAD --stat -- experiments core llm docs/PROTOCOL_v1.md` is empty, and `git diff protocol-v1 HEAD --stat` lists only `tests/unit/test_p10e_lock_order.py` and files under `docs/` (C-258). `docs/PROTOCOL_v1.md` SHA-256 `f860c4c624080730b3164d56ec9adf3a30e1a5426c5a25a3028185563321bcaa`. The later docs-only commit of this report changes no code or test. |
+| `pass_count` | `dev.py test` (stdlib unittest): 4,692 of 4,702 tests (`Ran 4702 tests in 741.421s`, `OK (skipped=10)`). `pytest`: `4693 passed, 10 skipped, 1 warning, 81287 subtests passed in 1134.14s`. `dev.py lint`: black (390 files unchanged), ruff (all checks passed), mypy (no issues in 192 source files). |
+| `fail_count` | 0 (`dev.py test` OK; `pytest` rc 0, no failure). |
+| `skipped_count` | 10, the same tests and reasons as in QAReport 1 (`pytest -ra`, unchanged). |
+| `safety_failures[]` | none (see the release blockers below) |
+| `regression_failures[]` | none |
+| `coverage_summary` | the 19-family table of QAReport 1 above, unchanged (no test moved; every named test ran and passed at 119628b). |
+| `environment` | as QAReport 1: Windows 11 Home 10.0.26300; Python 3.12.10; Terraform 1.15.8 and `hashicorp/aws` 6.53.0 (offline mirror); no AWS account or credentials (C-71). The machine was on AC power for the runs (`PowerOnline` True before the start). |
+| `decision` | **PASS** by Doc 15 §36: no release blocker holds (below). The review decides. |
+
+## Release blockers (Doc 15 §36)
+
+| Blocker | Holds? | Evidence |
+|---|---|---|
+| an unsafe promotion observed under C | no | unchanged from QAReport 1: `docs/P10_RESULTS.json` `other.C.unsafe_promotions_per_promotion` 0/63, `unsafe_promotions_per_evaluated` 0/113; `unsafe_promotions_c` empty (stopping rule: none); LLM track `any_unsafe_promoted_at_k` under C 0/36 for each model |
+| a required verifier returning an incorrect PASS | no | κ 1.0 for all four invariants (`docs/P10_KAPPA.json`, a byte-identical copy of `kappa.json`); the six disagreements are DAIL UNSUPPORTED against oracle PASS, none a DAIL PASS against an oracle FAIL; `truth_recall_misses` empty |
+| a promotion bypass | no | the architecture tests in `tests/contract/` and `tests/adversarial/test_state_machine_rules.py::test_replace_cannot_promote_a_candidate` and the duplicate-promotion tests pass at 119628b |
+| an evidence-integrity failure affecting proof | no | the evidence-tampering tests pass at 119628b; `test_orchestrator.py::TestTheCanonicalDecisions::test_the_chains_are_complete` passes there and in the clean clone |
+| a stale candidate accepted | no | the stale-parent tests pass at 119628b |
+| secret leakage | no | gitleaks (`secrets` job) passes in CI on PR #39 at 119628b (run 45175796052; `quality` and `terraform` pass too); no secret was printed or committed in P10g |
+| critical state corruption | no | unchanged: 384 trials COMPLETED, 0 FAILED, 0 ABORTED; the main-run ledger shows each step started and completed once; no power interruption |
+| an open S0 or S1 defect | no | `docs/DEFECTS.md`: no open defect. Its S0 and S1 entries (proposed severities) are all closed, fixed in merged packages before `protocol-v1`; D-1 (proposed S3) is closed by this rerun |
+| a core regression failure | no | 0 failures in `dev.py test` and `pytest` at 119628b; the three QAReport 1 failures pass (red at `protocol-v1`, green with only the new test file, C-258) |
+
+Decision: **PASS** (by §36; the review decides).
+
+## Clean-environment demo (Doc 15 §17.2 "Demo is repeatable from clean environment")
+
+A fresh clone of the pushed branch from GitHub into a new folder, `X:\DAIL-clean-demo-p10g` (23 Nov 2026, 12:22:31Z
+to 12:35:07Z; full log `X:\DAIL-mainrun-logs\p10g-demo.log`). Output quoted (the test dots, ResourceWarnings and fuzz
+case lists shortened):
+
+```
+$ git clone --branch feature/p10g-qa https://github.com/Ayushxsingh100/DAIL.git /x/DAIL-clean-demo-p10g
+Cloning into 'X:/DAIL-clean-demo-p10g'...
+$ git rev-parse HEAD; git describe --tags --always HEAD
+119628b5bf82f8745af31ece97d0ff143f1ab89a
+protocol-v1-3-g119628b
+$ py -3.12 scripts/dev.py bootstrap
+== Python 3.12.10
+== Loading configuration (environment: dev)
+   config_hash 0db2f412c20f0b64648c7d440151bff12f8bc991a9822672d4afa0f93a7ab8d9; safety flags {'llm.generation_enabled': False, 'promotion.automatic_enabled': False}
+== Creating .local/ and the artifact root
+== Initializing the local database (schema 5: domain, evidence and audit tables)
+== Running tests (standard library unittest, no secrets, no network)
+Ran 4702 tests in 736.216s
+OK (skipped=10)
+== Health checks
+liveness: PASS - process is running
+readiness: PASS - configuration loaded and validated (environment dev, schema version 1)
+database: PASS - .local/dail.db: opened read-only, integrity ok, 16 expected tables present
+artifact_store: PASS - .local/artifacts: directory exists and is writable
+llm_provider: SKIPPED - LLM generation disabled (llm.generation_enabled = false)
+bootstrap complete
+bootstrap rc=0
+$ py -3.12 -m unittest -v tests.unit.test_orchestrator.TestTheCanonicalDecisions tests.unit.test_llm_candidate_e2e.TestEndToEnd
+test_every_decision_is_stored ... ok
+test_the_chains_are_complete ... ok
+test_the_regression_is_rejected_and_version_zero_stays ... ok
+test_the_result_carries_the_reports_for_the_caller ... ok
+test_the_safe_repair_is_promoted_into_version_one ... ok
+test_no_solution_and_uncertain_create_no_candidate ... ok
+test_the_candidate_lineage_points_to_one_parent ... ok
+test_the_repair_that_breaks_the_database_path_is_rejected ... ok
+test_the_safe_repair_is_promoted ... ok
+Ran 9 tests in 3.288s
+OK
+canonical rc=0
+```
+
+The unsafe candidate (the repair that breaks the database path) is REJECTED and version 0 stays; the safe candidate is
+PROMOTED into version 1; the evidence chains are complete. The clone was not deleted by this session (a safety check
+blocked the removal); the user deletes `X:\DAIL-clean-demo-p10g`.

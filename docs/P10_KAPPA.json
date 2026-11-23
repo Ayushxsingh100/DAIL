@@ -1,0 +1,48 @@
+[
+ {
+  "cells": {
+   "FAIL/FAIL": 27,
+   "PASS/PASS": 180
+  },
+  "invariant_id": "INV-FUNC-001",
+  "kappa": 1.0,
+  "n": 207,
+  "other": {
+   "UNSUPPORTED/PASS": 2
+  }
+ },
+ {
+  "cells": {
+   "FAIL/FAIL": 52,
+   "PASS/PASS": 155
+  },
+  "invariant_id": "INV-SEC-001",
+  "kappa": 1.0,
+  "n": 207,
+  "other": {
+   "UNSUPPORTED/PASS": 2
+  }
+ },
+ {
+  "cells": {
+   "FAIL/FAIL": 16,
+   "PASS/PASS": 191
+  },
+  "invariant_id": "INV-SEC-002",
+  "kappa": 1.0,
+  "n": 207,
+  "other": {
+   "UNSUPPORTED/PASS": 2
+  }
+ },
+ {
+  "cells": {
+   "FAIL/FAIL": 9,
+   "PASS/PASS": 200
+  },
+  "invariant_id": "INV-SEC-003",
+  "kappa": 1.0,
+  "n": 209,
+  "other": {}
+ }
+]
