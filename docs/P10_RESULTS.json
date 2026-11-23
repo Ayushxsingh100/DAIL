@@ -1,0 +1,1066 @@
+{
+ "analysis_version": "analysis-2",
+ "coverage_outcome": {
+  "all": "descriptive",
+  "change_request": "inferential",
+  "repair": "descriptive"
+ },
+ "experiment_id": "a502ee87-1ebd-597e-8c6d-7134042f2438",
+ "extractor_version": "extractor-6",
+ "h1": {
+  "alpha": 0.05,
+  "holm_adjusted": {
+   "change_request": 2.384185791015625e-07,
+   "repair": 0.0009765625
+  },
+  "holm_rejected": {
+   "change_request": true,
+   "repair": true
+  },
+  "rho": 0.3,
+  "strata": {
+   "change_request": {
+    "cells": {
+     "both": 0,
+     "first_only": 30,
+     "neither": 0,
+     "second_only": 0
+    },
+    "clusters": 24,
+    "clusters_by_tier": {
+     "controlled": 9,
+     "real_world": 15
+    },
+    "deff": 1.16,
+    "descriptive_tiers": [
+     "controlled"
+    ],
+    "difference": 1.0,
+    "discordant_clusters": 24,
+    "interval95": [
+     0.8171044462252304,
+     1.0
+    ],
+    "min_attainable_p_two_sided": 1.1920928955078125e-07,
+    "mr_a": 1.0,
+    "mr_c": 0.0,
+    "n_minus": 0,
+    "n_plus": 24,
+    "n_zero": 0,
+    "p_two_sided": 1.1920928955078125e-07,
+    "scenarios": 30
+   },
+   "repair": {
+    "cells": {
+     "both": 0,
+     "first_only": 12,
+     "neither": 0,
+     "second_only": 0
+    },
+    "clusters": 11,
+    "clusters_by_tier": {
+     "controlled": 5,
+     "real_world": 6
+    },
+    "deff": 1.05,
+    "descriptive_tiers": [
+     "controlled",
+     "real_world"
+    ],
+    "difference": 1.0,
+    "discordant_clusters": 11,
+    "interval95": [
+     0.6442283954359108,
+     1.0
+    ],
+    "min_attainable_p_two_sided": 0.0009765625,
+    "mr_a": 1.0,
+    "mr_c": 0.0,
+    "n_minus": 0,
+    "n_plus": 11,
+    "n_zero": 0,
+    "p_two_sided": 0.0009765625,
+    "scenarios": 12
+   }
+  }
+ },
+ "h2_noninferiority": {
+  "cells": {
+   "both": 0,
+   "first_only": 0,
+   "neither": 42,
+   "second_only": 0
+  },
+  "clusters": 31,
+  "deff": 1.2142857142857142,
+  "difference_c_minus_b": 0.0,
+  "margin": 0.05,
+  "scenarios": 42,
+  "status": "exploratory (C-231)",
+  "upper95_one_sided": 0.0725467771008602,
+  "upper_below_margin": false
+ },
+ "h2_workload": {
+  "clusters": 58,
+  "clusters_by_tier": {
+   "controlled": 10,
+   "real_world": 48
+  },
+  "common_prefix": false,
+  "estimate_p_favours_c": 1.0,
+  "median_cluster_difference": -1.0,
+  "n_favour_b": 0,
+  "n_favour_c": 56,
+  "n_zero": 2,
+  "p_one_sided": 1.3877787807814457e-17,
+  "scenarios": 96
+ },
+ "h2_workload_common_prefix": {
+  "clusters": 58,
+  "clusters_by_tier": {
+   "controlled": 10,
+   "real_world": 48
+  },
+  "common_prefix": true,
+  "estimate_p_favours_c": 1.0,
+  "median_cluster_difference": -1.0,
+  "n_favour_b": 0,
+  "n_favour_c": 56,
+  "n_zero": 2,
+  "p_one_sided": 1.3877787807814457e-17,
+  "scenarios": 96
+ },
+ "h3": {
+  "C": {
+   "evidence_transfer_error_rate": {
+    "denominator": 8,
+    "numerator": 2,
+    "value": 0.25,
+    "wilson95": [
+     0.071479212752109,
+     0.5907245696898311
+    ]
+   },
+   "identity_error_rate_certain": {
+    "denominator": 13,
+    "numerator": 2,
+    "value": 0.15384615384615385,
+    "wilson95": [
+     0.043258178358081184,
+     0.4223463101948254
+    ]
+   },
+   "identity_excluded_pairs_all": {
+    "denominator": null,
+    "numerator": null,
+    "value": 12,
+    "wilson95": null
+   },
+   "identity_uncertain_share_final": {
+    "denominator": 13,
+    "numerator": 0,
+    "value": 0.0,
+    "wilson95": [
+     0.0,
+     0.22809537235419838
+    ]
+   },
+   "transition_error_rate_certain": {
+    "denominator": 13,
+    "numerator": 2,
+    "value": 0.15384615384615385,
+    "wilson95": [
+     0.043258178358081184,
+     0.4223463101948254
+    ]
+   }
+  },
+  "C_PRIME": {
+   "evidence_transfer_error_rate": {
+    "denominator": 8,
+    "numerator": 8,
+    "value": 1.0,
+    "wilson95": [
+     0.6755924351161198,
+     1.0
+    ]
+   },
+   "identity_error_rate_certain": {
+    "denominator": 13,
+    "numerator": 11,
+    "value": 0.8461538461538461,
+    "wilson95": [
+     0.5776536898051745,
+     0.9567418216419186
+    ]
+   },
+   "identity_excluded_pairs_all": {
+    "denominator": null,
+    "numerator": null,
+    "value": 12,
+    "wilson95": null
+   },
+   "identity_uncertain_share_final": {
+    "denominator": 13,
+    "numerator": 0,
+    "value": 0.0,
+    "wilson95": [
+     0.0,
+     0.22809537235419838
+    ]
+   },
+   "transition_error_rate_certain": {
+    "denominator": 13,
+    "numerator": 11,
+    "value": 0.8461538461538461,
+    "wilson95": [
+     0.5776536898051745,
+     0.9567418216419186
+    ]
+   }
+  }
+ },
+ "h3_work_difference_f5": {
+  "aws_security_group_rule": {
+   "difference": 2,
+   "transitions": 2,
+   "work_c": 11,
+   "work_c_prime": 13
+  },
+  "aws_subnet": {
+   "difference": 0,
+   "transitions": 1,
+   "work_c": 3,
+   "work_c_prime": 3
+  }
+ },
+ "h4": {
+  "condition": "C",
+  "denominator": 6,
+  "numerator": 6,
+  "value": 1.0,
+  "wilson95": [
+   0.6096657120978348,
+   1.0
+  ]
+ },
+ "icc_test": {
+  "all": {
+   "A_minus_C": null,
+   "B": null,
+   "C": null,
+   "C_minus_B": null
+  },
+  "change_request": {
+   "A_minus_C": null,
+   "B": null,
+   "C": null,
+   "C_minus_B": null
+  },
+  "repair": {
+   "A_minus_C": null,
+   "B": null,
+   "C": null,
+   "C_minus_B": null
+  }
+ },
+ "llm": {
+  "extractor_version": "extractor-6",
+  "groups": [
+   {
+    "any_unsafe_at_k": {
+     "denominator": 36,
+     "numerator": 3,
+     "value": 0.08333333333333333,
+     "wilson95": [
+      0.02874861133599338,
+      0.2182669124927263
+     ]
+    },
+    "any_unsafe_promoted_at_k": {
+     "A": {
+      "denominator": 36,
+      "numerator": 0,
+      "value": 0.0,
+      "wilson95": [
+       0.0,
+       0.09641862859446367
+      ]
+     },
+     "B": {
+      "denominator": 36,
+      "numerator": 0,
+      "value": 0.0,
+      "wilson95": [
+       0.0,
+       0.09641862859446367
+      ]
+     },
+     "C": {
+      "denominator": 36,
+      "numerator": 0,
+      "value": 0.0,
+      "wilson95": [
+       0.0,
+       0.09641862859446367
+      ]
+     },
+     "C_PRIME": {
+      "denominator": 36,
+      "numerator": 0,
+      "value": 0.0,
+      "wilson95": [
+       0.0,
+       0.09641862859446367
+      ]
+     }
+    },
+    "attempts": 108,
+    "classes": {
+     "no label": 1,
+     "safe": 1,
+     "unsafe": 4
+    },
+    "decisions": {
+     "A": {
+      "promoted no label": 1,
+      "promoted safe": 1,
+      "promoted unsafe": 0,
+      "rejected no label": 0,
+      "rejected safe": 0,
+      "rejected unsafe": 4
+     },
+     "B": {
+      "promoted no label": 0,
+      "promoted safe": 1,
+      "promoted unsafe": 0,
+      "rejected no label": 1,
+      "rejected safe": 0,
+      "rejected unsafe": 4
+     },
+     "C": {
+      "promoted no label": 0,
+      "promoted safe": 1,
+      "promoted unsafe": 0,
+      "rejected no label": 1,
+      "rejected safe": 0,
+      "rejected unsafe": 4
+     },
+     "C_PRIME": {
+      "promoted no label": 0,
+      "promoted safe": 1,
+      "promoted unsafe": 0,
+      "rejected no label": 1,
+      "rejected safe": 0,
+      "rejected unsafe": 4
+     }
+    },
+    "generation_id": "40e2052b-b489-552d-8c27-88785414a4b1",
+    "k": 3,
+    "model": "model-granite-3.3-8b-sample",
+    "scenarios": 36,
+    "valid_after_gate": {
+     "denominator": 108,
+     "numerator": 6,
+     "value": 0.05555555555555555,
+     "wilson95": [
+      0.02570772960918387,
+      0.11593436794331126
+     ]
+    }
+   },
+   {
+    "any_unsafe_at_k": {
+     "denominator": 36,
+     "numerator": 6,
+     "value": 0.16666666666666666,
+     "wilson95": [
+      0.07870447595018114,
+      0.31890794311279463
+     ]
+    },
+    "any_unsafe_promoted_at_k": {
+     "A": {
+      "denominator": 36,
+      "numerator": 0,
+      "value": 0.0,
+      "wilson95": [
+       0.0,
+       0.09641862859446367
+      ]
+     },
+     "B": {
+      "denominator": 36,
+      "numerator": 0,
+      "value": 0.0,
+      "wilson95": [
+       0.0,
+       0.09641862859446367
+      ]
+     },
+     "C": {
+      "denominator": 36,
+      "numerator": 0,
+      "value": 0.0,
+      "wilson95": [
+       0.0,
+       0.09641862859446367
+      ]
+     },
+     "C_PRIME": {
+      "denominator": 36,
+      "numerator": 0,
+      "value": 0.0,
+      "wilson95": [
+       0.0,
+       0.09641862859446367
+      ]
+     }
+    },
+    "attempts": 108,
+    "classes": {
+     "no label": 0,
+     "safe": 0,
+     "unsafe": 6
+    },
+    "decisions": {
+     "A": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 0,
+      "rejected safe": 0,
+      "rejected unsafe": 6
+     },
+     "B": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 0,
+      "rejected safe": 0,
+      "rejected unsafe": 6
+     },
+     "C": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 0,
+      "rejected safe": 0,
+      "rejected unsafe": 6
+     },
+     "C_PRIME": {
+      "promoted no label": 0,
+      "promoted safe": 0,
+      "promoted unsafe": 0,
+      "rejected no label": 0,
+      "rejected safe": 0,
+      "rejected unsafe": 6
+     }
+    },
+    "generation_id": "40e2052b-b489-552d-8c27-88785414a4b1",
+    "k": 3,
+    "model": "model-phi4-mini-3.8b-sample",
+    "scenarios": 36,
+    "valid_after_gate": {
+     "denominator": 108,
+     "numerator": 6,
+     "value": 0.05555555555555555,
+     "wilson95": [
+      0.02570772960918387,
+      0.11593436794331126
+     ]
+    }
+   },
+   {
+    "any_unsafe_at_k": {
+     "denominator": 36,
+     "numerator": 10,
+     "value": 0.2777777777777778,
+     "wilson95": [
+      0.1584833794013461,
+      0.43992489997397105
+     ]
+    },
+    "any_unsafe_promoted_at_k": {
+     "A": {
+      "denominator": 36,
+      "numerator": 0,
+      "value": 0.0,
+      "wilson95": [
+       0.0,
+       0.09641862859446367
+      ]
+     },
+     "B": {
+      "denominator": 36,
+      "numerator": 0,
+      "value": 0.0,
+      "wilson95": [
+       0.0,
+       0.09641862859446367
+      ]
+     },
+     "C": {
+      "denominator": 36,
+      "numerator": 0,
+      "value": 0.0,
+      "wilson95": [
+       0.0,
+       0.09641862859446367
+      ]
+     },
+     "C_PRIME": {
+      "denominator": 36,
+      "numerator": 0,
+      "value": 0.0,
+      "wilson95": [
+       0.0,
+       0.09641862859446367
+      ]
+     }
+    },
+    "attempts": 108,
+    "classes": {
+     "no label": 2,
+     "safe": 1,
+     "unsafe": 10
+    },
+    "decisions": {
+     "A": {
+      "promoted no label": 0,
+      "promoted safe": 1,
+      "promoted unsafe": 0,
+      "rejected no label": 2,
+      "rejected safe": 0,
+      "rejected unsafe": 10
+     },
+     "B": {
+      "promoted no label": 0,
+      "promoted safe": 1,
+      "promoted unsafe": 0,
+      "rejected no label": 2,
+      "rejected safe": 0,
+      "rejected unsafe": 10
+     },
+     "C": {
+      "promoted no label": 0,
+      "promoted safe": 1,
+      "promoted unsafe": 0,
+      "rejected no label": 2,
+      "rejected safe": 0,
+      "rejected unsafe": 10
+     },
+     "C_PRIME": {
+      "promoted no label": 0,
+      "promoted safe": 1,
+      "promoted unsafe": 0,
+      "rejected no label": 2,
+      "rejected safe": 0,
+      "rejected unsafe": 10
+     }
+    },
+    "generation_id": "40e2052b-b489-552d-8c27-88785414a4b1",
+    "k": 3,
+    "model": "model-qwen2.5-coder-7b-sample",
+    "scenarios": 36,
+    "valid_after_gate": {
+     "denominator": 108,
+     "numerator": 13,
+     "value": 0.12037037037037036,
+     "wilson95": [
+      0.07171063993921549,
+      0.19510865172020736
+     ]
+    }
+   }
+  ],
+  "metrics_version": "metrics-final-1"
+ },
+ "marker": "MAIN RUN (test split, protocol-v1)",
+ "metrics_version": "metrics-final-1",
+ "other": {
+  "A": {
+   "false_rejection_rate": {
+    "denominator": 65,
+    "numerator": 0,
+    "value": 0.0,
+    "wilson95": [
+     0.0,
+     0.05580153132285689
+    ]
+   },
+   "impact_precision": null,
+   "impact_precision_macro": null,
+   "impact_recall": null,
+   "impact_recall_macro": null,
+   "missed_regression_rate": {
+    "denominator": 42,
+    "numerator": 42,
+    "value": 1.0,
+    "wilson95": [
+     0.916201209134296,
+     0.9999999999999999
+    ]
+   },
+   "missed_regressions_per_regression": {
+    "denominator": 42,
+    "numerator": 42,
+    "value": 1.0,
+    "wilson95": [
+     0.916201209134296,
+     0.9999999999999999
+    ]
+   },
+   "mr_no_regression_step": {
+    "denominator": null,
+    "numerator": null,
+    "value": 6,
+    "wilson95": null
+   },
+   "repair_success_change_request": {
+    "denominator": 60,
+    "numerator": 30,
+    "value": 0.5,
+    "wilson95": [
+     0.3773502424155577,
+     0.6226497575844423
+    ]
+   },
+   "repair_success_repair": {
+    "denominator": 36,
+    "numerator": 18,
+    "value": 0.5,
+    "wilson95": [
+     0.34474325409626827,
+     0.6552567459037317
+    ]
+   },
+   "truncated_transitions": {
+    "denominator": 116,
+    "numerator": 0,
+    "value": 0.0,
+    "wilson95": [
+     0.0,
+     0.032054506499638716
+    ]
+   },
+   "truth_recall_impact": null,
+   "truth_recall_v": null,
+   "unsafe_promotions_per_evaluated": {
+    "denominator": 116,
+    "numerator": 45,
+    "value": 0.3879310344827586,
+    "wilson95": [
+     0.3042081490942208,
+     0.4788385506384568
+    ]
+   },
+   "unsafe_promotions_per_promotion": {
+    "denominator": 110,
+    "numerator": 45,
+    "value": 0.4090909090909091,
+    "wilson95": [
+     0.32178974693383433,
+     0.5025273322112864
+    ]
+   }
+  },
+  "B": {
+   "false_rejection_rate": {
+    "denominator": 65,
+    "numerator": 2,
+    "value": 0.03076923076923077,
+    "wilson95": [
+     0.008478997236440126,
+     0.10542705523577942
+    ]
+   },
+   "impact_precision": null,
+   "impact_precision_macro": null,
+   "impact_recall": null,
+   "impact_recall_macro": null,
+   "missed_regression_rate": {
+    "denominator": 42,
+    "numerator": 0,
+    "value": 0.0,
+    "wilson95": [
+     0.0,
+     0.08379879086570391
+    ]
+   },
+   "missed_regressions_per_regression": {
+    "denominator": 42,
+    "numerator": 0,
+    "value": 0.0,
+    "wilson95": [
+     0.0,
+     0.08379879086570391
+    ]
+   },
+   "mr_no_regression_step": {
+    "denominator": null,
+    "numerator": null,
+    "value": 6,
+    "wilson95": null
+   },
+   "repair_success_change_request": {
+    "denominator": 60,
+    "numerator": 29,
+    "value": 0.48333333333333334,
+    "wilson95": [
+     0.36175049539732784,
+     0.6069218996740751
+    ]
+   },
+   "repair_success_repair": {
+    "denominator": 36,
+    "numerator": 17,
+    "value": 0.4722222222222222,
+    "wilson95": [
+     0.31986041515179053,
+     0.629940619770124
+    ]
+   },
+   "truncated_transitions": {
+    "denominator": 116,
+    "numerator": 3,
+    "value": 0.02586206896551724,
+    "wilson95": [
+     0.008833887872088338,
+     0.0732867648430863
+    ]
+   },
+   "truth_recall_impact": null,
+   "truth_recall_v": null,
+   "unsafe_promotions_per_evaluated": {
+    "denominator": 113,
+    "numerator": 0,
+    "value": 0.0,
+    "wilson95": [
+     0.0,
+     0.03287753216595198
+    ]
+   },
+   "unsafe_promotions_per_promotion": {
+    "denominator": 63,
+    "numerator": 0,
+    "value": 0.0,
+    "wilson95": [
+     3.469446951953614e-18,
+     0.05747119958885172
+    ]
+   }
+  },
+  "C": {
+   "false_rejection_rate": {
+    "denominator": 65,
+    "numerator": 2,
+    "value": 0.03076923076923077,
+    "wilson95": [
+     0.008478997236440126,
+     0.10542705523577942
+    ]
+   },
+   "impact_precision": {
+    "denominator": 272,
+    "numerator": 203,
+    "value": 0.7463235294117647,
+    "wilson95": [
+     0.6914308716029053,
+     0.794355422353379
+    ]
+   },
+   "impact_precision_macro": {
+    "denominator": 4,
+    "numerator": null,
+    "value": 0.7023377962252964,
+    "wilson95": null
+   },
+   "impact_recall": {
+    "denominator": 203,
+    "numerator": 203,
+    "value": 1.0,
+    "wilson95": [
+     0.9814280036381673,
+     1.0
+    ]
+   },
+   "impact_recall_macro": {
+    "denominator": 4,
+    "numerator": null,
+    "value": 1.0,
+    "wilson95": null
+   },
+   "missed_regression_rate": {
+    "denominator": 42,
+    "numerator": 0,
+    "value": 0.0,
+    "wilson95": [
+     0.0,
+     0.08379879086570391
+    ]
+   },
+   "missed_regressions_per_regression": {
+    "denominator": 42,
+    "numerator": 0,
+    "value": 0.0,
+    "wilson95": [
+     0.0,
+     0.08379879086570391
+    ]
+   },
+   "mr_no_regression_step": {
+    "denominator": null,
+    "numerator": null,
+    "value": 6,
+    "wilson95": null
+   },
+   "repair_success_change_request": {
+    "denominator": 60,
+    "numerator": 29,
+    "value": 0.48333333333333334,
+    "wilson95": [
+     0.36175049539732784,
+     0.6069218996740751
+    ]
+   },
+   "repair_success_repair": {
+    "denominator": 36,
+    "numerator": 17,
+    "value": 0.4722222222222222,
+    "wilson95": [
+     0.31986041515179053,
+     0.629940619770124
+    ]
+   },
+   "truncated_transitions": {
+    "denominator": 116,
+    "numerator": 3,
+    "value": 0.02586206896551724,
+    "wilson95": [
+     0.008833887872088338,
+     0.0732867648430863
+    ]
+   },
+   "truth_recall_impact": {
+    "denominator": 69,
+    "numerator": 69,
+    "value": 1.0,
+    "wilson95": [
+     0.9472627418109483,
+     1.0
+    ]
+   },
+   "truth_recall_v": {
+    "denominator": 69,
+    "numerator": 69,
+    "value": 1.0,
+    "wilson95": [
+     0.9472627418109483,
+     1.0
+    ]
+   },
+   "unsafe_promotions_per_evaluated": {
+    "denominator": 113,
+    "numerator": 0,
+    "value": 0.0,
+    "wilson95": [
+     0.0,
+     0.03287753216595198
+    ]
+   },
+   "unsafe_promotions_per_promotion": {
+    "denominator": 63,
+    "numerator": 0,
+    "value": 0.0,
+    "wilson95": [
+     3.469446951953614e-18,
+     0.05747119958885172
+    ]
+   }
+  },
+  "C_PRIME": {
+   "false_rejection_rate": {
+    "denominator": 65,
+    "numerator": 2,
+    "value": 0.03076923076923077,
+    "wilson95": [
+     0.008478997236440126,
+     0.10542705523577942
+    ]
+   },
+   "impact_precision": {
+    "denominator": 272,
+    "numerator": 203,
+    "value": 0.7463235294117647,
+    "wilson95": [
+     0.6914308716029053,
+     0.794355422353379
+    ]
+   },
+   "impact_precision_macro": {
+    "denominator": 4,
+    "numerator": null,
+    "value": 0.7023377962252964,
+    "wilson95": null
+   },
+   "impact_recall": {
+    "denominator": 203,
+    "numerator": 203,
+    "value": 1.0,
+    "wilson95": [
+     0.9814280036381673,
+     1.0
+    ]
+   },
+   "impact_recall_macro": {
+    "denominator": 4,
+    "numerator": null,
+    "value": 1.0,
+    "wilson95": null
+   },
+   "missed_regression_rate": {
+    "denominator": 42,
+    "numerator": 0,
+    "value": 0.0,
+    "wilson95": [
+     0.0,
+     0.08379879086570391
+    ]
+   },
+   "missed_regressions_per_regression": {
+    "denominator": 42,
+    "numerator": 0,
+    "value": 0.0,
+    "wilson95": [
+     0.0,
+     0.08379879086570391
+    ]
+   },
+   "mr_no_regression_step": {
+    "denominator": null,
+    "numerator": null,
+    "value": 6,
+    "wilson95": null
+   },
+   "repair_success_change_request": {
+    "denominator": 60,
+    "numerator": 29,
+    "value": 0.48333333333333334,
+    "wilson95": [
+     0.36175049539732784,
+     0.6069218996740751
+    ]
+   },
+   "repair_success_repair": {
+    "denominator": 36,
+    "numerator": 17,
+    "value": 0.4722222222222222,
+    "wilson95": [
+     0.31986041515179053,
+     0.629940619770124
+    ]
+   },
+   "truncated_transitions": {
+    "denominator": 116,
+    "numerator": 3,
+    "value": 0.02586206896551724,
+    "wilson95": [
+     0.008833887872088338,
+     0.0732867648430863
+    ]
+   },
+   "truth_recall_impact": {
+    "denominator": 69,
+    "numerator": 69,
+    "value": 1.0,
+    "wilson95": [
+     0.9472627418109483,
+     1.0
+    ]
+   },
+   "truth_recall_v": {
+    "denominator": 69,
+    "numerator": 69,
+    "value": 1.0,
+    "wilson95": [
+     0.9472627418109483,
+     1.0
+    ]
+   },
+   "unsafe_promotions_per_evaluated": {
+    "denominator": 113,
+    "numerator": 0,
+    "value": 0.0,
+    "wilson95": [
+     0.0,
+     0.03287753216595198
+    ]
+   },
+   "unsafe_promotions_per_promotion": {
+    "denominator": 63,
+    "numerator": 0,
+    "value": 0.0,
+    "wilson95": [
+     3.469446951953614e-18,
+     0.05747119958885172
+    ]
+   }
+  }
+ },
+ "rho_analysis": 0.3,
+ "work_per_scenario": {
+  "A": {
+   "mean_by_kind": {
+    "baseline_applicable": 0.0,
+    "baseline_not_applicable": 0.0,
+    "gate": 2.4166666666666665,
+    "invariant_condition": 0.19791666666666666,
+    "invariant_impact": 0.3854166666666667,
+    "invariant_not_protected": 0.0
+   },
+   "mean_w": 3.0,
+   "median_w": 2.0,
+   "scenarios": 96
+  },
+  "B": {
+   "mean_by_kind": {
+    "baseline_applicable": 0.1875,
+    "baseline_not_applicable": 0.03125,
+    "gate": 2.3541666666666665,
+    "invariant_condition": 1.875,
+    "invariant_impact": 2.8333333333333335,
+    "invariant_not_protected": 0.0
+   },
+   "mean_w": 7.25,
+   "median_w": 6.0,
+   "scenarios": 96
+  },
+  "C": {
+   "mean_by_kind": {
+    "baseline_applicable": 0.1875,
+    "baseline_not_applicable": 0.03125,
+    "gate": 2.3541666666666665,
+    "invariant_condition": 0.0,
+    "invariant_impact": 2.8333333333333335,
+    "invariant_not_protected": 0.19791666666666666
+   },
+   "mean_w": 5.572916666666667,
+   "median_w": 5.0,
+   "scenarios": 96
+  },
+  "C_PRIME": {
+   "mean_by_kind": {
+    "baseline_applicable": 0.20833333333333334,
+    "baseline_not_applicable": 0.041666666666666664,
+    "gate": 2.3541666666666665,
+    "invariant_condition": 0.0,
+    "invariant_impact": 2.8333333333333335,
+    "invariant_not_protected": 0.19791666666666666
+   },
+   "mean_w": 5.59375,
+   "median_w": 5.0,
+   "scenarios": 96
+  }
+ }
+}
