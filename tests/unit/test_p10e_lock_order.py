@@ -338,7 +338,11 @@ if __name__ == "__main__":
 
 
 class TestTheCommand(Case):
-    """``python -m experiments.mainrun`` on this repository, which is not at ``protocol-v1``."""
+    """``python -m experiments.mainrun`` on this repository, with HEAD made to read as untagged.
+
+    The premise "HEAD is not tagged ``protocol-v1``" is set inside the test (C-258), so the test
+    holds wherever HEAD is, the tagged commit included.
+    """
 
     def env(self) -> dict[str, str]:
         return {
@@ -353,8 +357,17 @@ class TestTheCommand(Case):
         import os
         from unittest import mock
 
+        from experiments import split_guard
         from experiments.mainrun import __main__ as command
         from experiments.mainrun.power import HIBERNATE, LID, STANDBY
+
+        real_git = split_guard._git
+
+        def untagged(repo: Path, *args: str) -> tuple[int, str]:
+            # git's own answer for an untagged HEAD; every other call goes to the real git
+            if args[:1] == ("describe",):
+                return 128, ""
+            return real_git(repo, *args)
 
         awake = {STANDBY: 0, HIBERNATE: 0, LID: 0}
         for argv in (["reference"], ["reference", "--resume"], ["generate"], ["analyse"]):
@@ -362,6 +375,7 @@ class TestTheCommand(Case):
                 err = io.StringIO()
                 with (
                     mock.patch.dict(os.environ, self.env()),
+                    mock.patch.object(split_guard, "_git", side_effect=untagged),
                     mock.patch.object(command, "preflight", return_value=awake),
                     contextlib.redirect_stderr(err),
                     contextlib.redirect_stdout(io.StringIO()),

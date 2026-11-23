@@ -1006,6 +1006,15 @@ Carry-forward: P10d limits 1 and 2 (P10d-3: advisor, sign-off date, with the pro
   f860c4c6…; the protocol-v1 tag); P10d limits 3, 4 and 7 for the paper.
 ```
 
+## P10d-3 — The freeze record of protocol v1
+
+```text
+P10d-3: passed (verdict on PR #37)
+Recorded in P10g (23 Nov 2026), from the verdict in the merge commit c5f32de (tagged protocol-v1).
+  P10d limits 1 and 2: limit 1 closed by C-256 and the decided rows; limit 2 closed when the tag
+  was created (the verdict's words).
+```
+
 ## P10e-run — The main run on the test split
 
 ```text
@@ -1023,30 +1032,91 @@ At the tag protocol-v1 (c5f32de), clean tree, no edits. Experiment a502ee87-1ebd
 
 ```text
 TP-L2: passed with limits (verdict on TerraPreserve PR #14).
-Limits 1-5: NOT RECORDED. The verdict text was not given to P10f (PR #14 carries no verdict comment
-  and its merge commit dbffceb no verdict); the limits are copied word for word by the next package
-  that receives the verdict file.
+Limits of the verdict (copied word for word in P10g, 23 Nov 2026):
+1. **TPL2-06 is `Proposed`.** The authors must decide it.
+2. **One failure in the first full-suite run** (`TestATestSplitRun`, synthetic fixture: the fix candidate got no class) coincided with 88 minutes of Modern Standby on battery. It passed in six repeats and a second full run, and the assertion now prints the full record. If it fails again, investigate it as a real defect.
+3. **The machine was on battery and in standby during that suite run.** The real labelling run was on AC with no standby (plugged in 35 s before the start), so the labels are not affected.
+4. **`oracle/README.md` still lacks the authorship note,** because `oracle/` must not change. TPL2-02 and the datasheet carry the note, and the paper must too.
+5. **Only the 25 validate-valid candidates were exported and labelled** (gate-failed patches are invalid by C-227 and carry no DAIL decision). The analysis reports the valid share per model from DAIL's own records.
 Facts: PR #14 merged as dbffceb (23 Nov 2026, head bb802d9). 25 candidates read, verified and S0-
   matched; 25 label.json written; labels.json sha256 5e532ec6…3cba, under $TERRAPRESERVE_PRIVATE;
   oracle-1.0 unchanged; scenarios/ unchanged (798d51fc…).
 ```
 
+## P10f — The results of the single analysis and QA report 1 — passed with limits (verdict on PR #38)
+
+```text
+P10f: passed with limits (verdict on PR #38)
+Recorded in P10g (23 Nov 2026); merged as a3b311d. Limits of the verdict, copied word for word,
+each followed by its status:
+```
+
+1. **QA is BLOCK, so the P10 exit gate is not passed.**
+   - **Cause:** 3 subtests of `tests/unit/test_p10e_lock_order.py::test_every_step_is_refused_off_the_tag_and_writes_nothing` fail at the tag.
+   - **The defect is in the test's premise,** that HEAD is not tagged. It is not a defect in the guard: a scratch run refused every step with rc 2 and wrote nothing.
+   - **Fix:** a test-only fix, now that the analysis is done. It is recorded as a post-analysis deviation, then QA and the clean-environment demo are rerun (P10g).
+   - **The analysis is not rerun.**
+
+   [addressed by P10g, for the review to decide: the test-only fix (C-258, defect D-1) at 119628b; QA rerun on that commit (`dev.py test` 4,702 run, OK, 10 skipped; `pytest` 4,693 passed, 10 skipped, 0 failed; lint passes) and the clean-environment demo rerun (bootstrap complete); `docs/QA_REPORT_v1.md` QAReport 2; the analysis was not rerun.]
+2. **TP-L2 limits 1–5 are not recorded.** The next package copies them word for word from the TP-L2 verdict.
+
+   [closed by P10g: the five limits are copied word for word in the TP-L2 section above.]
+3. **Doc 15 §17.2 is only partly mapped.** Three items still need evidence:
+   - "All mandatory release gates pass."
+   - "No S0/S1 defects open."
+   - "End-to-end evidence chain complete."
+
+   [addressed by P10g: all four items are mapped to evidence in the P10 exit gate section below; each is NOT DECIDED, and the review decides.]
+4. **The P10d-3 status is not recorded.** The line to add is "P10d-3: passed (verdict on PR #37)".
+
+   [closed by P10g: the line is in the P10d-3 section above.]
+5. **There is no severity-rated defect list (Doc 12 §38),** so "No S0/S1 defects open" cannot be shown yet.
+
+   [addressed by P10g: `docs/DEFECTS.md`, with severities proposed (P10g) for the review to decide.]
+6. **The clean clone `X:\DAIL-clean-demo-p10f` still exists.** The user deletes it.
+
+   [open: `X:\DAIL-clean-demo-p10f` still exists on 23 Nov 2026, and so does P10g's demo clone `X:\DAIL-clean-demo-p10g` (a safety check blocked its removal); the user deletes both.]
+7. **For the paper (not blocking):**
+   - **H1 repair stratum:**
+     - The sign test is inferential under C-243.
+     - Its DEFF-Newcombe interval is descriptive, because the coverage of 0.914 is below 0.93.
+     - The "all" stratum is descriptive (0.929).
+   - **H2 non-inferiority is not shown:**
+     - The upper limit is 0.0725, which is above δ 0.05.
+     - This holds even though MR_B = MR_C = 0/42; the limit is set by the sample size.
+     - It must be reported as "not established". Never write "non-inferior".
+   - **κ = 1.0:**
+     - It is computed without the 6 DAIL UNSUPPORTED against oracle PASS cells.
+     - Report those cells and the two scenarios they come from (one F4, one F7), described by family only.
+   - **Costs of B, C and C′:** 2/65 false rejections and 3/116 TRUNCATED. Report them next to MR.
+   - **Condition A:** it promoted 45/110 unsafe candidates and its MR is 42/42, as its design implies. Say that A is target-only (C-205/206), so a reviewer does not read it as a strawman. H2 (B vs C) is the fair comparison for workload.
+   - **H3 and the LLM track are descriptive.** Only 25 of 324 LLM attempts passed the gate.
+   - **Not done offline (C-71):**
+     - the AWS sandbox demo (Doc 15 §35);
+     - the deployment smoke tests (§17.1).
+
+     State both as deviations.
+   - **Corrections carried in from earlier packages:**
+     - C-256: δ was fixed by the authors after an AI review, not by an advisor;
+     - C-233: Claude Code wrote both DAIL and the oracle.
+
+   [open: for the paper.]
+
 ## P10 exit gate (Doc 15 §17.2) — NOT DECIDED
 
 ```text
-Only the item quoted by the P10f work package is listed; the other §17.2 items were not given to
-P10f and are not reconstructed here (CLAUDE.md). The external review decides.
-"Demo is repeatable from clean environment" ... NOT DECIDED. Evidence: docs/QA_REPORT_v1.md (clean-
-  environment demo): a fresh clone at protocol-v1; bootstrap FAILED (the 3 failures of
-  test_every_step_is_refused_off_the_tag_and_writes_nothing, whose premise is a HEAD off the tag);
-  health checks PASS; the canonical end-to-end tests 9 of 9 OK (unsafe REJECTED, safe PROMOTED,
-  chains complete).
-Further evidence for the review: docs/P10_RESULTS.md and docs/P10_RESULTS.json (the single
-  analysis; unsafe promotions under C 0/63 per promotion, stopping rule: none);
-  docs/QA_REPORT_v1.md (decision BLOCK, the authors' decision: 3 failures at the release candidate);
-  C-257 (deviations).
-No item is marked passed here; the external review decides.
+The four items, quoted exactly as given by the P10g work package, each mapped to its evidence.
+Every item is NOT DECIDED here; the external review decides.
 ```
+
+| Item (Doc 15 §17.2) | Evidence | Status |
+|---|---|---|
+| "All mandatory release gates pass." | `docs/QA_REPORT_v1.md` QAReport 2 (the Doc 15 §36 release blockers, each with its evidence; decision PASS by §36, at 119628b, code-identical to `protocol-v1`); QAReport 1 (BLOCK) stays on record. The phase records above: every package from P0 to P10f carries a review verdict (several "passed with limits"); the "P10 — NOT STARTED" heading above is not changed here. | NOT DECIDED |
+| "No S0/S1 defects open." | `docs/DEFECTS.md`: no open defect; three closed defects proposed S0 (D-2 C-99/C-227, D-6 C-156, D-7 C-162) and three proposed S1 (D-3 C-209/C-210, D-4 C-216, D-5 C-111), each fixed in a merged package before `protocol-v1`; D-1 (the test premise, proposed S3) closed by P10g. Severities are proposed; the review decides. | NOT DECIDED |
+| "End-to-end evidence chain complete." | The canonical end-to-end tests in the clean clone at 119628b, 9 of 9 OK, including `test_orchestrator.py::TestTheCanonicalDecisions::test_the_chains_are_complete`; the evidence-tampering and chain tests in the suite (QAReport 2); the main run's ledger (reference, generation and analysis each started and completed once, P10e-run, C-257) and the single analysis's outputs in `docs/P10_RESULTS.*`, `docs/P10_COVERAGE.json` and `docs/P10_KAPPA.json`. | NOT DECIDED |
+| "Demo is repeatable from clean environment." | `docs/QA_REPORT_v1.md` QAReport 2, clean-environment demo: a fresh clone of `feature/p10g-qa` from GitHub at 119628b; `py -3.12 scripts/dev.py bootstrap` complete (4,702 tests OK, 10 skipped; health checks PASS, `llm_provider` SKIPPED as configured); the canonical tests 9 of 9 OK (unsafe REJECTED, safe PROMOTED, chains complete). The P10f demo at the tag (bootstrap FAILED, QAReport 1) stays on record. | NOT DECIDED |
+
+No item is marked passed here; the external review decides.
 
 ## Temporary exceptions
 
