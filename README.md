@@ -1,34 +1,42 @@
-# CloudSpartanX / DAIL
+# DAIL: Dependency-Aware Invariant Ledger
 
-**Dependency-Aware Invariant Ledger for Stateful Promotion of Iterative
-LLM-Generated Terraform Infrastructure States.**
+DAIL (Dependency-Aware Invariant Ledger) is a promotion gate for iterative, LLM-generated Terraform repairs. It records the verified properties of the last accepted configuration as protected invariants, works out which of them a candidate change may affect (identity, dependency graph, impact), re-verifies those and every invariant not yet protected, and promotes the candidate only if every required check passes. Uncertainty is never a pass, and the LLM never writes trusted state.
 
-This repository implements DAIL: a Terraform-specific, stateful
-remediation-control mechanism that treats previously verified infrastructure
-properties  protected obligations across iterative state transitions. See
-the paper (`DAIL_Paper_LaTeX.tex`, in the research repo) for the full
-mechanism, formal model, and evaluation methodology.
+## Status
 
-## Build status
+Complete. All build phases P0–P10 passed external review (`docs/PHASE_GATES.md`). The evaluation ran once, on TerraPreserve v1.0's held-out test split, under the protocol frozen at tag `protocol-v1` (`docs/PROTOCOL_v1.md`, SHA-256 `f860c4c624080730b3164d56ec9adf3a30e1a5426c5a25a3028185563321bcaa`). Results: `docs/P10_RESULTS.md`. QA: `docs/QA_REPORT_v1.md` (QA report 2: PASS).
 
-| Phase | Status |
-|---|---|
-| P0 — Project Bootstrap | PASSED (30 Sep 2026) |
-| P1 — Domain Foundation | PASSED (external review, 2 Oct 2026) |
-| P2 — Evidence Foundation | PASSED (external review, 4 Oct 2026) |
-| P3–P10 | NOT STARTED |
+## Main results
 
-Next step: the research track (Invariant Registry Specification and D0 amendments), then D1.
+96 test scenarios ([`docs/P10_RESULTS.md`](docs/P10_RESULTS.md)).
 
-- Gate status and known gaps: [`docs/PHASE_GATES.md`](docs/PHASE_GATES.md)
-- Work packages and order: [`docs/BUILD_SEQUENCE.md`](docs/BUILD_SEQUENCE.md)
-- Recorded conflicts and decisions: [`docs/DECISIONS_REGISTER.md`](docs/DECISIONS_REGISTER.md)
-- Specification index: [`docs/SPEC_INDEX.md`](docs/SPEC_INDEX.md)
-- Architecture decision records: [`docs/adr/`](docs/adr/)
+- **Missed regressions:** target-only verification (A) 42/42; DAIL (C) 0/42; full re-verification (B) 0/42.
+- **H1 (A vs C):** exact cluster sign tests, Holm-adjusted p = 2.38 × 10⁻⁷ (change requests, 24 clusters) and 9.77 × 10⁻⁴ (repairs, 11 clusters).
+- **H2 (B vs C) workload:** C needed fewer checks than B in 56 of 58 clusters and more in none (one-sided p = 1.39 × 10⁻¹⁷); 535 checks against 696 (23.1% fewer).
+- **H2 non-inferiority (exploratory):** not established. The one-sided 95% upper limit of MR_C − MR_B is 0.0725, above δ_NI = 0.05.
+- **Impact analysis:** recall 203/203, precision 203/272; truth recall 69/69.
+- **Unsafe promotions:** A 45 of 110 promotions; B, C and C′ 0 of 63. **False rejections:** B, C and C′ 2/65.
+- **DAIL–oracle agreement (κ, before adjudication):** 1.0 per invariant over the PASS/FAIL cells. Six DAIL-UNSUPPORTED/oracle-PASS cells are reported apart and were not adjudicated.
 
-Per Doc 15 Section 41 ("Implementation Rules We Must Not Break"): phases are
-built bottom-up and gated — later phases are not started until the current
-phase's exit criteria pass. Do not skip ahead.
+H1 follows largely from condition A's design (a target-only check cannot see a regression of another invariant); see the paper.
+
+## Reproducing the results
+
+- **The test suite:** `python3.12 scripts/dev.py bootstrap`, then `python3.12 scripts/dev.py test` (see "Local commands" below). The dev toolchain for `lint` and `pytest` is installed from the hash-locked lockfile: [`requirements/README.md`](requirements/README.md).
+- **The evaluation:** the main run is `python -m experiments.mainrun`, as given in [`experiments/README.md`](experiments/README.md) ("The main run"):
+
+  ```bash
+  python3.12 -m experiments.mainrun reference [--resume]
+  python3.12 -m experiments.mainrun generate [--resume]
+  # stop: TerraPreserve labels the export (TP-L2) into $TERRAPRESERVE_PRIVATE/llm_candidates/test/<generation id>/
+  python3.12 -m experiments.mainrun analyse
+  ```
+
+  What each step does, the environment variables and the output layout are in [`experiments/README.md`](experiments/README.md).
+- **TerraPreserve:** the run needs TerraPreserve at tag `terrapreserve-v1.0` and its test split.
+- **The guard:** it refuses to run except on the commit tagged `protocol-v1`, with a clean tree.
+- **Pins:** Terraform 1.15.8, `hashicorp/aws` 6.53.0 (offline mirror), Python 3.12; for the LLM track, Ollama with the three model digests in `docs/PROTOCOL_v1.md` §8.
+- **No deployment:** never `terraform apply`, `destroy` or `plan` in DAIL; no AWS account is used.
 
 ## Local commands (Doc 14 §12)
 
@@ -61,107 +69,39 @@ python3.12 scripts/dev.py health      # one line per health check; exit 1 on any
   `netsh interface ipv6 set prefixpolicy ::ffff:0:0/96 100 4`, then revert with
   `netsh interface ipv6 set prefixpolicy ::ffff:0:0/96 35 4`.
 
-## Dev toolchain and lockfiles
+## Repository map
 
-The dev toolchain is exact-pinned in `pyproject.toml` and hash-locked in
-`requirements/dev.lock` (see [`requirements/README.md`](requirements/README.md)).
+- `core/`: the deterministic safety logic: domain, persistence, Terraform model, identity, dependency graph, impact, verification and promotion.
+- `evidence/`: the evidence service, correlation context, structured logs and replay.
+- `llm/`: the local Ollama and fake adapters, prompts, schemas and patch validation (free open-weight models only).
+- `experiments/`: the experiment harness, the conditions, the LLM candidates, the metrics, the statistics and the main run.
+- `fixtures/`: the canonical Terraform fixtures (test data only).
+- `config/`: versioned default configuration and the environment overrides.
+- `scripts/`: `dev.py` (bootstrap, test, lint, health) and its shell wrapper.
+- `tests/`: unit, integration, contract, adversarial and end-to-end tests.
+- `docs/`: the decisions register, phase gates, frozen protocol, results, QA report, defect list and ADRs (`docs/adr/`).
 
-```bash
-# fresh clone of the branch
-git clone <repo-url> cloudspartanx && cd cloudspartanx && git checkout feature/p0-close
+## Companion dataset
 
-# zero-dependency bootstrap (no venv, no network)
-python3.12 scripts/dev.py bootstrap
+TerraPreserve (https://github.com/Ayushxsingh100/terrapreserve), with its separately implemented oracle.
 
-# locked dev toolchain
-python3.12 -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
-python -m pip install "pip-tools>=7.4"
-pip-compile --extra=dev --generate-hashes --output-file=requirements/dev.lock pyproject.toml
-python -m pip install --require-hashes -r requirements/dev.lock
-python -m pip install --no-deps -e .
-python scripts/dev.py lint
-pytest
-pip-audit --require-hashes -r requirements/dev.lock
+## How this was built
 
-# Terraform (must print 1.15.x)
-terraform version
-terraform -chdir=infrastructure/terraform init -backend=false
-terraform -chdir=infrastructure/terraform providers lock \
-  -platform=linux_amd64 -platform=darwin_arm64 -platform=darwin_amd64 -platform=windows_amd64
-terraform fmt -check -recursive infrastructure/terraform
-terraform -chdir=infrastructure/terraform validate
+The code in this repository, and TerraPreserve's generator and oracle, were written by an AI coding assistant (Claude Code, Anthropic) from work packages prepared under the authors' direction. Every change was reviewed by an independent review step before merging (`docs/PHASE_GATES.md`). The independence of DAIL and the oracle rests on separate code in separate repositories, a different input path and an enforced import ban, not on separate human authors (C-233).
 
-python scripts/dev.py health
+## Limitations
 
-# commit requirements/dev.lock and infrastructure/terraform/.terraform.lock.hcl,
-# push the branch, open a PR to main, wait for quality/secrets/terraform to go green,
-# merge, confirm green on main, then protect main (PR + the three required checks,
-# no force-push, no deletion).
-```
+- Configuration-level only; nothing is deployed.
+- Four invariants.
+- Nine AWS resource types.
+- Replacement is detected only for a security group's `name`.
+- Unknown types default-open.
+- Module calls are unsupported.
 
-## Pinned toolchain
+## Citation
 
-| Tool | Pin |
-|---|---|
-| Python | 3.12 |
-| Terraform | `~> 1.15.0` (CI installs 1.15.8) |
-| AWS provider | 6.53.0 |
-| black | 26.3.1 |
-| ruff | 0.7.0 |
-| mypy | 1.13.0 |
-| pytest | 9.0.3 |
-| pytest-cov | 5.0.0 |
-| pip-audit | exact version comes from the lockfile |
-| actions/checkout | v6 |
-| actions/setup-python | v6 |
-| gitleaks-action | v3 |
+See [`CITATION.cff`](CITATION.cff). The paper reference is to be added.
 
-## Repository layout
+## Licence
 
-```
-cloudspartanx/
-├── .github/workflows/ci.yml   # quality, secrets, terraform jobs (Doc 14 §22-23)
-├── config/
-│   ├── base/                  # one versioned default file per area (Doc 14 §14)
-│   └── environments/          # dev, test, experiment, staging overrides (Doc 14 §17)
-├── core/
-│   ├── domain/                # P1/P2: domain objects, lifecycles, canonical hashing, evidence, audit,
-│   │                          # redaction, repository ports
-│   ├── persistence/           # P1b/P2-fix: SQLite adapter behind the ports (schema version 5)
-│   ├── terraform_model/       # P3a: parser, normalizer, canonical security rule, fingerprints
-│   ├── identity/              # P3b: identity engine
-│   ├── dependency/            # P3c: dependency graph
-│   ├── impact/                # P4: impact and invalidation
-│   ├── verification/          # P5a/P5b: deterministic verifiers
-│   ├── promotion/             # P6a/P6b: promotion decision and transaction
-│   └── application/           # configuration + health (P0-close); scope policy (P4);
-│                              # EvaluationOrchestrator (P6b)
-├── evidence/                  # P2: evidence service, correlation context, structured logs, replay mode
-├── llm/                       # P7a/P7b: adapter/ (fake and local Ollama), prompts/, schemas/,
-│                              # validation/; free open-weight models only (C-71)
-├── experiments/               # P8: trial harness, conditions, metrics
-├── fixtures/                  # the 15 Doc 12 §7 canonical fixtures (Doc 04 §15 layout)
-│   ├── canonical_regression/{baseline,patch_safe,patch_regression}/
-│   ├── identity/  dependency/  impact/  verification/  adversarial/
-├── infrastructure/terraform/  # version pins only (versions.tf; validated by CI); no deployment:
-│                              # P9 and AWS deployment are removed (C-71)
-├── requirements/              # dev.lock (hash-locked dev toolchain, generated by pip-compile)
-├── tests/
-│   ├── unit/  integration/  contract/  adversarial/  e2e/
-├── docs/                      # PHASE_GATES, BUILD_SEQUENCE, DECISIONS_REGISTER, SPEC_INDEX, adr/
-└── scripts/
-    ├── dev.py                 # bootstrap | test | lint | health
-    └── bootstrap.sh           # wrapper for dev.py bootstrap
-```
-
-The TerraPreserve benchmark and its independent oracle live in a separate
-repository (ADR-010, ADR-013). This repository contains no `benchmark/` or
-`oracle/` directory and never imports them.
-
-## Engineering principles (Doc 14, Section 2)
-
-- Keep deterministic safety logic separate from probabilistic LLM integration.
-- Trusted State changes only through the application promotion transaction.
-- Do not allow logs to substitute for evidence.
-- Do not allow model confidence to substitute for verification.
-- Do not silently ignore UNKNOWN or UNSUPPORTED results.
+Apache-2.0, see [`LICENSE`](LICENSE).

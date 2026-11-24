@@ -1,0 +1,14 @@
+cff-version: 1.2.0
+message: "If you use DAIL, please cite it as below."
+title: "DAIL: Dependency-Aware Invariant Ledger"
+type: software
+authors:
+  - given-names: "Ayush Kumar"
+    family-names: "Singh"
+    affiliation: "School of Computer Science, UPES, Dehradun, India"
+  - given-names: "Krishika"
+    affiliation: "School of Computer Science, UPES, Dehradun, India"
+repository-code: "https://github.com/Ayushxsingh100/DAIL"
+license: Apache-2.0
+version: "1.0.0"
+keywords: [Terraform, infrastructure as code, LLM, invariant verification, change impact analysis]
