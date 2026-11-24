@@ -671,7 +671,7 @@ M5 "Comparison report generated" ....... docs/P8_DEV_PILOT.md.
 No item is marked passed here; the external review decides.
 ```
 
-## P10 — NOT STARTED
+## P10 — passed with limits (verdicts on PR #38 and PR #39)
 
 P9 (AWS integration) and milestone M6 (AWS Demonstration) are removed (C-71, Decided by the advisor,
 11 Nov 2026): AWS stays fully offline, with no deployment, no AWS account and no calibration against
@@ -1058,24 +1058,36 @@ each followed by its status:
    - **The analysis is not rerun.**
 
    [addressed by P10g, for the review to decide: the test-only fix (C-258, defect D-1) at 119628b; QA rerun on that commit (`dev.py test` 4,702 run, OK, 10 skipped; `pytest` 4,693 passed, 10 skipped, 0 failed; lint passes) and the clean-environment demo rerun (bootstrap complete); `docs/QA_REPORT_v1.md` QAReport 2; the analysis was not rerun.]
+
+   [closed by P10g, verdict on PR #39]
 2. **TP-L2 limits 1–5 are not recorded.** The next package copies them word for word from the TP-L2 verdict.
 
    [closed by P10g: the five limits are copied word for word in the TP-L2 section above.]
+
+   [closed by P10g, verdict on PR #39]
 3. **Doc 15 §17.2 is only partly mapped.** Three items still need evidence:
    - "All mandatory release gates pass."
    - "No S0/S1 defects open."
    - "End-to-end evidence chain complete."
 
    [addressed by P10g: all four items are mapped to evidence in the P10 exit gate section below; each is NOT DECIDED, and the review decides.]
+
+   [closed by P10g, verdict on PR #39]
 4. **The P10d-3 status is not recorded.** The line to add is "P10d-3: passed (verdict on PR #37)".
 
    [closed by P10g: the line is in the P10d-3 section above.]
+
+   [closed by P10g, verdict on PR #39]
 5. **There is no severity-rated defect list (Doc 12 §38),** so "No S0/S1 defects open" cannot be shown yet.
 
    [addressed by P10g: `docs/DEFECTS.md`, with severities proposed (P10g) for the review to decide.]
+
+   [closed by P10g, verdict on PR #39]
 6. **The clean clone `X:\DAIL-clean-demo-p10f` still exists.** The user deletes it.
 
    [open: `X:\DAIL-clean-demo-p10f` still exists on 23 Nov 2026, and so does P10g's demo clone `X:\DAIL-clean-demo-p10g` (a safety check blocked its removal); the user deletes both.]
+
+   [open: the user deletes `X:\DAIL-clean-demo-p10f` and `X:\DAIL-clean-demo-p10g`]
 7. **For the paper (not blocking):**
    - **H1 repair stratum:**
      - The sign test is inferential under C-243.
@@ -1102,7 +1114,39 @@ each followed by its status:
 
    [open: for the paper.]
 
-## P10 exit gate (Doc 15 §17.2) — NOT DECIDED
+## P10g — The test-only fix, QA report 2 and the gate records — passed (verdict on PR #39)
+
+```text
+P10g: passed (verdict on PR #39)
+Recorded in R1 (24 Nov 2026), from the verdict on PR #39 (head 7b245a7, merged as 2884fd9).
+```
+
+Gate decisions of the verdict, copied word for word:
+
+- **P10g:** passed (verdict on PR #39).
+- **QAReport 2:** PASS is confirmed. No Doc 15 §36 release blocker holds at `119628b`, which is code-identical to `protocol-v1`.
+- **`docs/DEFECTS.md`:** the proposed severities are accepted as written.
+  - D-1 is S3.
+  - D-2, D-6 and D-7 are S0.
+  - D-3, D-4 and D-5 are S1.
+  - None is open.
+- **The P10 exit gate (Doc 15 §17.2)** is **passed with limits**. Its four items:
+  - "All mandatory release gates pass." **PASSED** (QAReport 2).
+  - "No S0/S1 defects open." **PASSED** (`docs/DEFECTS.md`, limit 1).
+  - "End-to-end evidence chain complete." **PASSED.** `test_the_chains_are_complete` passes in the suite and in the fresh clone.
+  - "Demo is repeatable from clean environment." **PASSED for the offline demo.** A fresh clone of `119628b` bootstraps with rc 0, and the canonical tests pass 9/9: unsafe REJECTED, safe PROMOTED (limit 2).
+- **P10:** the "P10 — NOT STARTED" heading becomes "P10 — passed with limits (verdicts on PR #38 and PR #39)".
+- **P10f limits:** limits 1 to 5 are now closed. Limit 6 closes when the user deletes the clone, and limit 7 stays open for the paper.
+
+Limits carried forward (not blocking), copied word for word:
+
+1. **The defect list covers only the defects that the register records.** Defects found in reviews and fixed inside the same package, without a register row, are not listed. The paper must not claim a complete defect history.
+2. **The AWS sandbox demo (Doc 15 §35) and the deployment smoke tests (§17.1) were not run.** The project is offline by C-71. "Repeatable from a clean environment" means the offline demo only. The paper states this as a deviation.
+3. **The release candidate tested is `119628b`, not the tagged commit.** It is code-identical to `protocol-v1` (C-258). The paper reports the results as produced at `protocol-v1`, and QA as passed at `119628b`.
+4. **The clones `X:\DAIL-clean-demo-p10f` and `X:\DAIL-clean-demo-p10g` still exist.** The user deletes them.
+5. **P10f limit 7 (the paper items) stays open.**
+
+## P10 exit gate (Doc 15 §17.2) — passed with limits (verdict on PR #39)
 
 ```text
 The four items, quoted exactly as given by the P10g work package, each mapped to its evidence.
@@ -1111,12 +1155,12 @@ Every item is NOT DECIDED here; the external review decides.
 
 | Item (Doc 15 §17.2) | Evidence | Status |
 |---|---|---|
-| "All mandatory release gates pass." | `docs/QA_REPORT_v1.md` QAReport 2 (the Doc 15 §36 release blockers, each with its evidence; decision PASS by §36, at 119628b, code-identical to `protocol-v1`); QAReport 1 (BLOCK) stays on record. The phase records above: every package from P0 to P10f carries a review verdict (several "passed with limits"); the "P10 — NOT STARTED" heading above is not changed here. | NOT DECIDED |
-| "No S0/S1 defects open." | `docs/DEFECTS.md`: no open defect; three closed defects proposed S0 (D-2 C-99/C-227, D-6 C-156, D-7 C-162) and three proposed S1 (D-3 C-209/C-210, D-4 C-216, D-5 C-111), each fixed in a merged package before `protocol-v1`; D-1 (the test premise, proposed S3) closed by P10g. Severities are proposed; the review decides. | NOT DECIDED |
-| "End-to-end evidence chain complete." | The canonical end-to-end tests in the clean clone at 119628b, 9 of 9 OK, including `test_orchestrator.py::TestTheCanonicalDecisions::test_the_chains_are_complete`; the evidence-tampering and chain tests in the suite (QAReport 2); the main run's ledger (reference, generation and analysis each started and completed once, P10e-run, C-257) and the single analysis's outputs in `docs/P10_RESULTS.*`, `docs/P10_COVERAGE.json` and `docs/P10_KAPPA.json`. | NOT DECIDED |
-| "Demo is repeatable from clean environment." | `docs/QA_REPORT_v1.md` QAReport 2, clean-environment demo: a fresh clone of `feature/p10g-qa` from GitHub at 119628b; `py -3.12 scripts/dev.py bootstrap` complete (4,702 tests OK, 10 skipped; health checks PASS, `llm_provider` SKIPPED as configured); the canonical tests 9 of 9 OK (unsafe REJECTED, safe PROMOTED, chains complete). The P10f demo at the tag (bootstrap FAILED, QAReport 1) stays on record. | NOT DECIDED |
+| "All mandatory release gates pass." | `docs/QA_REPORT_v1.md` QAReport 2 (the Doc 15 §36 release blockers, each with its evidence; decision PASS by §36, at 119628b, code-identical to `protocol-v1`); QAReport 1 (BLOCK) stays on record. The phase records above: every package from P0 to P10f carries a review verdict (several "passed with limits"); the "P10 — NOT STARTED" heading above is not changed here. | **PASSED** (QAReport 2). |
+| "No S0/S1 defects open." | `docs/DEFECTS.md`: no open defect; three closed defects proposed S0 (D-2 C-99/C-227, D-6 C-156, D-7 C-162) and three proposed S1 (D-3 C-209/C-210, D-4 C-216, D-5 C-111), each fixed in a merged package before `protocol-v1`; D-1 (the test premise, proposed S3) closed by P10g. Severities are proposed; the review decides. | **PASSED** (`docs/DEFECTS.md`, limit 1). |
+| "End-to-end evidence chain complete." | The canonical end-to-end tests in the clean clone at 119628b, 9 of 9 OK, including `test_orchestrator.py::TestTheCanonicalDecisions::test_the_chains_are_complete`; the evidence-tampering and chain tests in the suite (QAReport 2); the main run's ledger (reference, generation and analysis each started and completed once, P10e-run, C-257) and the single analysis's outputs in `docs/P10_RESULTS.*`, `docs/P10_COVERAGE.json` and `docs/P10_KAPPA.json`. | **PASSED.** `test_the_chains_are_complete` passes in the suite and in the fresh clone. |
+| "Demo is repeatable from clean environment." | `docs/QA_REPORT_v1.md` QAReport 2, clean-environment demo: a fresh clone of `feature/p10g-qa` from GitHub at 119628b; `py -3.12 scripts/dev.py bootstrap` complete (4,702 tests OK, 10 skipped; health checks PASS, `llm_provider` SKIPPED as configured); the canonical tests 9 of 9 OK (unsafe REJECTED, safe PROMOTED, chains complete). The P10f demo at the tag (bootstrap FAILED, QAReport 1) stays on record. | **PASSED for the offline demo.** A fresh clone of `119628b` bootstraps with rc 0, and the canonical tests pass 9/9: unsafe REJECTED, safe PROMOTED (limit 2). |
 
-No item is marked passed here; the external review decides.
+The statuses are the decisions of the verdict on PR #39, word for word (recorded in R1, 24 Nov 2026).
 
 ## Temporary exceptions
 
