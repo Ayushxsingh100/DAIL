@@ -2,6 +2,7 @@
 
 DAIL (Dependency-Aware Invariant Ledger) is a promotion gate for iterative, LLM-generated Terraform repairs. It records the verified properties of the last accepted configuration as protected invariants, works out which of them a candidate change may affect (identity, dependency graph, impact), re-verifies those and every invariant not yet protected, and promotes the candidate only if every required check passes. Uncertainty is never a pass, and the LLM never writes trusted state.
 
+
 ## Status
 
 Complete. All build phases P0–P10 passed external review (`docs/PHASE_GATES.md`). The evaluation ran once, on TerraPreserve v1.0's held-out test split, under the protocol frozen at tag `protocol-v1` (`docs/PROTOCOL_v1.md`, SHA-256 `f860c4c624080730b3164d56ec9adf3a30e1a5426c5a25a3028185563321bcaa`). Results: `docs/P10_RESULTS.md`. QA: `docs/QA_REPORT_v1.md` (QA report 2: PASS).
